@@ -95,17 +95,22 @@ final class DevHTTPConnection: @unchecked Sendable {
         self.handler = handler
     }
 
+    /// The connection's handlers hold this object (strongly) until the
+    /// connection is cancelled; nothing else keeps it alive.
     func start(queue: DispatchQueue) {
-        connection.stateUpdateHandler = { [weak self] state in
-            if case .failed = state { self?.connection.cancel() }
+        connection.stateUpdateHandler = { [self] state in
+            switch state {
+            case .failed: connection.cancel()
+            case .cancelled: connection.stateUpdateHandler = nil
+            default: break
+            }
         }
         connection.start(queue: queue)
         receive()
     }
 
     private func receive() {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) { [weak self] data, _, complete, error in
-            guard let self else { return }
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 16) { [self] data, _, complete, error in
             if let data { self.buffer.append(data) }
             if let request = self.parse() {
                 Task { await self.respond(to: request) }

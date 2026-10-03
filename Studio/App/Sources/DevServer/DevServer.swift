@@ -66,7 +66,11 @@ final class DevServer {
         return bytes.map { String(format: "%02x", $0) }.joined()
     }
 
-    func startIfEnabled() { if enabled { start() } }
+    func startIfEnabled() {
+        guard enabled else { return }
+        start()
+        UIDriver.enableAccessibilityTree()
+    }
 
     func regenerateToken() {
         token = Self.makeToken()

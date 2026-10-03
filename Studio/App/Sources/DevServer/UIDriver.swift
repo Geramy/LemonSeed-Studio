@@ -15,11 +15,32 @@ enum UIDriver {
         var frame: CGRect
     }
 
+    // MARK: Accessibility
+
+    /// SwiftUI builds its accessibility elements only while an assistive
+    /// client (VoiceOver, XCTest) is attached. Debug builds turn on the
+    /// accessibility automation flag XCTest uses, so the tree is there for
+    /// the remote control. Private (libAccessibility), debug builds only.
+    static func enableAccessibilityTree() {
+        guard !accessibilityEnabled else { return }
+        accessibilityEnabled = true
+        guard let handle = dlopen("/usr/lib/libAccessibility.dylib", RTLD_NOW) else { return }
+        typealias SetEnabled = @convention(c) (Bool) -> Void
+        for name in ["_AXSSetAutomationEnabled", "_AXSApplicationAccessibilitySetEnabled"] {
+            if let symbol = dlsym(handle, name) {
+                unsafeBitCast(symbol, to: SetEnabled.self)(true)
+            }
+        }
+    }
+
+    private static var accessibilityEnabled = false
+
     // MARK: Tree
 
     /// Every accessibility element and identified container in the key
     /// window, flattened in reading order with its depth.
     static func tree(includeAll: Bool = false) -> [[String: Any]] {
+        enableAccessibilityTree()
         guard let window = DevSupport.keyWindow else { return [] }
         var out: [[String: Any]] = []
         visit(window, depth: 0, includeAll: includeAll) { node, depth, object in
@@ -86,6 +107,7 @@ enum UIDriver {
 
     /// The first element with this identifier (or, failing that, label).
     static func find(id: String? = nil, label: String? = nil) -> Found? {
+        enableAccessibilityTree()
         guard let window = DevSupport.keyWindow else { return nil }
         var match: Found?
         func search(_ object: NSObject, depth: Int) {

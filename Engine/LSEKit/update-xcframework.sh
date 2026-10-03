@@ -55,4 +55,23 @@ MAP
 HDR
   fi
 done
+# LSE's per-session KV (lse_session_close) gets the same kind of marker:
+# canImport(LSESessions).
+for slice in LSE.xcframework/*/; do
+  [[ -d "$slice/Headers/LSE" ]] || continue
+  if nm -gU "$slice"/*.a 2>/dev/null | grep -q ' _lse_session_close$'; then
+    mkdir -p "$slice/Headers/LSESessions"
+    cat > "$slice/Headers/LSESessions/module.modulemap" <<'MAP'
+module LSESessions {
+  header "lse_sessions.h"
+  export *
+}
+MAP
+    cat > "$slice/Headers/LSESessions/lse_sessions.h" <<'HDR'
+/* Present when the linked libLSE has per-session KV (lse_session_close),
+ * written by Engine/LSEKit/update-xcframework.sh. */
+#include "../LSE/lse.h"
+HDR
+  fi
+done
 echo "LSEKit: $(pwd)/LSE.xcframework from $(git -C "$LSE_DIR" describe --always --dirty 2>/dev/null || echo "$LSE_DIR")"

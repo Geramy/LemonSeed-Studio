@@ -3,6 +3,9 @@ import LSE
 #if canImport(LSEEstimate)
 import LSEEstimate
 #endif
+#if canImport(LSESessions)
+import LSESessions
+#endif
 
 /// The Lemon Seed Engine running inside this process.
 ///
@@ -138,6 +141,30 @@ public final class LSEEngine: @unchecked Sendable {
         cfg.port = c.port
         cfg.api_key = cString(c.apiKey)
         return try body(&cfg)
+    }
+
+    // MARK: Sessions
+
+    /// Whether the linked engine keeps KV per `session_id` and can release a
+    /// session (lse_session_close).
+    public static var supportsSessions: Bool {
+        #if canImport(LSESessions)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// Releases a session's KV and state (after a generation in flight in
+    /// it finishes). False when the engine has no such session, or keeps no
+    /// sessions at all.
+    @discardableResult
+    public func closeSession(_ id: String) -> Bool {
+        #if canImport(LSESessions)
+        return lse_session_close(handle, id) == LSE_OK
+        #else
+        return false
+        #endif
     }
 
     // MARK: Model info and memory estimates

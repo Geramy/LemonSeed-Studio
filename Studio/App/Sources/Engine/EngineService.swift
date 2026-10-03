@@ -357,15 +357,27 @@ final class EngineService {
 
     // MARK: Sessions
 
-    /// Whether the engine answered the session-close route; nil until tried.
+    /// Whether the engine answered the session-close route; nil until tried
+    /// (engines without lse_session_close only).
     @ObservationIgnored private var sessionCloseSupported: Bool?
 
-    /// Drops a chat's KV session in the engine (`DELETE /v1/lse/sessions/{id}`,
-    /// LSE's per-session KV). An engine without per-session KV answers 404
-    /// once and is not asked again; it keeps a single resident prefix cache,
-    /// which the next chat with a different prompt replaces anyway.
+    /// Releases a chat's KV session in the engine. With per-session KV
+    /// (lse_session_close linked) this calls the engine directly; an older
+    /// engine is asked through its `DELETE /v1/lse/sessions/{id}` route once,
+    /// and not again if it does not know it.
     func closeSession(_ id: String) {
-        guard sessionCloseSupported != false, phase == .ready else { return }
+        guard phase == .ready else { return }
+        #if canImport(LSEKit)
+        if LSEEngine.supportsSessions, let engine = box.engine {
+            sessionCloseSupported = true
+            Task.detached {
+                let closed = engine.closeSession(id)
+                engineLog.log("lse_session_close \(id, privacy: .public): \(closed ? "released" : "no such session")")
+            }
+            return
+        }
+        #endif
+        guard sessionCloseSupported != false else { return }
         let box = self.box
         Task.detached {
             let response = try? box.perform(method: "DELETE", path: "/v1/lse/sessions/\(id)", body: nil) { _ in true }
@@ -378,7 +390,12 @@ final class EngineService {
         }
     }
 
-    var supportsSessionClose: Bool { sessionCloseSupported == true }
+    var supportsSessionClose: Bool {
+        #if canImport(LSEKit)
+        if LSEEngine.supportsSessions { return true }
+        #endif
+        return sessionCloseSupported == true
+    }
 
     /// Device memory live/peak from lse_status, as text.
     func memoryLine() -> String {

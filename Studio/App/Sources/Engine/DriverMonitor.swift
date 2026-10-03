@@ -238,7 +238,7 @@ struct EngineStatusView: View {
         switch driver.engineState {
         case .deviceMatched(let detail):
             return ("checkmark.seal.fill", p.success.color, "Driver running",
-                    "The MacLinuxGPU service matched an AMD GPU (\(detail)). Start the GPU from here once the engine is installed.")
+                    "The MacLinuxGPU service matched an AMD GPU (\(detail)). The engine starts the GPU when it loads a model.")
         case .driverNotEnabled:
             return ("switch.2", p.warning.color, "Enable the driver",
                     "Open Settings › General › Drivers (or Settings › Apps › LemonSeed Studio › Drivers) and turn on LemonSeed Studio's AMD GPU driver.")
@@ -271,7 +271,9 @@ struct EngineStatusView: View {
                 "\($0.className), registry 0x\(String($0.registryID, radix: 16)), \($0.matchCount) match\($0.matchCount == 1 ? "" : "es")"
             } ?? (driver.lookupError ?? "not running"))
             if let server = driver.service?.userServerName {
-                row("Driver process", server == DriverMonitor.dextBundleID ? server : "\(server) (not this app's driver)")
+                row("Driver process", server == DriverMonitor.dextBundleID ? server
+                    : server == "unknown" ? "\(DriverMonitor.dextBundleID) (its registry properties are hidden from apps)"
+                    : "\(server) (not this app's driver)")
             }
         }
         .padding(Space.m)

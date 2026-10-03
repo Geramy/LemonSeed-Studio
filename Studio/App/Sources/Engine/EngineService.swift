@@ -299,6 +299,9 @@ final class EngineService {
     }
 
     func append(_ line: String) {
+        #if DEBUG
+        DevLog.shared.append(line, source: "lse")
+        #endif
         log.append(line)
         if log.count > 2000 { log.removeFirst(log.count - 2000) }
     }

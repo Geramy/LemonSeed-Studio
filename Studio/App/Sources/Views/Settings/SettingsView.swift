@@ -1,10 +1,11 @@
 import SwiftUI
+import StudioGitUI
 import StudioAgent
 import StudioCore
 import StudioDesign
 
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case appearance, editor, keyboard, accounts, model, engine, about
+    case appearance, editor, keyboard, accounts, model, engine, developer, about
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .accounts: "Accounts"
         case .model: "Model Endpoint"
         case .engine: "GPU Driver"
+        case .developer: "Developer"
         case .about: "About"
         }
     }
@@ -28,6 +30,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .accounts: "person.crop.circle"
         case .model: StudioSymbol.agent
         case .engine: StudioSymbol.gpu
+        case .developer: "hammer"
         case .about: "info.circle"
         }
     }
@@ -77,6 +80,7 @@ struct SettingsView: View {
                     case .keyboard: KeyboardSettings()
                     case .accounts: AccountsSettings()
                     case .model: ModelSettings()
+                    case .developer: DeveloperSettings()
                     case .engine: EngineSettings()
                     case .about: AboutSettings()
                     }
@@ -312,30 +316,21 @@ private struct KeyboardSettings: View {
 // MARK: - Accounts
 
 private struct AccountsSettings: View {
-    var body: some View {
-        SettingsForm {
-            Section {
-                account("GitHub", symbol: "chevron.left.forwardslash.chevron.right", detail: "github.com and GitHub Enterprise")
-                account("GitLab", symbol: "chevron.left.forwardslash.chevron.right", detail: "gitlab.com and self-hosted GitLab")
-            } footer: {
-                Text("Sign-in, SSH keys in the Secure Enclave and multiple accounts arrive with the Git package. Credentials are kept in the Keychain on this iPad only.")
-            }
-        }
-    }
+    @Environment(AppModel.self) private var app
 
-    private func account(_ name: String, symbol: String, detail: String) -> some View {
-        HStack {
-            Label {
-                VStack(alignment: .leading) {
-                    Text(name)
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
+    var body: some View {
+        if let git = app.services.git as? StudioGitProvider {
+            // StudioGit's accounts: GitHub/GitLab sign-in (personal access
+            // token, or the device flow once a client ID is set), the commit
+            // identity and SSH keys.
+            AccountsView(services: git.services)
+                .accessibilityIdentifier("settings.accounts")
+        } else {
+            SettingsForm {
+                Section {
+                    Text("Source control accounts need the Git package.").foregroundStyle(.secondary)
                 }
-            } icon: {
-                Image(systemName: symbol)
             }
-            Spacer()
-            Button("Sign In") {}
-                .disabled(true)
         }
     }
 }
@@ -418,6 +413,51 @@ private struct EngineSettings: View {
         .background(Color(.systemGroupedBackground).opacity(0))
     }
 }
+
+// MARK: - Developer
+
+private struct DeveloperSettings: View {
+    var body: some View {
+        SettingsForm {
+            #if DEBUG
+            DevServerSection(server: DevServer.shared)
+            #else
+            Section {
+                Text("The development remote control is only in debug builds.")
+                    .foregroundStyle(.secondary)
+            }
+            #endif
+        }
+    }
+}
+
+#if DEBUG
+private struct DevServerSection: View {
+    @Bindable var server: DevServer
+
+    var body: some View {
+        Section {
+            Toggle("Remote control", isOn: $server.enabled)
+                .accessibilityIdentifier("settings.devServer")
+            LabeledContent("State", value: server.state)
+            LabeledContent("Address", value: server.addresses.isEmpty ? "n/a"
+                           : server.addresses.map { "\($0):\(DevServer.port)" }.joined(separator: ", "))
+            LabeledContent("Bonjour", value: DevServer.serviceType)
+            LabeledContent("Token") {
+                Text(server.token)
+                    .font(.system(.footnote, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+            LabeledContent("Requests", value: "\(server.requestCount)")
+            Button("New Token") { server.regenerateToken() }
+        } header: {
+            Text("Development remote control")
+        } footer: {
+            Text("Studio/scripts/studioctl on the Mac drives the app over Wi-Fi: UI tree, taps, typing, screenshots, engine and chat. Every request needs this launch's token, also written to Documents/devserver.json. Debug builds only; never on cellular.")
+        }
+    }
+}
+#endif
 
 // MARK: - About
 

@@ -115,13 +115,16 @@ struct AgentHeader: View {
             }
             .foregroundStyle(theme.primaryText)
             .accessibilityLabel("Permission mode")
+            .accessibilityIdentifier("agent.mode")
 
             Button { model.refreshSessions(); showingSessions = true } label: {
                 Image(systemName: "clock.arrow.circlepath")
             }
-            .accessibilityLabel("Sessions")
+            .accessibilityLabel("Chats")
+            .accessibilityIdentifier("agent.sessions")
             Button { model.newSession() } label: { Image(systemName: "square.and.pencil") }
-                .accessibilityLabel("New session")
+                .accessibilityLabel("New chat")
+                .accessibilityIdentifier("agent.newChat")
                 .keyboardShortcut("n", modifiers: [.command, .shift])
         }
         .font(.system(size: 17))
@@ -255,6 +258,7 @@ struct Composer: View {
                 .lineLimit(1...8)
                 .focused(focused)
                 .onSubmit { model.send() }
+                .accessibilityIdentifier("agent.composer")
                 .padding(.vertical, 10)
                 .padding(.leading, 14)
 
@@ -268,6 +272,7 @@ struct Composer: View {
                 }
                 .keyboardShortcut(".", modifiers: .command)
                 .accessibilityLabel("Stop")
+                .accessibilityIdentifier("agent.stop")
                 .padding(5)
             }
             if !model.isRunning || model.canSend {
@@ -281,6 +286,7 @@ struct Composer: View {
                 .disabled(!model.canSend)
                 .keyboardShortcut(.return, modifiers: .command)
                 .accessibilityLabel("Send")
+                .accessibilityIdentifier("agent.send")
                 .padding(5)
             }
         }

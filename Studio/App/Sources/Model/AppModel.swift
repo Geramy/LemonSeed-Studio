@@ -64,6 +64,10 @@ final class AppModel {
         FontRegistry.registerBundledFonts()
         SampleContent.installIfRequested(library: library)
         if let forced = LaunchOptions.hardwareKeyboard { keyboard.override = forced }
+        #if DEBUG
+        // The development remote control (Settings › Developer).
+        DevServer.shared.startIfEnabled()
+        #endif
     }
 
     /// The density views lay out with (never `.automatic`).

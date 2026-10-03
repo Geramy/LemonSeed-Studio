@@ -76,6 +76,7 @@ struct EnginePanel: View {
                         if let launch = gpu.currentLaunch() { engine.reload(launch) }
                     } label: { Label("Reload", systemImage: "arrow.clockwise") }
                         .buttonStyle(.studioSecondary)
+                        .accessibilityIdentifier("engine.reload")
                 case .loading, .stopping:
                     Button { engine.stop() } label: { Label("Stop", systemImage: "stop") }
                         .buttonStyle(.studioSecondary)

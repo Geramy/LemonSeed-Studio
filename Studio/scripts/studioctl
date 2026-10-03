@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""studioctl: drive a debug build of LemonSeed Studio on an iPad from the Mac.
+
+The app (debug builds, Settings > Developer > Remote control) listens on the
+iPad's Wi-Fi interface, port 8765, advertises _lemonseed-dev._tcp with
+Bonjour, and requires a per-launch token. studioctl reads the token and the
+iPad's address from Documents/devserver.json with `devicectl device copy
+from`, or takes --host/--token.
+
+Examples:
+  studioctl status
+  studioctl nav ai
+  studioctl chat "What does src/main.c print?" --thinking low
+  studioctl screenshot ai.png
+  studioctl tap engine.reload
+  studioctl drag sidebar.resize 120
+  studioctl engine reload --wait
+  studioctl shots ./screens            # every main screen
+  studioctl record-fixture r9700-idle --out Fixtures/r9700-idle.json
+
+Standard library only.
+"""
+import argparse
+import http.client
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+
+PORT = 8765
+SERVICE = "_lemonseed-dev._tcp"
+BUNDLE = "com.geramyloveless.LemonSeedStudio"
+CACHE = os.path.expanduser("~/.cache/studioctl")
+
+
+def die(msg, code=1):
+    print(f"studioctl: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+# --- discovery -------------------------------------------------------------
+
+def default_device():
+    if os.environ.get("STUDIO_DEVICE"):
+        return os.environ["STUDIO_DEVICE"]
+    with tempfile.NamedTemporaryFile(suffix=".json") as f:
+        r = subprocess.run(["xcrun", "devicectl", "list", "devices", "--json-output", f.name],
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            return None
+        try:
+            devices = json.load(open(f.name))["result"]["devices"]
+        except Exception:
+            return None
+    for d in devices:
+        props = d.get("hardwareProperties", {})
+        if props.get("deviceType") == "iPad" and d.get("connectionProperties", {}).get("pairingState") == "paired":
+            return d["identifier"]
+    return None
+
+
+def fetch_info(device):
+    """Documents/devserver.json from the app's container."""
+    os.makedirs(CACHE, exist_ok=True)
+    dest = os.path.join(CACHE, f"{device}.json")
+    r = subprocess.run(["xcrun", "devicectl", "device", "copy", "from", "--device", device,
+                        "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE,
+                        "--source", "Documents/devserver.json", "--destination", dest],
+                       capture_output=True, text=True)
+    if r.returncode != 0 or not os.path.exists(dest):
+        die("could not read Documents/devserver.json from the iPad (is a debug build running with "
+            "Settings > Developer > Remote control on?)\n" + r.stderr.strip()[-400:])
+    with open(dest) as f:
+        return json.load(f)
+
+
+def bonjour_host(timeout=4.0):
+    """The first _lemonseed-dev._tcp service's host, via dns-sd."""
+    try:
+        browse = subprocess.Popen(["dns-sd", "-B", SERVICE, "local."], stdout=subprocess.PIPE, text=True)
+        name = None
+        deadline = time.time() + timeout
+        while time.time() < deadline and name is None:
+            line = browse.stdout.readline()
+            if " Add " in line and SERVICE in line:
+                name = line.split(SERVICE + ".", 1)[1].strip()
+        browse.kill()
+        if not name:
+            return None
+        resolve = subprocess.Popen(["dns-sd", "-L", name, SERVICE, "local."], stdout=subprocess.PIPE, text=True)
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            line = resolve.stdout.readline()
+            if "can be reached at" in line:
+                resolve.kill()
+                return line.split("can be reached at", 1)[1].split(":")[0].strip().rstrip(".")
+        resolve.kill()
+    except FileNotFoundError:
+        pass
+    return None
+
+
+class Client:
+    def __init__(self, args):
+        self.token = args.token or os.environ.get("STUDIO_TOKEN")
+        self.host = args.host or os.environ.get("STUDIO_HOST")
+        self.port = args.port
+        if not self.token or not self.host:
+            device = args.device or default_device()
+            if not self.token:
+                if not device:
+                    die("no iPad found; pass --device or --token/--host")
+                info = fetch_info(device)
+                self.token = info["token"]
+                self.port = info.get("port", self.port)
+                if not self.host and info.get("addresses"):
+                    self.host = info["addresses"][0]
+            if not self.host:
+                self.host = bonjour_host()
+        if not self.host:
+            die("could not find the iPad; pass --host")
+
+    def _conn(self, timeout):
+        return http.client.HTTPConnection(self.host, self.port, timeout=timeout)
+
+    def call(self, method, path, body=None, timeout=60, raw=False):
+        c = self._conn(timeout)
+        data = json.dumps(body).encode() if body is not None else None
+        headers = {"Authorization": f"Bearer {self.token}"}
+        if data is not None:
+            headers["Content-Type"] = "application/json"
+        c.request(method, path, body=data, headers=headers)
+        r = c.getresponse()
+        payload = r.read()
+        if raw:
+            return r.status, payload
+        try:
+            obj = json.loads(payload) if payload else {}
+        except ValueError:
+            obj = {"raw": payload.decode(errors="replace")}
+        if r.status >= 400:
+            die(f"{method} {path}: HTTP {r.status}: {obj.get('error', obj)}")
+        return obj
+
+    def stream(self, method, path, body=None, timeout=1800):
+        """Yields each server-sent event's JSON object."""
+        c = self._conn(timeout)
+        c.request(method, path, body=json.dumps(body or {}).encode(),
+                  headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"})
+        r = c.getresponse()
+        if r.status >= 400:
+            die(f"{method} {path}: HTTP {r.status}: {r.read().decode(errors='replace')}")
+        if not r.getheader("Content-Type", "").startswith("text/event-stream"):
+            yield json.loads(r.read() or b"{}")
+            return
+        while True:
+            line = r.readline()
+            if not line:
+                break
+            line = line.decode(errors="replace").strip()
+            if not line.startswith("data: "):
+                continue
+            data = line[6:]
+            if data == "[DONE]":
+                break
+            yield json.loads(data)
+
+
+def out(obj):
+    print(json.dumps(obj, indent=2, sort_keys=True))
+
+
+# --- commands --------------------------------------------------------------
+
+def cmd_status(cl, a):
+    out(cl.call("GET", "/status"))
+
+
+def cmd_tree(cl, a):
+    elements = cl.call("GET", "/ui/tree" + ("?all=1" if a.all else ""))["elements"]
+    for e in elements:
+        text = " ".join(filter(None, [e.get("id") and f"#{e['id']}", e.get("label") and repr(e["label"]),
+                                      e.get("value") and f"= {e['value']!r}",
+                                      e.get("traits") and "[" + ",".join(e["traits"]) + "]"]))
+        if a.grep and a.grep.lower() not in text.lower():
+            continue
+        x, y, w, h = e["frame"]
+        print(f"{'  ' * min(e['depth'], 30)}{text}  ({x:.0f},{y:.0f} {w:.0f}x{h:.0f})")
+
+
+def cmd_tap(cl, a):
+    body = {}
+    if a.point:
+        body["point"] = [float(v) for v in a.point.split(",")]
+    elif a.label:
+        body["label"] = a.label
+    else:
+        body["id"] = a.target
+    out(cl.call("POST", "/ui/tap", body))
+
+
+def cmd_type(cl, a):
+    out(cl.call("POST", "/ui/type", {"text": a.text, **({"id": a.into} if a.into else {})}))
+
+
+def cmd_key(cl, a):
+    out(cl.call("POST", "/ui/key", {"key": a.key, "modifiers": a.mod or []}))
+
+
+def cmd_scroll(cl, a):
+    out(cl.call("POST", "/ui/scroll", {"id": a.id, "dx": a.dx, "dy": a.dy}))
+
+
+def cmd_drag(cl, a):
+    out(cl.call("POST", "/ui/drag", {"id": a.target, "dx": a.dx, "dy": a.dy}))
+
+
+def cmd_rotate(cl, a):
+    out(cl.call("POST", "/ui/rotate", {"orientation": a.orientation}))
+
+
+def cmd_screenshot(cl, a):
+    status, png = cl.call("GET", f"/ui/screenshot?delay={a.delay}", raw=True)
+    if status != 200:
+        die(f"screenshot failed: HTTP {status}")
+    with open(a.out, "wb") as f:
+        f.write(png)
+    print(a.out)
+
+
+def cmd_nav(cl, a):
+    body = {"screen": a.screen}
+    if a.sidebar_width:
+        body["sidebarWidth"] = a.sidebar_width
+    out(cl.call("POST", "/nav", body))
+
+
+def wait_engine(cl, timeout=900):
+    start = time.time()
+    while time.time() - start < timeout:
+        s = cl.call("GET", "/engine/status")
+        phase = s.get("phase", "")
+        if phase == "ready" or phase.startswith("failed"):
+            return s
+        time.sleep(2)
+    die("the engine did not settle")
+
+
+def cmd_engine(cl, a):
+    if a.action == "status":
+        out(cl.call("GET", "/engine/status"))
+        return
+    s = cl.call("POST", f"/engine/{a.action}")
+    if a.wait and a.action in ("start", "reload"):
+        time.sleep(2)
+        s = wait_engine(cl)
+    out(s)
+
+
+def cmd_request(cl, a):
+    body = json.loads(a.body) if a.body else None
+    if body is not None and a.stream:
+        body["stream"] = True
+    for ev in cl.stream("POST", "/engine/request", {"method": a.method, "path": a.path, "body": body}):
+        if a.stream and "choices" in ev:
+            delta = ev["choices"][0].get("delta", {}) if ev["choices"] else {}
+            sys.stdout.write(delta.get("reasoning_content", "") + delta.get("content", ""))
+            sys.stdout.flush()
+        else:
+            out(ev)
+    print()
+
+
+def cmd_chat(cl, a):
+    body = {"text": a.text}
+    if a.thinking:
+        body["thinking"] = a.thinking
+    if a.session:
+        body["session"] = a.session
+    if a.mode:
+        body["mode"] = a.mode
+    thinking = False
+    start = time.time()
+    for ev in cl.stream("POST", "/chat/send", body):
+        t = ev.get("type")
+        if t == "reasoning":
+            if not thinking:
+                sys.stdout.write("\n[thinking] ")
+                thinking = True
+            sys.stdout.write(ev["text"])
+        elif t == "text":
+            if thinking:
+                sys.stdout.write("\n[answer] ")
+                thinking = False
+            sys.stdout.write(ev["text"])
+        elif t == "tool":
+            sys.stdout.write(f"\n[tool {ev['name']} {ev['status']}] {ev.get('arguments', '')}\n")
+        elif t == "done":
+            print(f"\n\n[done in {time.time() - start:.1f} s]")
+            out({k: v for k, v in ev.items() if k != "type"})
+        sys.stdout.flush()
+
+
+def cmd_sessions(cl, a):
+    out(cl.call("GET", "/chat/sessions"))
+
+
+def cmd_session(cl, a):
+    if a.action == "new":
+        out(cl.call("POST", "/chat/new", {}))
+    else:
+        out(cl.call("POST", f"/chat/session/{a.action}", {"id": a.id}))
+
+
+def cmd_logs(cl, a):
+    since = a.since
+    while True:
+        lines = cl.call("GET", f"/logs?since={since}")["lines"]
+        for l in lines:
+            print(f"{l['time']} [{l['source']}] {l['text']}")
+            since = l["seq"]
+        if not a.follow:
+            break
+        time.sleep(1)
+
+
+def cmd_driver(cl, a):
+    s = cl.call("GET", "/driver/status")
+    report = s.pop("probeReport", None)
+    out(s)
+    if report and a.report:
+        print(report)
+
+
+def cmd_record_fixture(cl, a):
+    r = cl.call("POST", "/fixtures/record", {"name": a.name, "seconds": a.seconds, "description": a.description},
+                timeout=a.seconds + 120)
+    print(r["result"])
+    if a.out:
+        status, data = cl.call("GET", f"/file?path={r['file']}", raw=True)
+        if status != 200:
+            die(f"could not fetch {r['file']}")
+        with open(a.out, "wb") as f:
+            f.write(data)
+        print(a.out)
+
+
+def cmd_get(cl, a):
+    status, data = cl.call("GET", f"/file?path={a.path}", raw=True)
+    if status != 200:
+        die(f"HTTP {status}: {data[:200]!r}")
+    with open(a.out, "wb") as f:
+        f.write(data)
+    print(a.out)
+
+
+SCREENS = ["explorer", "ai", "models", "models-manager", "gpu", "gpu-monitor", "engine", "diagnostics",
+           "load-settings", "source-control", "search", "terminal", "settings"]
+
+
+def cmd_shots(cl, a):
+    os.makedirs(a.dir, exist_ok=True)
+    for i, screen in enumerate(a.screens or SCREENS, 1):
+        cl.call("POST", "/nav", {"screen": screen})
+        status, png = cl.call("GET", f"/ui/screenshot?delay={a.delay}", raw=True)
+        path = os.path.join(a.dir, f"{i:02d}-{screen}.png")
+        with open(path, "wb") as f:
+            f.write(png)
+        print(path)
+    cl.call("POST", "/nav", {"screen": "close-sheets"})
+
+
+def main():
+    p = argparse.ArgumentParser(prog="studioctl", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--host")
+    p.add_argument("--port", type=int, default=PORT)
+    p.add_argument("--token")
+    p.add_argument("--device", help="CoreDevice identifier (default: $STUDIO_DEVICE or the paired iPad)")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("status").set_defaults(fn=cmd_status)
+    s = sub.add_parser("tree"); s.add_argument("--all", action="store_true"); s.add_argument("--grep"); s.set_defaults(fn=cmd_tree)
+    s = sub.add_parser("tap"); s.add_argument("target", nargs="?"); s.add_argument("--label"); s.add_argument("--point")
+    s.set_defaults(fn=cmd_tap)
+    s = sub.add_parser("type"); s.add_argument("text"); s.add_argument("--into"); s.set_defaults(fn=cmd_type)
+    s = sub.add_parser("key"); s.add_argument("key"); s.add_argument("--mod", action="append"); s.set_defaults(fn=cmd_key)
+    s = sub.add_parser("scroll"); s.add_argument("dy", type=float); s.add_argument("--dx", type=float, default=0)
+    s.add_argument("--id"); s.set_defaults(fn=cmd_scroll)
+    s = sub.add_parser("drag"); s.add_argument("target"); s.add_argument("dx", type=float); s.add_argument("dy", type=float, nargs="?", default=0)
+    s.set_defaults(fn=cmd_drag)
+    s = sub.add_parser("rotate"); s.add_argument("orientation", choices=["portrait", "landscape"]); s.set_defaults(fn=cmd_rotate)
+    s = sub.add_parser("screenshot"); s.add_argument("out"); s.add_argument("--delay", type=float, default=0.5)
+    s.set_defaults(fn=cmd_screenshot)
+    s = sub.add_parser("nav"); s.add_argument("screen"); s.add_argument("--sidebar-width", type=float); s.set_defaults(fn=cmd_nav)
+    s = sub.add_parser("engine"); s.add_argument("action", choices=["status", "start", "stop", "reload"])
+    s.add_argument("--wait", action="store_true"); s.set_defaults(fn=cmd_engine)
+    s = sub.add_parser("request", help="raw lse_request passthrough")
+    s.add_argument("method"); s.add_argument("path"); s.add_argument("body", nargs="?"); s.add_argument("--stream", action="store_true")
+    s.set_defaults(fn=cmd_request)
+    s = sub.add_parser("chat"); s.add_argument("text"); s.add_argument("--thinking"); s.add_argument("--session")
+    s.add_argument("--mode", choices=["readOnly", "ask", "review", "autopilot"]); s.set_defaults(fn=cmd_chat)
+    sub.add_parser("sessions").set_defaults(fn=cmd_sessions)
+    s = sub.add_parser("session"); s.add_argument("action", choices=["new", "close", "delete"]); s.add_argument("id", nargs="?")
+    s.set_defaults(fn=cmd_session)
+    s = sub.add_parser("logs"); s.add_argument("--since", type=int, default=0); s.add_argument("--follow", "-f", action="store_true")
+    s.set_defaults(fn=cmd_logs)
+    s = sub.add_parser("driver"); s.add_argument("--report", action="store_true"); s.set_defaults(fn=cmd_driver)
+    s = sub.add_parser("record-fixture"); s.add_argument("name"); s.add_argument("--seconds", type=float, default=60)
+    s.add_argument("--description", default=""); s.add_argument("--out"); s.set_defaults(fn=cmd_record_fixture)
+    s = sub.add_parser("get", help="a file under the app's Documents"); s.add_argument("path"); s.add_argument("out")
+    s.set_defaults(fn=cmd_get)
+    s = sub.add_parser("shots", help="navigate the main screens and screenshot each")
+    s.add_argument("dir"); s.add_argument("screens", nargs="*"); s.add_argument("--delay", type=float, default=2.0)
+    s.set_defaults(fn=cmd_shots)
+
+    a = p.parse_args()
+    a.fn(Client(a), a)
+
+
+if __name__ == "__main__":
+    main()

@@ -243,7 +243,7 @@ cat >"$HEADERS/Clibgit2.h" <<'EOF'
 EOF
 cat >"$HEADERS/module.modulemap" <<'EOF'
 module Clibgit2 {
-    umbrella header "Clibgit2.h"
+    header "Clibgit2.h"
     export *
     link "z"
     link "iconv"

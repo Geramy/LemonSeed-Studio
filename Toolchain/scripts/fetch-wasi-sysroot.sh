@@ -71,6 +71,12 @@ for t in $WASI_TARGETS; do
   cp "$rt_dir/libclang_rt.builtins.a" "$OUT/clang/lib/wasm32-unknown-${t#wasm32-}/"
 done
 
+# clang finds libc++'s version by listing <sysroot>/include/c++ (it expects
+# v1 there) before it adds <sysroot>/include/<target>/c++/v1. Keep that
+# directory, with a marker file so bundling never drops it as empty.
+mkdir -p "$OUT/sysroot/include/c++/v1"
+echo "libc++ headers live in include/<target>/c++/v1" >"$OUT/sysroot/include/c++/v1/README.txt"
+
 # Builtin headers straight from the pinned clang source (the generated
 # target-specific headers such as arm_neon.h are not needed for wasm).
 mkdir -p "$OUT/clang/include"

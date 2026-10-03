@@ -104,6 +104,17 @@ final class EngineService {
     private(set) var log: [String] = []
     private(set) var startedAt: Date?
 
+    /// Whether this process can open a second engine after closing one.
+    /// LSE (through bb2459d) does not return a closed engine's device memory
+    /// to the GPU, so a second lse_open in the same process runs out of VRAM
+    /// with the first engine's buffers still allocated. Until that is fixed
+    /// the app opens the engine at most once per launch.
+    static let canReopenInProcess = false
+    /// An engine was opened (or opening was attempted) in this process.
+    private(set) var openedInThisProcess = false
+    /// Settings that need an app restart to load (see canReopenInProcess).
+    private(set) var restartRequired: EngineLaunch?
+
     /// Start the engine when the app launches (Settings › GPU).
     var autoStart: Bool {
         didSet { UserDefaults.standard.set(autoStart, forKey: "engine.autoStart") }
@@ -176,17 +187,23 @@ final class EngineService {
         }
         switch phase {
         case .loading, .stopping:
-            pendingLaunch = launch
+            // Never a second lse_open while one engine is open or opening.
+            if launch != self.launch { requireRestart(for: launch) }
             return
         case .ready:
             if launch == self.launch { return }
-            pendingLaunch = launch
-            stop()
+            requireRestart(for: launch)
             return
         default:
             break
         }
+        if openedInThisProcess && !Self.canReopenInProcess {
+            requireRestart(for: launch)
+            return
+        }
         #if canImport(LSEKit)
+        openedInThisProcess = true
+        restartRequired = nil
         self.launch = launch
         stopAfterLoad = false
         phase = .loading("Starting the GPU")
@@ -273,8 +290,19 @@ final class EngineService {
         phase = .failed("This build has no GPU engine (simulator).")
     }
 
-    /// Restarts with new settings (Apply in the load settings sheet).
+    private func requireRestart(for launch: EngineLaunch) {
+        restartRequired = launch
+        engineLog.log("engine reload deferred to the next launch: \(launch.modelID, privacy: .public) \(launch.kvCacheDType, privacy: .public)/\(launch.kvLength)")
+    }
+
+    /// Restarts with new settings (Apply in the load settings sheet). While
+    /// the engine cannot reopen in process, the settings wait for the next
+    /// launch instead (they are already saved).
     func reload(_ launch: EngineLaunch) {
+        if openedInThisProcess && !Self.canReopenInProcess {
+            if launch != self.launch || phase != .ready { requireRestart(for: launch) }
+            return
+        }
         switch phase {
         case .loading, .stopping:
             stopAfterLoad = false

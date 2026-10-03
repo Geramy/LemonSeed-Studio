@@ -17,6 +17,11 @@ struct EnginePanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Space.m) {
+            if engine.restartRequired != nil || (engine.openedInThisProcess && !EngineService.canReopenInProcess
+                                                 && engine.phase != .ready && engine.phase != .stopping
+                                                 && !isLoading) {
+                restartBanner
+            }
             engineCard
             if let timings = engine.lastTimings { timingsCard(timings) }
             EngineStatusView(driver: provider.driver)
@@ -30,6 +35,32 @@ struct EnginePanel: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("engine.panel")
+    }
+
+    private var isLoading: Bool {
+        if case .loading = engine.phase { return true }
+        return false
+    }
+
+    /// The engine opens once per launch for now (see
+    /// EngineService.canReopenInProcess): new settings, another model or a
+    /// start after a stop take effect when the app starts again.
+    private var restartBanner: some View {
+        VStack(alignment: .leading, spacing: Space.s) {
+            Label("Restart LemonSeed Studio to apply", systemImage: "arrow.clockwise.circle.fill")
+                .font(.studio(type.body, weight: .semibold))
+                .foregroundStyle(theme.palette.warning.color)
+            Text(engine.restartRequired.map { "Saved: \($0.modelName), \($0.kvCacheDType) K/V × \($0.kvLength.formatted()). " } ?? ""
+                 + "The engine can't be reloaded in place yet (a closed engine keeps its GPU memory until the app quits). Quit the app from the app switcher and open it again; it loads with these settings.")
+                .font(.studio(type.caption))
+                .foregroundStyle(theme.palette.textSecondary.color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(Space.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.palette.warning.color.opacity(0.10), in: RoundedRectangle(cornerRadius: Radius.l, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("engine.restartRequired")
     }
 
     // MARK: Engine
@@ -73,11 +104,13 @@ struct EnginePanel: View {
                     Button { engine.stop() } label: { Label("Stop", systemImage: "stop.fill") }
                         .buttonStyle(.studioSecondary)
                         .accessibilityIdentifier("engine.stop")
-                    Button {
-                        if let launch = gpu.currentLaunch() { engine.reload(launch) }
-                    } label: { Label("Reload", systemImage: "arrow.clockwise") }
-                        .buttonStyle(.studioSecondary)
-                        .accessibilityIdentifier("engine.reload")
+                    if EngineService.canReopenInProcess {
+                        Button {
+                            if let launch = gpu.currentLaunch() { engine.reload(launch) }
+                        } label: { Label("Reload", systemImage: "arrow.clockwise") }
+                            .buttonStyle(.studioSecondary)
+                            .accessibilityIdentifier("engine.reload")
+                    }
                 case .loading, .stopping:
                     Button { engine.stop() } label: { Label("Stop", systemImage: "stop") }
                         .buttonStyle(.studioSecondary)
@@ -86,7 +119,8 @@ struct EnginePanel: View {
                         Label("Start", systemImage: "bolt.fill")
                     }
                     .buttonStyle(.studioPrimary)
-                    .disabled(!EngineService.isAvailable || gpu.selectedModel == nil)
+                    .disabled(!EngineService.isAvailable || gpu.selectedModel == nil
+                              || (engine.openedInThisProcess && !EngineService.canReopenInProcess))
                     .accessibilityIdentifier("engine.start")
                 }
                 Spacer()

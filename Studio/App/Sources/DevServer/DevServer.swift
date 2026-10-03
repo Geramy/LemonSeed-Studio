@@ -298,6 +298,10 @@ final class DevServer {
                            "batch": "\(launch.batchSize)/\(launch.ubatchSize)"] as [String: Any]
         }
         if let seconds = app.engine.loadSeconds { s["loadSeconds"] = seconds }
+        s["canReopenInProcess"] = EngineService.canReopenInProcess
+        if let pending = app.engine.restartRequired {
+            s["restartRequired"] = ["model": pending.modelID, "kv": "\(pending.kvCacheDType)/\(pending.kvLength)"]
+        }
         return s
     }
 

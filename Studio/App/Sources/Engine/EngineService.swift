@@ -105,11 +105,11 @@ final class EngineService {
     private(set) var startedAt: Date?
 
     /// Whether this process can open a second engine after closing one.
-    /// LSE (through bb2459d) does not return a closed engine's device memory
-    /// to the GPU, so a second lse_open in the same process runs out of VRAM
-    /// with the first engine's buffers still allocated. Until that is fixed
-    /// the app opens the engine at most once per launch.
-    static let canReopenInProcess = false
+    /// LSE before 48c88ff did not return a closed engine's device memory, so
+    /// a second lse_open ran out of VRAM; with such an engine set this to
+    /// false and the app opens the engine at most once per launch. Either
+    /// way a second lse_open never runs while one engine is open or opening.
+    static let canReopenInProcess = true
     /// An engine was opened (or opening was attempted) in this process.
     private(set) var openedInThisProcess = false
     /// Settings that need an app restart to load (see canReopenInProcess).
@@ -187,12 +187,17 @@ final class EngineService {
         }
         switch phase {
         case .loading, .stopping:
-            // Never a second lse_open while one engine is open or opening.
-            if launch != self.launch { requireRestart(for: launch) }
+            // Never a second lse_open while one engine is open or opening:
+            // the request waits until this one has finished (and closes).
+            if launch != self.launch {
+                if Self.canReopenInProcess { pendingLaunch = launch } else { requireRestart(for: launch) }
+            }
             return
         case .ready:
             if launch == self.launch { return }
-            requireRestart(for: launch)
+            guard Self.canReopenInProcess else { requireRestart(for: launch); return }
+            pendingLaunch = launch
+            stop()
             return
         default:
             break

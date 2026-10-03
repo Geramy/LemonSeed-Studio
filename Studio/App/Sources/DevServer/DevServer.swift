@@ -299,6 +299,13 @@ final class DevServer {
         }
         if let seconds = app.engine.loadSeconds { s["loadSeconds"] = seconds }
         s["canReopenInProcess"] = EngineService.canReopenInProcess
+        // The driver's own view: amdgpu's mem_info_vram_used/total through
+        // StudioTelemetry's observer client.
+        if let telemetry = app.services.telemetry as? StudioTelemetryProvider,
+           let vram = telemetry.service.state.summary.vram {
+            s["driverVRAM"] = ["usedGiB": vram.used, "totalGiB": vram.total,
+                               "source": telemetry.service.state.summary.vramSource]
+        }
         if let pending = app.engine.restartRequired {
             s["restartRequired"] = ["model": pending.modelID, "kv": "\(pending.kvCacheDType)/\(pending.kvLength)"]
         }

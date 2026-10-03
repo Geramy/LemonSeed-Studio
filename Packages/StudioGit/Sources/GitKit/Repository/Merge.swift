@@ -70,8 +70,16 @@ public enum ConflictResolution: Sendable, Hashable {
 
 extension GitRepository {
     public func merge(_ revision: String, options: MergeOptions = MergeOptions()) throws -> MergeResult {
+        // From a reference when possible, so MERGE_MSG names the branch.
         var annotated: OpaquePointer?
-        try check(git_annotated_commit_from_revspec(&annotated, handle, revision), "git_annotated_commit_from_revspec(\(revision))")
+        var ref: OpaquePointer?
+        if git_reference_dwim(&ref, handle, revision) == 0 {
+            defer { git_reference_free(ref) }
+            try check(git_annotated_commit_from_ref(&annotated, handle, ref), "git_annotated_commit_from_ref(\(revision))")
+        } else {
+            git_error_clear()
+            try check(git_annotated_commit_from_revspec(&annotated, handle, revision), "git_annotated_commit_from_revspec(\(revision))")
+        }
         defer { git_annotated_commit_free(annotated) }
         let theirID = ObjectID(git_annotated_commit_id(annotated))
 

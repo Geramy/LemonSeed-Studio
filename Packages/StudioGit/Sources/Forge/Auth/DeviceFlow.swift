@@ -12,6 +12,16 @@ public struct DeviceAuthorization: Codable, Sendable, Hashable {
     public var expiresAt: Date
     /// Seconds between polls.
     public var interval: Int
+
+    public init(deviceCode: String, userCode: String, verificationURI: URL, verificationURIComplete: URL? = nil,
+                expiresAt: Date, interval: Int = 5) {
+        self.deviceCode = deviceCode
+        self.userCode = userCode
+        self.verificationURI = verificationURI
+        self.verificationURIComplete = verificationURIComplete
+        self.expiresAt = expiresAt
+        self.interval = interval
+    }
 }
 
 /// An OAuth access token (and, for GitLab, a refresh token).

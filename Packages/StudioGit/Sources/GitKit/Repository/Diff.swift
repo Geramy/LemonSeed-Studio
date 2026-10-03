@@ -37,6 +37,16 @@ public struct DiffHunk: Sendable, Hashable, Identifiable, Codable {
     public var newStart: Int
     public var newCount: Int
     public var lines: [DiffLine]
+
+    public init(id: Int, header: String, oldStart: Int, oldCount: Int, newStart: Int, newCount: Int, lines: [DiffLine]) {
+        self.id = id
+        self.header = header
+        self.oldStart = oldStart
+        self.oldCount = oldCount
+        self.newStart = newStart
+        self.newCount = newCount
+        self.lines = lines
+    }
 }
 
 public struct FileDiff: Sendable, Hashable, Identifiable, Codable {

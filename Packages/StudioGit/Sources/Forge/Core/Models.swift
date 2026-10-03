@@ -23,6 +23,12 @@ public struct ForgeOrganization: Codable, Sendable, Hashable, Identifiable {
     public var login: String
     public var name: String?
     public var avatarURL: URL?
+    public init(id: String, login: String, name: String? = nil, avatarURL: URL? = nil) {
+        self.id = id
+        self.login = login
+        self.name = name
+        self.avatarURL = avatarURL
+    }
 }
 
 public struct ForgeRepository: Codable, Sendable, Hashable, Identifiable {
@@ -77,12 +83,22 @@ public struct ForgeBranch: Codable, Sendable, Hashable, Identifiable {
     public var isProtected: Bool
     public var isDefault: Bool
     public var id: String { name }
+    public init(name: String, commit: String, isProtected: Bool = false, isDefault: Bool = false) {
+        self.name = name
+        self.commit = commit
+        self.isProtected = isProtected
+        self.isDefault = isDefault
+    }
 }
 
 public struct ForgeTag: Codable, Sendable, Hashable, Identifiable {
     public var name: String
     public var commit: String
     public var id: String { name }
+    public init(name: String, commit: String) {
+        self.name = name
+        self.commit = commit
+    }
 }
 
 public enum PullRequestState: String, Codable, Sendable, Hashable {
@@ -164,6 +180,14 @@ public struct PullRequestFile: Codable, Sendable, Hashable, Identifiable {
     /// binary or very large files.
     public var patch: String?
     public var id: String { path }
+    public init(path: String, previousPath: String? = nil, status: Status, additions: Int, deletions: Int, patch: String? = nil) {
+        self.path = path
+        self.previousPath = previousPath
+        self.status = status
+        self.additions = additions
+        self.deletions = deletions
+        self.patch = patch
+    }
 }
 
 public struct PullRequestComment: Codable, Sendable, Hashable, Identifiable {
@@ -177,6 +201,18 @@ public struct PullRequestComment: Codable, Sendable, Hashable, Identifiable {
     /// Comments in the same review thread share this id.
     public var threadID: String?
     public var isResolved: Bool?
+
+    public init(id: String, author: ForgeUser? = nil, body: String, createdAt: Date? = nil, path: String? = nil,
+                line: Int? = nil, threadID: String? = nil, isResolved: Bool? = nil) {
+        self.id = id
+        self.author = author
+        self.body = body
+        self.createdAt = createdAt
+        self.path = path
+        self.line = line
+        self.threadID = threadID
+        self.isResolved = isResolved
+    }
 }
 
 public enum ReviewEvent: String, Sendable, Hashable, CaseIterable {
@@ -243,6 +279,17 @@ public struct CIRun: Codable, Sendable, Hashable, Identifiable {
     public var completedAt: Date?
     /// Workflow (GitHub) or stage (GitLab).
     public var group: String?
+
+    public init(id: String, name: String, state: CIState, webURL: URL? = nil, startedAt: Date? = nil,
+                completedAt: Date? = nil, group: String? = nil) {
+        self.id = id
+        self.name = name
+        self.state = state
+        self.webURL = webURL
+        self.startedAt = startedAt
+        self.completedAt = completedAt
+        self.group = group
+    }
 }
 
 public struct CIStatus: Codable, Sendable, Hashable {
@@ -265,4 +312,12 @@ public struct ForgeSSHKey: Codable, Sendable, Hashable, Identifiable {
     public var key: String
     public var usage: Usage
     public var createdAt: Date?
+
+    public init(id: String, title: String, key: String, usage: Usage, createdAt: Date? = nil) {
+        self.id = id
+        self.title = title
+        self.key = key
+        self.usage = usage
+        self.createdAt = createdAt
+    }
 }

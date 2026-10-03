@@ -55,6 +55,7 @@ final class ToolbarTests: StudioUITestCase {
         XCTAssertTrue(app.buttons["Demo"].firstMatch.waitForExistence(timeout: 3), "recent workspaces are listed")
         app.buttons["New Window"].firstMatch.tap()
         expect("welcome", timeout: 10)
+        menu("Window", "Close")
     }
 
     func testMoreMenu() {
@@ -76,6 +77,7 @@ final class ToolbarTests: StudioUITestCase {
         tap("toolbar.more")
         app.buttons["GPU Monitor in New Window"].firstMatch.tap()
         expect("engine.status", timeout: 10)
+        menu("Window", "Close")
     }
 
     func testActivityBar() {

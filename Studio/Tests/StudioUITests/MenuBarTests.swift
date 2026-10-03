@@ -55,6 +55,9 @@ final class MenuBarTests: StudioUITestCase {
         launch()
         menu("File", "New Window")
         expect("welcome", timeout: 10, "a new window opens on the welcome screen")
+        // Close it again so later launches start with one window.
+        menu("Window", "Close")
+        expect("toolbar.workspaceMenu", timeout: 10)
     }
 
     func testViewMenuChrome() {

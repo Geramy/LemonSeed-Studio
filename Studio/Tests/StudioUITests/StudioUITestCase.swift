@@ -106,11 +106,19 @@ class StudioUITestCase: XCTestCase {
         ensureForeground()
         let file = springboard.buttons["File"].firstMatch
         guard file.exists, file.isHittable else { return }
-        // An inert spot: the top bar's empty middle, or the window's bottom edge.
+        // An inert spot inside whatever is in front: a sheet's title bar, the
+        // top bar's empty middle, or the welcome screen's header. Never a
+        // spot outside a sheet, which would dismiss it.
+        let sheet = element("settings")
         let menuButton = element("toolbar.workspaceMenu")
-        let point = menuButton.exists
-            ? CGVector(dx: menuButton.frame.maxX + 60, dy: menuButton.frame.midY)
-            : CGVector(dx: app.frame.midX, dy: app.frame.maxY - 8)
+        let point: CGVector
+        if sheet.exists {
+            point = CGVector(dx: sheet.frame.midX + 120, dy: sheet.frame.minY + 22)
+        } else if menuButton.exists {
+            point = CGVector(dx: menuButton.frame.maxX + 60, dy: menuButton.frame.midY)
+        } else {
+            point = CGVector(dx: app.frame.midX, dy: app.frame.minY + 300)
+        }
         app.coordinate(withNormalizedOffset: .zero).withOffset(point).tap()
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == false"), object: file)
         _ = XCTWaiter.wait(for: [gone], timeout: 3)

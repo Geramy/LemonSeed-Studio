@@ -1,7 +1,9 @@
 # LemonSeed Studio iPad proof of life.
 #
-# One iPadOS app that embeds the mac_linuxgpu DriverKit extension and reads
-# the identity and BAR layout of an AMD GPU attached over Thunderbolt.
+# One iPadOS app that embeds the mac_linuxgpu DriverKit extension, reads the
+# identity and BAR layout of an AMD GPU attached over Thunderbolt, and can run
+# the upstream amdgpu probe (InitDevice) while serving it the bundled
+# linux-firmware set through mac_linuxgpu's firmware servicer.
 #
 # Generate with ./build.sh (or `xcodegen` with MAC_LINUXGPU_DIR exported).
 # MAC_LINUXGPU_DIR is the mac_linuxgpu checkout the dext is compiled from;
@@ -41,6 +43,22 @@ targets:
     deploymentTarget: "26.2"
     sources:
       - path: App
+      # mac_linuxgpu's user-space firmware servicer, compiled unchanged from
+      # the checkout (the same files the macOS host app builds).
+      - path: ${MAC_LINUXGPU_DIR}/host
+        name: mac_linuxgpu host
+        includes:
+          - fw_mailbox_service.c
+          - fw_mailbox_service.h
+          - fw_mailbox_iokit.c
+    postCompileScripts:
+      - name: Bundle firmware
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          # The firmware.lock set, SHA-256 checked, as the servicer's root.
+          "$SRCROOT/scripts/bundle-firmware.sh" "$MAC_LINUXGPU_DIR" \
+            "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Firmware"
     dependencies:
       # Embedded through "Embed System Extensions" ($(SYSTEM_EXTENSIONS_FOLDER_PATH)).
       - target: MacLinuxGPU
@@ -53,6 +71,9 @@ targets:
         INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/LemonSeedStudio.entitlements
         SWIFT_OBJC_BRIDGING_HEADER: App/ProofOfLife-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(MAC_LINUXGPU_DIR)/host"
         SWIFT_VERSION: "5.10"
         TARGETED_DEVICE_FAMILY: "2"
         SUPPORTED_PLATFORMS: iphoneos
@@ -60,7 +81,9 @@ targets:
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
-        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        # "Bundle firmware" reads the mac_linuxgpu checkout's lock and
+        # build/firmware (and may fetch it), which a sandboxed script cannot.
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
 
   MacLinuxGPU:
     # The same DriverKit sources and library as the macOS build

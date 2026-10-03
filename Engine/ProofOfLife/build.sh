@@ -5,6 +5,15 @@
 #   ./build.sh                 generate the project and build for an iOS device
 #   ./build.sh install         ... then install on $DEVICE
 #   ./build.sh run             ... then install and launch on $DEVICE
+#   ./build.sh test            macOS tests only (no iOS build): the firmware
+#                              servicer against the bundled firmware set
+#
+# Launch arguments (devicectl ... process launch ... <bundle id> <args>):
+#   --auto-probe               probe, then write the report
+#   --auto-bringup             probe, initialize the GPU (InitDevice with the
+#                              firmware servicer), then write the report
+#   --bringup-timeout=SECONDS  InitDevice wait before it is reported hung (300)
+# The report goes to stdout and the app's Documents/probe-report.txt.
 #
 # Environment:
 #   MAC_LINUXGPU_DIR  mac_linuxgpu checkout the dext is compiled from
@@ -46,6 +55,20 @@ if [[ -n "$pinned" && "$pinned" != "$actual" ]]; then
   echo "note: $MAC_LINUXGPU_DIR is at $actual; the submodule pin is $pinned" >&2
 fi
 
+if [[ "${1:-build}" == test ]]; then
+  # The servicer source the app compiles, run on macOS against a mailbox in
+  # anonymous memory and the firmware root the app bundles.
+  out="$HERE/build/test"
+  mkdir -p "$out"
+  "$HERE/scripts/bundle-firmware.sh" "$MAC_LINUXGPU_DIR" "$out/Firmware"
+  xcrun clang -std=gnu11 -O1 -Wall -Wextra -Werror \
+    -I"$MAC_LINUXGPU_DIR/host" -I"$MAC_LINUXGPU_DIR/linuxu/headers" \
+    "$HERE/Tests/fw_service_test.c" "$MAC_LINUXGPU_DIR/host/fw_mailbox_service.c" \
+    -o "$out/fw_service_test"
+  "$out/fw_service_test" "$out/Firmware" "$out/Firmware/firmware.lock"
+  exit 0
+fi
+
 /opt/homebrew/bin/xcodegen --spec "$HERE/project.yml" --project "$HERE"
 
 xcodebuild \
@@ -71,5 +94,5 @@ case "${1:-build}" in
       xcrun devicectl device process launch --device "$DEVICE" --terminate-existing "$BUNDLE_ID"
     fi
     ;;
-  *) echo "usage: $0 [build|install|run]" >&2; exit 2 ;;
+  *) echo "usage: $0 [build|install|run|test]" >&2; exit 2 ;;
 esac

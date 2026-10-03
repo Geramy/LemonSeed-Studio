@@ -108,6 +108,9 @@ public struct ModelRecord: Codable, Sendable, Hashable, Identifiable {
     public var traits: ModelTraits?
     /// For main models: the DFlash2 draft LSE should run with.
     public var linkedDraftID: String?
+    /// For main models: how LSE loads it, when the user changed the defaults.
+    /// Absent in registries written before load settings existed.
+    public var loadSettings: ModelLoadSettings?
     public var state: State
     public var addedAt: Date
     public var lastUsedAt: Date?
@@ -221,11 +224,43 @@ public actor ModelRegistry {
     public func remove(_ id: String) throws {
         models.removeAll { $0.id == id }
         for i in models.indices where models[i].linkedDraftID == id { models[i].linkedDraftID = nil }
+        for i in models.indices where models[i].loadSettings?.draftID == id { models[i].loadSettings?.draftID = nil }
         try save()
     }
 
+    /// Pairs a main model with a DFlash2 draft (nil: none). Stored load
+    /// settings follow: they switch to the draft, or turn DFlash2 off.
     public func link(main: String, draft: String?) throws {
-        try update(main) { $0.linkedDraftID = draft }
+        try update(main) { record in
+            record.linkedDraftID = draft
+            if record.loadSettings != nil {
+                record.loadSettings?.draftID = draft
+                record.loadSettings?.dflash2Enabled = draft != nil
+            }
+        }
+    }
+
+    // MARK: Load settings
+
+    /// The model's stored load settings, or the defaults for it: the
+    /// standard preset with its linked draft, clamped to its config.
+    public func loadSettings(for id: String, preset: LSELaunchPreset = .standard) -> ModelLoadSettings {
+        guard let record = record(id) else { return ModelLoadSettings(preset: preset) }
+        let dir = location.directory(for: record.directoryName)
+        let summary = ModelConfigSummary.read(directory: dir)
+        if let stored = record.loadSettings { return stored.normalized(for: summary) }
+        let draft = record.linkedDraftID.flatMap { id in models.first { $0.id == id && $0.state == .installed } }
+        return .defaults(preset: preset, linkedDraftID: draft?.id, summary: summary,
+                         hasMTPModule: ConfigMemoryEstimator.isDirectory(dir.appending(path: "mtp")))
+    }
+
+    /// Stores a model's load settings (nil: back to the defaults). A chosen
+    /// DFlash2 draft becomes the model's linked draft as well.
+    public func setLoadSettings(_ settings: ModelLoadSettings?, for id: String) throws {
+        try update(id) { record in
+            record.loadSettings = settings
+            if let settings, settings.dflash2Enabled, let draft = settings.draftID { record.linkedDraftID = draft }
+        }
     }
 
     public func markUsed(_ id: String, at date: Date = Date()) throws {

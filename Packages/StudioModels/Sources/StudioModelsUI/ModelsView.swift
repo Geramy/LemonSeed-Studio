@@ -5,6 +5,14 @@
 // it a ModelLibrary and present it anywhere.
 //
 //   ModelsView(library: library)
+//
+// Each installed model has Load Settings… (K/V cache, context, prefill,
+// drafter, sampling) with a GPU memory fit check. Pass the GPU's VRAM and an
+// estimator to get a verdict, and onApplyLoadSettings to reload the engine
+// once new settings are stored:
+//
+//   ModelsView(library: library, vramTotalBytes: gpu.vramBytes,
+//              onApplyLoadSettings: { id, settings in engine.reload(id) })
 
 import StudioModels
 import SwiftUI
@@ -14,10 +22,23 @@ public struct ModelsView: View {
     let embedInNavigation: Bool
     @State private var showingToken = false
     @State private var pendingDelete: ModelRecord?
+    @State private var loadSettingsTarget: ModelRecord?
+    let vramTotalBytes: UInt64?
+    let estimator: any ModelMemoryEstimating
+    let onApplyLoadSettings: ((String, ModelLoadSettings) -> Void)?
 
-    public init(library: ModelLibrary, embedInNavigation: Bool = true) {
+    /// - Parameters:
+    ///   - vramTotalBytes: the GPU's memory for the load settings fit check; nil shows no verdict.
+    ///   - estimator: sizes a load; nil uses ConfigMemoryEstimator.
+    ///   - onApplyLoadSettings: called with the model id after its new settings are stored.
+    public init(library: ModelLibrary, embedInNavigation: Bool = true, vramTotalBytes: UInt64? = nil,
+                estimator: (any ModelMemoryEstimating)? = nil,
+                onApplyLoadSettings: ((String, ModelLoadSettings) -> Void)? = nil) {
         self.library = library
         self.embedInNavigation = embedInNavigation
+        self.vramTotalBytes = vramTotalBytes
+        self.estimator = estimator ?? ConfigMemoryEstimator()
+        self.onApplyLoadSettings = onApplyLoadSettings
     }
 
     public var body: some View {
@@ -41,7 +62,8 @@ public struct ModelsView: View {
             if !library.records.isEmpty {
                 Section("On this iPad") {
                     ForEach(sortedRecords) { record in
-                        InstalledModelRow(library: library, record: record, onDelete: { pendingDelete = record })
+                        InstalledModelRow(library: library, record: record, onDelete: { pendingDelete = record },
+                                          onLoadSettings: { loadSettingsTarget = record })
                     }
                 }
             }
@@ -76,6 +98,12 @@ public struct ModelsView: View {
         }
         .refreshable { await library.refresh() }
         .sheet(isPresented: $showingToken) { HubTokenView(library: library) }
+        .sheet(item: $loadSettingsTarget) { record in
+            ModelLoadSettingsView(modelID: record.id, displayName: record.name, library: library,
+                                  estimator: estimator, vramTotalBytes: vramTotalBytes) { settings in
+                onApplyLoadSettings?(record.id, settings)
+            }
+        }
         .confirmationDialog("Delete \(pendingDelete?.name ?? "model")?", isPresented: Binding(
             get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }), titleVisibility: .visible
         ) {
@@ -136,7 +164,11 @@ struct InstalledModelRow: View {
     let library: ModelLibrary
     let record: ModelRecord
     let onDelete: () -> Void
+    var onLoadSettings: (() -> Void)? = nil
     @State private var showingDetails = false
+
+    /// Load settings apply to installed main models only.
+    private var hasLoadSettings: Bool { record.role == .main && record.state == .installed && onLoadSettings != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -176,6 +208,9 @@ struct InstalledModelRow: View {
         .sheet(isPresented: $showingDetails) { ModelDetailView(library: library, record: record) }
         .contextMenu {
             Button("Details", systemImage: "info.circle") { showingDetails = true }
+            if hasLoadSettings, let onLoadSettings {
+                Button("Load Settings…", systemImage: "slider.horizontal.3", action: onLoadSettings)
+            }
             Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
         }
     }
@@ -218,6 +253,10 @@ struct InstalledModelRow: View {
                     library.verify(record.id)
                 }
                 .disabled(library.verifying[record.id] != nil)
+                if hasLoadSettings, let onLoadSettings {
+                    Button("Load Settings…", systemImage: "slider.horizontal.3", action: onLoadSettings)
+                        .accessibilityIdentifier("models.loadSettings.\(record.id)")
+                }
                 Button("Details", systemImage: "info.circle") { showingDetails = true }
                 Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
             case .incomplete, .missing:

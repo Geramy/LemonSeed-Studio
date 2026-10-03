@@ -141,10 +141,93 @@ public final class ModelLibrary {
         return draft
     }
 
-    /// LSE's arguments for an installed main model and its linked draft.
+    /// LSE's arguments for an installed main model: its load settings (stored,
+    /// or the preset's defaults) and its draft.
     public func launchArguments(for id: String) -> [String]? {
+        launchConfiguration(for: id)?.arguments
+    }
+
+    /// The resolved launch for an installed main model: the lse_config values
+    /// its load settings give, with the draft and MTP module found on disk.
+    public func launchConfiguration(for id: String) -> LSELaunchConfiguration? {
         guard let record = record(id), record.state == .installed, record.role == .main else { return nil }
-        return preset.arguments(model: directory(of: record), dflash2Draft: linkedDraft(of: record).map(directory(of:)))
+        let settings = loadSettings(for: id)
+        return preset.configuration(model: directory(of: record), settings: settings,
+                                    dflash2Draft: draft(of: record, settings: settings).map(directory(of:)),
+                                    mtpModule: mtpModuleDirectory(of: record))
+    }
+
+    // MARK: Load settings
+
+    /// The model's config.json geometry: max context, MTP, layer split.
+    public func configSummary(for id: String) -> ModelConfigSummary? {
+        guard let record = record(id) else { return nil }
+        return ModelConfigSummary.read(directory: directory(of: record))
+    }
+
+    /// The model's stored load settings, or its defaults: the preset, with
+    /// DFlash2 when a draft is linked (otherwise MTP when it has a module),
+    /// clamped to its config.
+    public func loadSettings(for id: String) -> ModelLoadSettings {
+        guard let record = record(id) else { return ModelLoadSettings(preset: preset) }
+        let summary = ModelConfigSummary.read(directory: directory(of: record))
+        if let stored = record.loadSettings { return stored.normalized(for: summary) }
+        return defaultLoadSettings(for: record, summary: summary)
+    }
+
+    /// The defaults for a model, ignoring anything stored.
+    public func defaultLoadSettings(for id: String) -> ModelLoadSettings {
+        guard let record = record(id) else { return ModelLoadSettings(preset: preset) }
+        return defaultLoadSettings(for: record, summary: ModelConfigSummary.read(directory: directory(of: record)))
+    }
+
+    private func defaultLoadSettings(for record: ModelRecord, summary: ModelConfigSummary?) -> ModelLoadSettings {
+        .defaults(preset: preset, linkedDraftID: linkedDraft(of: record)?.id, summary: summary,
+                  hasMTPModule: mtpModuleDirectory(of: record) != nil)
+    }
+
+    /// Persists a model's load settings (nil: back to the defaults), clamped
+    /// to its config. Returns false, with `lastError` set, when the registry
+    /// could not be written.
+    @discardableResult
+    public func setLoadSettings(_ settings: ModelLoadSettings?, for id: String) async -> Bool {
+        let normalized = settings?.normalized(for: configSummary(for: id))
+        do {
+            try await registry.setLoadSettings(normalized, for: id)
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+        records = await registry.all()
+        return true
+    }
+
+    /// Installed DFlash2 drafts that pass LSE's geometry check for the model
+    /// (a draft or model without readable traits is offered too).
+    public func compatibleDrafts(for id: String) -> [ModelRecord] {
+        let mine = record(id)?.traits
+        return installedDrafts.filter { draft in
+            guard draft.state == .installed else { return false }
+            guard let mine, let theirs = draft.traits else { return true }
+            return mine.accepts(draft: theirs)
+        }
+    }
+
+    /// The draft a launch with these settings runs: the chosen one, else the
+    /// linked one, when installed and DFlash2 is on.
+    public func draft(of record: ModelRecord, settings: ModelLoadSettings) -> ModelRecord? {
+        guard settings.dflash2Enabled else { return nil }
+        if let id = settings.draftID, let draft = self.record(id), draft.state == .installed,
+           draft.role == .dflash2Draft {
+            return draft
+        }
+        return linkedDraft(of: record)
+    }
+
+    /// The MTP module LSE finds beside the model (`mtp/`), when installed.
+    public func mtpModuleDirectory(of record: ModelRecord) -> URL? {
+        let dir = directory(of: record).appending(path: "mtp")
+        return ConfigMemoryEstimator.isDirectory(dir) ? dir : nil
     }
 
     // MARK: Commands

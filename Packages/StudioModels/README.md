@@ -45,6 +45,20 @@ results.filter(HubSearchFilters(mtp: true, dflash2: true, layout: .dense, bits: 
 await library.download(result, draft: result.drafts.first, includeMTP: true)
 ```
 
+Per-model load settings (K/V cache type, context length, prefill sizes, DFlash2 or MTP, sampling defaults) are stored in the registry entry; `launchArguments(for:)` and `launchConfiguration(for:)` follow them:
+
+```swift
+var settings = library.loadSettings(for: id)  // stored, or the preset's defaults for this model
+settings.kvLength = 65536; settings.kvCacheDType = .fp8
+await library.setLoadSettings(settings, for: id)    // nil: back to the defaults
+library.launchConfiguration(for: id)                // lse_config values, plus .arguments
+try ConfigMemoryEstimator().estimate(modelDirectory: dir, draftDirectory: draftDir, settings: settings)
+```
+
+- **Defaults:** `ModelLoadSettings()` is `LSELaunchPreset.standard`, so a model without stored settings launches exactly as before.
+- **Memory estimate:** `ConfigMemoryEstimator` is a fallback computed from `config.json` and the safetensors on disk, marked `isApproximate`. An estimator backed by LSE can replace it through `ModelMemoryEstimating`.
+- **UI:** `ModelLoadSettingsView`, opened from Load Settings… on the Models screen. Pass `vramTotalBytes` to `ModelsView` for a fit verdict.
+
 Lower level, each usable on its own:
 
 - `ModelCatalog`

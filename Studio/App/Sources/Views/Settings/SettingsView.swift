@@ -324,6 +324,7 @@ private struct AccountsSettings: View {
             // token, or the device flow once a client ID is set), the commit
             // identity and SSH keys.
             AccountsView(services: git.services)
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("settings.accounts")
         } else {
             SettingsForm {

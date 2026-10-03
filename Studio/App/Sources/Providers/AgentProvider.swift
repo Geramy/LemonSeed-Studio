@@ -105,6 +105,7 @@ private struct StudioAgentPanel: View {
                 EngineGate(engine: provider.engine)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("agent.panel")
     }
 }

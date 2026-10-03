@@ -28,6 +28,7 @@ struct EnginePanel: View {
                 try? await Task.sleep(for: .seconds(2))
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("engine.panel")
     }
 

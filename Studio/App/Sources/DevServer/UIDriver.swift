@@ -53,7 +53,7 @@ enum UIDriver {
     }
 
     private static func describe(_ object: NSObject) -> [String: Any]? {
-        let identifier = (object as? UIAccessibilityIdentification)?.accessibilityIdentifier ?? ""
+        let identifier = identifier(of: object) ?? ""
         let isElement = object.isAccessibilityElement
         guard isElement || !identifier.isEmpty else { return nil }
         let f = object.accessibilityFrame
@@ -67,6 +67,17 @@ enum UIDriver {
         let traits = traitNames(object.accessibilityTraits)
         if !traits.isEmpty { node["traits"] = traits }
         return node
+    }
+
+    /// The accessibility identifier. SwiftUI's accessibility nodes answer
+    /// `accessibilityIdentifier` without declaring the protocol, so ask by
+    /// selector.
+    private static func identifier(of object: NSObject) -> String? {
+        if let id = (object as? UIAccessibilityIdentification)?.accessibilityIdentifier, !id.isEmpty { return id }
+        let selector = NSSelectorFromString("accessibilityIdentifier")
+        guard object.responds(to: selector), let value = object.perform(selector)?.takeUnretainedValue() as? String,
+              !value.isEmpty else { return nil }
+        return value
     }
 
     private static func traitNames(_ t: UIAccessibilityTraits) -> [String] {
@@ -112,7 +123,7 @@ enum UIDriver {
         var match: Found?
         func search(_ object: NSObject, depth: Int) {
             guard match == nil, depth < 80 else { return }
-            let identifier = (object as? UIAccessibilityIdentification)?.accessibilityIdentifier
+            let identifier = identifier(of: object)
             if let id, identifier == id { match = Found(object: object, frame: object.accessibilityFrame); return }
             if id == nil, let label, object.accessibilityLabel == label {
                 match = Found(object: object, frame: object.accessibilityFrame); return

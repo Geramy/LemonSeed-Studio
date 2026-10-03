@@ -165,6 +165,7 @@ struct AdaptiveGPUMonitor: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("gpu.monitor")
     }
 
@@ -240,6 +241,7 @@ struct GPUMonitorSheet: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("gpu.monitorSheet")
     }
 }

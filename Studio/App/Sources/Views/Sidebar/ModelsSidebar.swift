@@ -58,6 +58,7 @@ struct ModelsSidebar: View {
             .padding(.horizontal, Space.m)
             .padding(.bottom, Space.l)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("models.sidebar")
     }
 
@@ -138,6 +139,7 @@ struct ModelsManagerSheet: View {
                     }
                 }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("models.screen")
     }
 }

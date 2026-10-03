@@ -7,37 +7,32 @@
 //   WebKitRunner  WASI in a hidden WKWebView (JavaScriptCore JITs the wasm in
 //                 the WebContent process)
 //
-// The two XCFrameworks are build products of Toolchain/scripts and are reached
-// through the Frameworks symlink (Frameworks -> ../../Toolchain/build/xcframeworks).
-// When one is missing the package still builds: the matching C bridge compiles
-// to a stub that reports how to build it.
+// The two XCFrameworks are build products of Toolchain/scripts, reached
+// through the Frameworks symlink (Frameworks -> ../../Toolchain/build/xcframeworks):
+//
+//   build-llvm-ios.sh   LemonSeedLLVM.xcframework  (about 20 minutes per slice at -j10)
+//   build-wamr-ios.sh   LemonSeedWAMR.xcframework  (seconds)
+//
+// To build the package without them, run make-stub-xcframeworks.sh: it fills
+// in placeholders whose config header tells the C bridges to compile to stubs
+// that report how to build the real thing. (The decision lives in a header,
+// not in this manifest, because SwiftPM caches manifest evaluation.)
 
-import Foundation
 import PackageDescription
 
-let packageDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
-func hasFramework(_ name: String) -> Bool {
-  FileManager.default.fileExists(atPath: "\(packageDir)/Frameworks/\(name).xcframework/Info.plist")
-}
-let hasLLVM = hasFramework("LemonSeedLLVM")
-let hasWAMR = hasFramework("LemonSeedWAMR")
-
-var targets: [Target] = [
+let targets: [Target] = [
+  .binaryTarget(name: "LemonSeedLLVM", path: "Frameworks/LemonSeedLLVM.xcframework"),
+  .binaryTarget(name: "LemonSeedWAMR", path: "Frameworks/LemonSeedWAMR.xcframework"),
   .target(
     name: "CToolchainBridge",
-    dependencies: hasLLVM ? ["LemonSeedLLVM"] : [],
+    dependencies: ["LemonSeedLLVM"],
     cxxSettings: [
-      .define("LST_HAVE_LLVM", to: hasLLVM ? "1" : "0"),
       // Match how LLVM itself is built (no RTTI, release headers).
       .define("NDEBUG"),
       .unsafeFlags(["-fno-rtti", "-Wno-deprecated-declarations"]),
     ]
   ),
-  .target(
-    name: "CWAMRRunner",
-    dependencies: hasWAMR ? ["LemonSeedWAMR"] : [],
-    cSettings: [.define("LST_HAVE_WAMR", to: hasWAMR ? "1" : "0")]
-  ),
+  .target(name: "CWAMRRunner", dependencies: ["LemonSeedWAMR"]),
   .target(
     name: "StudioToolchain",
     dependencies: ["CToolchainBridge", "CWAMRRunner"],
@@ -48,12 +43,6 @@ var targets: [Target] = [
     dependencies: ["StudioToolchain"]
   ),
 ]
-if hasLLVM {
-  targets.append(.binaryTarget(name: "LemonSeedLLVM", path: "Frameworks/LemonSeedLLVM.xcframework"))
-}
-if hasWAMR {
-  targets.append(.binaryTarget(name: "LemonSeedWAMR", path: "Frameworks/LemonSeedWAMR.xcframework"))
-}
 
 let package = Package(
   name: "StudioToolchain",

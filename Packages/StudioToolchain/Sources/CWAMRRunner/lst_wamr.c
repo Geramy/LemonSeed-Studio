@@ -2,6 +2,9 @@
 
 #include "lst_wamr.h"
 
+// Written by build-wamr-ios.sh (1) or make-stub-xcframeworks.sh (0).
+#include <lemonseed/wamr_config.h>
+
 #if LST_HAVE_WAMR
 
 #include <wamr/wasm_export.h>

@@ -11,6 +11,9 @@
 
 #include "lst_compiler.h"
 
+// Written by build-llvm-ios.sh (1) or make-stub-xcframeworks.sh (0).
+#include <lemonseed/llvm_config.h>
+
 #if LST_HAVE_LLVM
 
 #include "clang/Basic/Diagnostic.h"
@@ -203,6 +206,7 @@ int runCC1(llvm::ArrayRef<const char *> jobArgs, const char *argv0,
       /*ShouldOwnClient=*/true);
   if (!clang->hasDiagnostics())
     return 1;
+  clang->setVerboseOutputStream(errOS); // "N errors generated." and -v
   parseBuffer->FlushDiagnostics(clang->getDiagnostics());
   if (!ok) {
     clang->getDiagnosticClient().finish();
@@ -340,8 +344,9 @@ extern "C" int lst_wasm_ld_main(int argc, const char *const *argv,
 #include <string.h>
 
 static const char kMissing[] =
-    "The LLVM toolchain is not built into this app. Run "
-    "Toolchain/scripts/build-llvm-ios.sh, then rebuild.";
+    "The LLVM toolchain is not built into this app (placeholder "
+    "LemonSeedLLVM.xcframework). Run Toolchain/scripts/build-llvm-ios.sh, "
+    "then rebuild.";
 
 static void reportMissing(const lst_callbacks *callbacks) {
   if (callbacks && callbacks->text)

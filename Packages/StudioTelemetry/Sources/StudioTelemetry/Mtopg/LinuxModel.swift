@@ -199,7 +199,7 @@ func hwmonSensorRows(_ t: [String: String], hwmon h: String) -> [LinuxSensorRow]
         guard let watts = hw(file).flatMap(Double.init).map({ $0 / 1e6 }) else { continue }
         rows.append(LinuxSensorRow(id: rows.count, kind: .power, label: label + powerLabel, value: watts, maxValue: cap ?? 400,
                                    text: String(format: "%.0f W", watts) + (cap.map { String(format: " / %.0f W cap", $0) } ?? ""),
-                                   source: "\(h)/\(file) (\(h)/power1_cap)"))
+                                   source: "\(h)/\(file) vs power1_cap"))
     }
     if let rpm = hw("fan1_input").flatMap(Double.init) {
         let max = hw("fan1_max").flatMap(Double.init)

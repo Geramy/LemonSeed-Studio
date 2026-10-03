@@ -100,7 +100,7 @@ struct SourceCaption: View {
                 Text(summary)
                     .font(TelemetryFont.source)
                     .foregroundStyle(theme.inkMuted)
-                    .lineLimit(expanded ? nil : 2)
+                    .lineLimit(expanded ? nil : 3)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if expanded, !detail.isEmpty {
@@ -168,8 +168,7 @@ struct Meter: View {
             .frame(height: 6)
             .animation(.smooth(duration: 0.45), value: fraction)
             if let source {
-                Text(source).font(TelemetryFont.source).foregroundStyle(theme.inkMuted).lineLimit(1)
-                    .truncationMode(.middle)
+                Text(source).font(TelemetryFont.source).foregroundStyle(theme.inkMuted).lineLimit(2)
             }
         }
         .accessibilityElement(children: .ignore)

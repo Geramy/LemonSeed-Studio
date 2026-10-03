@@ -84,8 +84,13 @@ public struct GPUDashboard: View {
         case 3:
             let column = max((width - 28) / 3, 0)
             row(height: 300) { loadPanel.frame(width: column * 2 + 14); memoryActivityPanel.frame(width: column) }
-            row { vramPanel; clocksPanel; sensorsPanel }
-            row { throttlePanel; pciePanel; sourcePanel }
+            // Balanced columns rather than rows: the sensor list is long.
+            HStack(alignment: .top, spacing: 14) {
+                stack { vramPanel; throttlePanel; pciePanel }.frame(width: column)
+                stack { clocksPanel; sourcePanel }.frame(width: column)
+                stack { sensorsPanel }.frame(width: column)
+            }
+            .fixedSize(horizontal: false, vertical: true)
         case 2:
             row(height: 280) { loadPanel }
             row(height: 280) { memoryActivityPanel; vramPanel }
@@ -99,6 +104,11 @@ public struct GPUDashboard: View {
                 vramPanel; clocksPanel; sensorsPanel; throttlePanel; pciePanel; sourcePanel
             }
         }
+    }
+
+    /// Panels stacked in a column; the last one stretches to the row's height.
+    private func stack<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(spacing: 14) { content() }.frame(maxHeight: .infinity, alignment: .top)
     }
 
     /// Panels side by side, all as tall as the tallest.
@@ -122,6 +132,8 @@ public struct GPUDashboard: View {
                 Text(state.deviceName ?? "AMD GPU")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(theme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                     .help(state.deviceNameSource ?? "")
                 Text(identityLine)
                     .font(.system(size: 12).monospacedDigit())
@@ -148,7 +160,10 @@ public struct GPUDashboard: View {
     private var identityLine: String {
         var parts: [String] = []
         if !linux.deviceLine.isEmpty { parts.append(linux.deviceLine) }
-        if !linux.linkLine.isEmpty { parts.append(linux.linkLine) }
+        if !linux.linkLine.isEmpty {
+            // pci-sysfs prints "32.0 GT/s PCIe"; say PCIe once in the header.
+            parts.append(linux.linkLine.replacingOccurrences(of: " PCIe x", with: " x"))
+        }
         if let b = linux.build, b > 0 { parts.append("runtime ABI \(b)") }
         if let p = linux.perfLevel { parts.append("perf level \(p)") }
         if let d = state.device { parts.append("registry \(d.label)") }
@@ -321,11 +336,11 @@ public struct GPUDashboard: View {
                     StatusBadge(text: "indep_throttle_status not reported", tone: .neutral)
                 }
                 if let raw = linux.throttleRaw {
-                    Text(String(format: "throttle_status  0x%08llx  (ASIC-specific bits)", raw))
+                    Text(String(format: "throttle_status  0x%08llx", raw))
                         .font(TelemetryFont.source).foregroundStyle(theme.inkSecondary)
                 }
                 Spacer(minLength: 0)
-                SourceCaption(summary: "bit names: SMU_THROTTLER_* (amdgpu_smu.h)",
+                SourceCaption(summary: "bit names: SMU_THROTTLER_* (amdgpu_smu.h); throttle_status bits are ASIC-specific",
                               detail: "gpu_metrics indep_throttle_status decoded with the ASIC-independent SMU_THROTTLER_* bits; throttle_status is the raw, ASIC-specific word.")
             }
         }

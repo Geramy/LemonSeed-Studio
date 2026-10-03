@@ -58,10 +58,14 @@ public final class Compiler: Sendable {
   public static var isAvailable: Bool { lst_toolchain_available() != 0 }
   public static var version: String { String(cString: lst_toolchain_version()) }
 
-  /// Builds `sources` into a WASI command module at `output`.
+  /// Builds `sources` into a WASI command module at `output`. With a working
+  /// directory, clang runs as if started there (-working-directory, no chdir)
+  /// and sources inside it are named relative to it, so diagnostics read
+  /// "hello.c:3:5" instead of carrying the full container path.
   public func compile(
     sources: [URL], output: URL, language: SourceLanguage = .c,
-    optimization: String = "-O2", extraArguments: [String] = []
+    optimization: String = "-O2", extraArguments: [String] = [],
+    workingDirectory: URL? = nil
   ) async -> CompileResult {
     var arguments = [
       language == .c ? "clang" : "clang++",
@@ -74,7 +78,16 @@ public final class Compiler: Sendable {
       language == .cxx ? "-fno-exceptions" : nil,
     ].compactMap { $0 }
     arguments += extraArguments
-    arguments += sources.map(\.path)
+    if let workingDirectory {
+      let base = workingDirectory.standardizedFileURL.path + "/"
+      arguments += ["-working-directory", workingDirectory.path]
+      arguments += sources.map { url in
+        let path = url.standardizedFileURL.path
+        return path.hasPrefix(base) ? String(path.dropFirst(base.count)) : url.path
+      }
+    } else {
+      arguments += sources.map(\.path)
+    }
     arguments += ["-o", output.path]
     return await run(arguments: arguments, output: output)
   }

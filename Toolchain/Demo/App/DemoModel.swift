@@ -80,7 +80,7 @@ final class DemoModel {
 
     log(.info, "$ clang --target=wasm32-wasip1 -O2 hello.c -o hello.wasm   (in process)")
     let before = MemoryFootprint.current()
-    let result = await Compiler(resources: resources).compile(sources: [sourceURL], output: outputURL)
+    let result = await Compiler(resources: resources).compile(sources: [sourceURL], output: outputURL, workingDirectory: dir)
     let after = MemoryFootprint.current()
     diagnostics = result.diagnostics
     if !result.log.isEmpty { log(result.succeeded ? .stderr : .error, result.log) }

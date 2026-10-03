@@ -173,3 +173,18 @@ struct KeyboardStressStatus: View {
             .accessibilityLabel(stress.status)
     }
 }
+
+/// The active document's text as an accessibility element, refreshed on
+/// every edit (UI tests only: `-StudioExposeEditorText YES`).
+struct EditorContentsProbe: View {
+    let document: EditorDocument
+
+    var body: some View {
+        let _ = document.revision
+        Text(document.currentText.isEmpty ? "<empty>" : document.currentText)
+            .font(.system(size: 6))
+            .lineLimit(1)
+            .frame(height: 8)
+            .accessibilityIdentifier("editor.contents")
+    }
+}

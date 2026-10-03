@@ -67,6 +67,7 @@ struct ExplorerRow: View {
     @State private var hovering = false
     @State private var targeted = false
     @State private var draftName = ""
+    @State private var nameSelection: TextSelection?
     @FocusState private var renameFocused: Bool
 
     private var tree: FileTree { controller.workspace.tree }
@@ -89,7 +90,7 @@ struct ExplorerRow: View {
             .frame(width: 12)
             icon
             if isRenaming {
-                TextField("Name", text: $draftName)
+                TextField("Name", text: $draftName, selection: $nameSelection)
                     .textFieldStyle(.plain)
                     .font(.studio(type.body))
                     .foregroundStyle(theme.palette.textPrimary.color)
@@ -106,7 +107,18 @@ struct ExplorerRow: View {
                     .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(theme.palette.accent.color, lineWidth: 1))
                     .onAppear {
                         draftName = node.name
+                        // Select the name without its extension, as Finder does.
+                        let base = node.isDirectory || !node.name.dropFirst().contains(".")
+                            ? draftName[...] : draftName[..<(draftName.lastIndex(of: ".") ?? draftName.endIndex)]
+                        let range = draftName.startIndex..<base.endIndex
                         renameFocused = true
+                        // After focus lands (focusing puts the caret at the end).
+                        Task { @MainActor in
+                            for delay in [30, 120] {
+                                try? await Task.sleep(for: .milliseconds(delay))
+                                nameSelection = TextSelection(range: range)
+                            }
+                        }
                     }
                     .onChange(of: renameFocused) { _, focused in
                         if !focused, isRenaming { controller.rename(node.url, to: draftName) }

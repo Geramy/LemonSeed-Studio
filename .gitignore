@@ -4,3 +4,6 @@ xcuserdata/
 *.xcuserstate
 .DS_Store
 __pycache__/
+
+# Internal planning notes stay local
+planning/

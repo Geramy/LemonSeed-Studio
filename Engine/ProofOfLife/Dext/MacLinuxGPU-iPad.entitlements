@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	    iPadOS signing of the mac_linuxgpu dext.
+
+	    transport.pci must equal the match the App ID's DriverKit profile
+	    grants, the same wildcard as dext/mac_linuxgpu.entitlements. Which
+	    functions the dext binds is decided by the vendor/class personality
+	    in dext/Info.plist.
+
+	    allow-any-userclient-access is macOS only and is left out: on iPadOS
+	    the containing app reaches the user client through its
+	    communicates-with-drivers entitlement.
+	-->
+	<key>com.apple.developer.driverkit</key>
+	<true/>
+	<key>com.apple.developer.driverkit.transport.pci</key>
+	<array>
+		<dict>
+			<key>IOPCIPrimaryMatch</key>
+			<string>0xFFFFFFFF&amp;0x00000000</string>
+		</dict>
+	</array>
+</dict>
+</plist>

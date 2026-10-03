@@ -1,0 +1,140 @@
+# LemonSeed Studio iPad proof of life.
+#
+# One iPadOS app that embeds the mac_linuxgpu DriverKit extension and reads
+# the identity and BAR layout of an AMD GPU attached over Thunderbolt.
+#
+# Generate with ./build.sh (or `xcodegen` with MAC_LINUXGPU_DIR exported).
+# MAC_LINUXGPU_DIR is the mac_linuxgpu checkout the dext is compiled from;
+# build.sh defaults it to third_party/mac_linuxgpu. Its build-dk/ must hold
+# libmacamgdu-dk.a (`make lib-dext`), which the dext's first build phase runs.
+#
+# Bundle identifiers are fixed: the PCI transport entitlement is granted to
+# the App ID com.geramyloveless.MacAMDGPUHost.MacAMDGPU, and the dext must be
+# embedded in an app whose identifier is its prefix.
+
+name: ProofOfLife
+
+options:
+  deploymentTarget:
+    iOS: "26.2"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: YBQ9BU6Q6F
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    MAC_LINUXGPU_DIR: "${MAC_LINUXGPU_DIR}"
+    CLANG_CXX_LANGUAGE_STANDARD: gnu++20
+    GCC_C_LANGUAGE_STANDARD: gnu11
+
+targets:
+  LemonSeedStudio:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.2"
+    sources:
+      - path: App
+    dependencies:
+      # Embedded through "Embed System Extensions" ($(SYSTEM_EXTENSIONS_FOLDER_PATH)).
+      - target: MacLinuxGPU
+        embed: true
+      - sdk: IOKit.framework
+    settings:
+      base:
+        PRODUCT_NAME: LemonSeedStudio
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.MacAMDGPUHost
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/LemonSeedStudio.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: App/ProofOfLife-Bridging-Header.h
+        SWIFT_VERSION: "5.10"
+        TARGETED_DEVICE_FAMILY: "2"
+        SUPPORTED_PLATFORMS: iphoneos
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+  MacLinuxGPU:
+    # The same DriverKit binary as the macOS build (arm64-apple-driverkit);
+    # only the entitlements differ (Dext/MacLinuxGPU-iPad.entitlements).
+    type: driver-extension
+    platform: macOS
+    settingPresets: none
+    sources:
+      - path: ${MAC_LINUXGPU_DIR}/dext
+        name: dext
+        group: mac_linuxgpu
+        includes:
+          - MacLinuxGPU.iig
+          - MacLinuxGPUUserClient.iig
+          - sources/MacLinuxGPUXcode.mm
+          - sources/dext_main.mm
+          - sources/iokit_bridge.mm
+          - sources/fake_mmio.mm
+          - sources/dext_compute.c
+          - sources/dext_threads.mm
+          - sources/dext_aql.mm
+          - sources/dext_kfd.mm
+      - path: Dext
+    preBuildScripts:
+      - name: Build Linux KMD
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          # make runs mac_linuxgpu's scripts/bootstrap.sh first when its setup
+          # is missing or stale (pinned Linux submodule, patches, firmware).
+          /usr/bin/make -C "$MAC_LINUXGPU_DIR" verify-source
+          /usr/bin/make -C "$MAC_LINUXGPU_DIR" -j8 lib-dext
+    settings:
+      base:
+        SDKROOT: driverkit
+        SUPPORTED_PLATFORMS: driverkit
+        DRIVERKIT_DEPLOYMENT_TARGET: "25.2"
+        ARCHS: arm64
+        "EXCLUDED_ARCHS[sdk=driverkit*]": x86_64
+        ONLY_ACTIVE_ARCH: NO
+        PRODUCT_NAME: com.geramyloveless.MacAMDGPUHost.MacAMDGPU
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.MacAMDGPUHost.MacAMDGPU
+        INFOPLIST_FILE: "$(MAC_LINUXGPU_DIR)/dext/Info.plist"
+        CODE_SIGN_ENTITLEMENTS: Dext/MacLinuxGPU-iPad.entitlements
+        OTHER_CODE_SIGN_FLAGS: "-o library,runtime"
+        CLANG_ENABLE_OBJC_ARC: NO
+        CLANG_ENABLE_MODULES: YES
+        DEAD_CODE_STRIPPING: NO
+        DEFINES_MODULE: NO
+        GCC_ENABLE_CPP_EXCEPTIONS: NO
+        GCC_ENABLE_OBJC_EXCEPTIONS: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        CLANG_WARN_DOCUMENTATION_COMMENTS: NO
+        GCC_PREPROCESSOR_DEFINITIONS:
+          - "$(inherited)"
+          - LINUXU_DEXT=1
+        HEADER_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(MAC_LINUXGPU_DIR)/dext"
+          - "$(MAC_LINUXGPU_DIR)/dext/sources"
+          - "$(MAC_LINUXGPU_DIR)/linuxu/headers"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-L"
+          - "$(MAC_LINUXGPU_DIR)/build-dk"
+          - "-lmacamgdu-dk"
+          - "-framework"
+          - DriverKit
+          - "-framework"
+          - PCIDriverKit
+
+schemes:
+  LemonSeedStudio:
+    build:
+      targets:
+        LemonSeedStudio: all
+        MacLinuxGPU: all
+    run:
+      config: Debug
+    archive:
+      config: Release

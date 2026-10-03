@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	    A settings page for the app, so Settings shows LemonSeed Studio and,
+	    on it, the Drivers link that enables the embedded GPU driver.
+	-->
+	<key>StringsTable</key>
+	<string>Root</string>
+	<key>PreferenceSpecifiers</key>
+	<array>
+		<dict>
+			<key>Type</key>
+			<string>PSGroupSpecifier</string>
+			<key>Title</key>
+			<string>GPU Driver</string>
+			<key>FooterText</key>
+			<string>Turn on the LemonSeed Studio GPU driver under Drivers. It starts when an AMD GPU is connected over Thunderbolt.</string>
+		</dict>
+		<dict>
+			<key>Type</key>
+			<string>PSTitleValueSpecifier</string>
+			<key>Title</key>
+			<string>Milestone</string>
+			<key>Key</key>
+			<string>proof_of_life_milestone</string>
+			<key>DefaultValue</key>
+			<string>Identity and BARs</string>
+		</dict>
+	</array>
+</dict>
+</plist>

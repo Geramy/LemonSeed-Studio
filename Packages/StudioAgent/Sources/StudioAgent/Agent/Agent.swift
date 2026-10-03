@@ -58,6 +58,13 @@ public actor Agent {
     private var followUps: [String] = []
     private var runTask: Task<Void, Never>?
     public private(set) var lastContextTokens = 0
+    /// What the user decided about the agent's changes since its last turn,
+    /// told to the model at the start of the next one.
+    private var reviewNotes: [String] = []
+
+    /// User messages that carry review outcomes start with this, so a
+    /// transcript can show them as notices rather than as the user's words.
+    public static let reviewNotePrefix = "[Review of your changes] "
 
     // MARK: Lifecycle
 
@@ -191,6 +198,11 @@ public actor Agent {
         checkpoints.begin()
         var reason: AgentEndReason = .completed
         do {
+            if !reviewNotes.isEmpty {
+                let note = Self.reviewNotePrefix + reviewNotes.joined(separator: " ")
+                reviewNotes.removeAll()
+                try record(.message(.user(.init(text: note))))
+            }
             try record(.message(.user(.init(text: prompt))), out: out, announce: prompt)
             reason = try await loop(out)
         } catch is CancellationError {
@@ -459,9 +471,25 @@ public actor Agent {
     }
 
     /// Applies a review: rejected hunks go back to the checkpointed original.
+    /// The model hears which changes were reverted at the start of its next
+    /// turn.
     public func applyReview(_ changes: ChangeSet, decisions: ChangeSet.Decisions) throws {
         try changes.apply(decisions, store: checkpoints, fileSystem: fileSystem)
         let rejected = decisions.rejected.values.reduce(0) { $0 + $1.count }
+        var reverted: [String] = []
+        for file in changes.files {
+            guard let hunks = decisions.rejected[file.path], !hunks.isEmpty else { continue }
+            let all = file.isBinary || hunks.isSuperset(of: file.hunks.map(\.id))
+            switch (all, file.kind) {
+            case (true, .added): reverted.append("\(file.path) was not created (the user denied it)")
+            case (true, .deleted): reverted.append("\(file.path) was restored (the user denied deleting it)")
+            case (true, _): reverted.append("your changes to \(file.path) were reverted (the user denied them)")
+            case (false, _): reverted.append("\(hunks.count) of \(file.hunks.count) changed blocks in \(file.path) were reverted")
+            }
+        }
+        if !reverted.isEmpty {
+            reviewNotes.append(reverted.joined(separator: "; ") + ". Do not redo denied changes unless the user asks.")
+        }
         if rejected > 0 {
             try record(.custom(customType: "lemonseed.review",
                                data: ["checkpoint": .string(changes.checkpoint.id),

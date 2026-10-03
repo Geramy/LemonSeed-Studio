@@ -40,7 +40,7 @@ done
 # back to their own estimates).
 for slice in LSE.xcframework/*/; do
   [[ -d "$slice/Headers/LSE" ]] || continue
-  if nm -gU "$slice"/*.a 2>/dev/null | grep -q ' _lse_estimate$'; then
+  if nm -gU "$slice"/*.a 2>/dev/null | grep -c ' _lse_estimate$' >/dev/null; then
     mkdir -p "$slice/Headers/LSEEstimate"
     cat > "$slice/Headers/LSEEstimate/module.modulemap" <<'MAP'
 module LSEEstimate {
@@ -59,7 +59,7 @@ done
 # canImport(LSESessions).
 for slice in LSE.xcframework/*/; do
   [[ -d "$slice/Headers/LSE" ]] || continue
-  if nm -gU "$slice"/*.a 2>/dev/null | grep -q ' _lse_session_close$'; then
+  if nm -gU "$slice"/*.a 2>/dev/null | grep -c ' _lse_session_close$' >/dev/null; then
     mkdir -p "$slice/Headers/LSESessions"
     cat > "$slice/Headers/LSESessions/module.modulemap" <<'MAP'
 module LSESessions {
@@ -70,6 +70,25 @@ MAP
     cat > "$slice/Headers/LSESessions/lse_sessions.h" <<'HDR'
 /* Present when the linked libLSE has per-session KV (lse_session_close),
  * written by Engine/LSEKit/update-xcframework.sh. */
+#include "../LSE/lse.h"
+HDR
+  fi
+done
+# Device power (lse_power_prepare / lse_power_resume): canImport(LSEPower).
+for slice in LSE.xcframework/*/; do
+  [[ -d "$slice/Headers/LSE" ]] || continue
+  if nm -gU "$slice"/*.a 2>/dev/null | grep -c ' _lse_power_prepare$' >/dev/null; then
+    mkdir -p "$slice/Headers/LSEPower"
+    cat > "$slice/Headers/LSEPower/module.modulemap" <<'MAP'
+module LSEPower {
+  header "lse_power.h"
+  export *
+}
+MAP
+    cat > "$slice/Headers/LSEPower/lse_power.h" <<'HDR'
+/* Present when the linked libLSE has device power control
+ * (lse_power_prepare, lse_power_resume), written by
+ * Engine/LSEKit/update-xcframework.sh. */
 #include "../LSE/lse.h"
 HDR
   fi

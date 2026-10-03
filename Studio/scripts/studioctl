@@ -297,10 +297,22 @@ def cmd_chat(cl, a):
             sys.stdout.write(ev["text"])
         elif t == "tool":
             sys.stdout.write(f"\n[tool {ev['name']} {ev['status']}] {ev.get('arguments', '')}\n")
+        elif t == "notice":
+            sys.stdout.write(f"\n[notice] {ev['text']}\n")
+        elif t == "changes":
+            files = ", ".join(f"{f['path']} ({f['kind']}, +{f['additions']}/-{f['deletions']}, {f['state']})" for f in ev["files"])
+            sys.stdout.write(f"\n[changes] {files}\n")
         elif t == "done":
             print(f"\n\n[done in {time.time() - start:.1f} s]")
             out({k: v for k, v in ev.items() if k != "type"})
         sys.stdout.flush()
+
+
+def cmd_review(cl, a):
+    if a.action == "show":
+        out(cl.call("GET", "/chat/review"))
+    else:
+        out(cl.call("POST", "/chat/review", {"action": a.action, "path": a.path or ""}))
 
 
 def cmd_sessions(cl, a):
@@ -408,7 +420,11 @@ def main():
     s.add_argument("method"); s.add_argument("path"); s.add_argument("body", nargs="?"); s.add_argument("--stream", action="store_true")
     s.set_defaults(fn=cmd_request)
     s = sub.add_parser("chat"); s.add_argument("text"); s.add_argument("--thinking"); s.add_argument("--session")
-    s.add_argument("--mode", choices=["readOnly", "ask", "review", "autopilot"]); s.set_defaults(fn=cmd_chat)
+    s.add_argument("--mode", choices=["readOnly", "ask", "review", "autopilot"],
+                   help="permission mode for this chat (new chats default to review)"); s.set_defaults(fn=cmd_chat)
+    s = sub.add_parser("review", help="the latest agent changes: show, accept/deny a file, acceptAll/denyAll, diff")
+    s.add_argument("action", choices=["show", "accept", "deny", "acceptAll", "denyAll", "diff", "closeDiff"])
+    s.add_argument("path", nargs="?"); s.set_defaults(fn=cmd_review)
     sub.add_parser("sessions").set_defaults(fn=cmd_sessions)
     s = sub.add_parser("session"); s.add_argument("action", choices=["new", "close", "delete"]); s.add_argument("id", nargs="?")
     s.set_defaults(fn=cmd_session)

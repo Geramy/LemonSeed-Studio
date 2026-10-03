@@ -67,6 +67,24 @@ public enum EngineStatus: Sendable, Equatable {
     case scripted
 }
 
+/// What the user decided about one file an agent run changed.
+public enum FileReviewState: String, Sendable, Hashable {
+    /// On disk, waiting for Accept or Deny (review and ask modes).
+    case pending
+    /// Kept.
+    case accepted
+    /// Reverted to the checkpoint.
+    case denied
+    /// Some blocks kept, some reverted (from the diff).
+    case partial
+    /// Applied directly (autopilot); can still be undone.
+    case applied
+    /// A later run changed the file again; decide on that run's card.
+    case superseded
+
+    public var isOpen: Bool { self == .pending || self == .applied }
+}
+
 /// Generation statistics from LSE's timings. Nil fields render as "n/a".
 public struct AgentStats: Sendable, Equatable {
     public var lastTimings: GenerationTimings?
@@ -87,8 +105,31 @@ public final class AgentViewModel {
     public private(set) var sessions: [SessionSummary] = []
     public private(set) var sessionTitle = "New session"
     public private(set) var pendingApproval: PermissionRequest?
-    /// Set to present the review sheet.
+    /// Set to present the review sheet (a whole run, or one file of it).
     public var review: ChangeSet?
+    /// Per run (change set id) and file: the user's decision.
+    public private(set) var fileReview: [String: [String: FileReviewState]] = [:]
+    /// Files the agent changed that still wait for a decision (workspace
+    /// relative): the explorer marks them.
+    public var pendingPaths: Set<String> {
+        var paths = Set<String>()
+        for (_, files) in fileReview { for (path, state) in files where state == .pending { paths.insert(path) } }
+        return paths
+    }
+    /// Files changed by the agent in this chat that are still in place
+    /// (pending, accepted, partial or applied).
+    public var changedPaths: Set<String> {
+        var paths = Set<String>()
+        for (_, files) in fileReview {
+            for (path, state) in files where state != .denied && state != .superseded { paths.insert(path) }
+        }
+        return paths
+    }
+    /// Asks the host to open a workspace-relative file in the editor.
+    public var onOpenFile: ((String) -> Void)?
+    /// Tells the host which files changed on disk (reverted, kept), so the
+    /// editor, explorer and source control refresh.
+    public var onFilesChanged: (([String]) -> Void)?
     /// Set to present the session list.
     public var isShowingSessions = false
     public var mode: PermissionMode {
@@ -162,6 +203,10 @@ public final class AgentViewModel {
         currentSessionIDCache = nil
         items = []
         index = [:]
+        fileReview = [:]
+        // Every new chat starts in the default mode (review); read-only is
+        // an explicit choice per chat.
+        mode = configuration.permissionMode
         sessionTitle = "New session"
         stats = AgentStats(contextWindow: configuration.endpoint.contextWindow)
     }
@@ -319,14 +364,88 @@ public final class AgentViewModel {
         Task { self.review = await agent.latestChangeSet() }
     }
 
-    public func applyReview(_ changes: ChangeSet, decisions: ChangeSet.Decisions) {
+    // MARK: Per-file review
+
+    public func reviewState(_ changes: ChangeSet, path: String) -> FileReviewState {
+        fileReview[changes.id]?[path] ?? .accepted
+    }
+
+    /// Keeps a file as the agent left it, and opens it in the editor.
+    public func acceptFile(_ changes: ChangeSet, path: String) {
+        guard reviewState(changes, path: path).isOpen else { return }
+        fileReview[changes.id]?[path] = .accepted
+        if changes.files.first(where: { $0.path == path })?.kind != .deleted { onOpenFile?(path) }
+        onFilesChanged?([path])
+    }
+
+    /// Reverts a file to its checkpoint; the model hears about it next turn.
+    public func denyFile(_ changes: ChangeSet, path: String) {
+        guard reviewState(changes, path: path).isOpen, let file = changes.files.first(where: { $0.path == path }) else { return }
+        var decisions = ChangeSet.Decisions()
+        decisions.setAll(file, accepted: false)
+        if file.isBinary || file.hunks.isEmpty { decisions.rejected[path] = [-1] }
+        revert(changes, decisions: decisions, paths: [path], state: .denied)
+    }
+
+    public func acceptAll(_ changes: ChangeSet) {
+        let open = changes.files.filter { reviewState(changes, path: $0.path).isOpen }
+        guard !open.isEmpty else { return }
+        for f in open { fileReview[changes.id]?[f.path] = .accepted }
+        if let first = open.first(where: { $0.kind != .deleted }) { onOpenFile?(first.path) }
+        onFilesChanged?(open.map(\.path))
+    }
+
+    public func denyAll(_ changes: ChangeSet) {
+        let open = changes.files.filter { reviewState(changes, path: $0.path).isOpen }
+        guard !open.isEmpty else { return }
+        var decisions = ChangeSet.Decisions()
+        for f in open {
+            decisions.setAll(f, accepted: false)
+            if f.isBinary || f.hunks.isEmpty { decisions.rejected[f.path] = [-1] }
+        }
+        revert(changes, decisions: decisions, paths: open.map(\.path), state: .denied)
+    }
+
+    /// Opens the diff of one file (per-block accept and deny).
+    public func showDiff(_ changes: ChangeSet, path: String) {
+        guard let file = changes.files.first(where: { $0.path == path }) else { return }
+        review = ChangeSet(checkpoint: changes.checkpoint, files: [file])
+    }
+
+    private func revert(_ changes: ChangeSet, decisions: ChangeSet.Decisions, paths: [String], state: FileReviewState) {
         guard let agent else { return }
         Task {
             do {
                 try await agent.applyReview(changes, decisions: decisions)
-                let rejected = decisions.rejected.values.reduce(0) { $0 + $1.count }
-                append(.notice(rejected == 0 ? "Review applied: all changes kept."
-                               : "Review applied: \(rejected) hunk\(rejected == 1 ? "" : "s") reverted.", isError: false))
+                for p in paths { fileReview[changes.id]?[p] = state }
+                onFilesChanged?(paths)
+            } catch {
+                append(.notice("Could not revert \(paths.joined(separator: ", ")): \(error.localizedDescription)", isError: true))
+            }
+        }
+    }
+
+    /// The result of the diff review: hunk decisions for the files shown.
+    /// Files are looked up in the whole run, so a one-file review applies to
+    /// that file only.
+    public func applyReview(_ changes: ChangeSet, decisions: ChangeSet.Decisions) {
+        guard let run = items.lazy.compactMap({ item -> ChangeSet? in
+            if case .changes(let c) = item.kind, c.id == changes.id { return c }
+            return nil
+        }).first ?? Optional(changes) else { return }
+        guard let agent else { return }
+        let paths = changes.files.map(\.path)
+        Task {
+            do {
+                try await agent.applyReview(run, decisions: decisions)
+                for file in changes.files {
+                    let rejected = decisions.rejected[file.path] ?? []
+                    let state: FileReviewState = rejected.isEmpty ? .accepted
+                        : (file.isBinary || rejected.isSuperset(of: file.hunks.map(\.id))) ? .denied : .partial
+                    fileReview[run.id]?[file.path] = state
+                    if state != .denied, file.kind != .deleted, paths.count == 1 { onOpenFile?(file.path) }
+                }
+                onFilesChanged?(paths)
             } catch {
                 append(.notice("Could not apply the review: \(error.localizedDescription)", isError: true))
             }
@@ -440,8 +559,18 @@ public final class AgentViewModel {
         case .compactionEnd(let summary):
             append(.compaction(summary: summary))
         case .changesReady(let changes):
+            // An earlier run's undecided change to the same file is
+            // superseded: this run's checkpoint holds the newer original.
+            let paths = Set(changes.files.map(\.path))
+            for (id, files) in fileReview {
+                for (path, state) in files where paths.contains(path) && state.isOpen {
+                    fileReview[id]?[path] = .superseded
+                }
+            }
+            let initial: FileReviewState = mode == .autopilot ? .applied : .pending
+            fileReview[changes.id] = Dictionary(uniqueKeysWithValues: changes.files.map { ($0.path, initial) })
             append(.changes(changes))
-            if mode == .review { review = changes }
+            onFilesChanged?(changes.files.map(\.path))
         case .notice(let text):
             append(.notice(text, isError: false))
         case .agentEnd(let reason):
@@ -527,7 +656,11 @@ public final class AgentViewModel {
         for (entryID, message) in doc.contextEntries() {
             switch message {
             case .user(let u):
-                out.append(TranscriptItem(id: entryID, kind: .user(text: u.text, entryID: entryID)))
+                if u.text.hasPrefix(Agent.reviewNotePrefix) {
+                    out.append(TranscriptItem(id: entryID, kind: .notice(String(u.text.dropFirst(Agent.reviewNotePrefix.count)), isError: false)))
+                } else {
+                    out.append(TranscriptItem(id: entryID, kind: .user(text: u.text, entryID: entryID)))
+                }
             case .assistant(let a):
                 if !a.text.isEmpty || !a.thinking.isEmpty || a.errorMessage != nil {
                     var b = AssistantBlock(text: a.text, reasoning: a.thinking, isStreaming: false)

@@ -76,6 +76,16 @@ struct ExplorerRow: View {
     private var isRenaming: Bool { controller.renamingURL == node.url }
     private var isActive: Bool { controller.activeDocument?.url == node.url }
 
+    /// The agent changed this file (or something in this folder) and the
+    /// change waits for Accept or Deny in the AI panel.
+    private var agentPending: Bool {
+        guard let provider = controller.app.services.agent as? StudioAgentProvider,
+              let relative = controller.workspace.relativePath(of: node.url) else { return false }
+        let pending = provider.pendingPaths(for: controller.rootURL)
+        guard !pending.isEmpty else { return false }
+        return node.isDirectory ? pending.contains { $0.hasPrefix(relative + "/") } : pending.contains(relative)
+    }
+
     var body: some View {
         HStack(spacing: Space.xs + 1) {
             Group {
@@ -131,6 +141,14 @@ struct ExplorerRow: View {
                     .truncationMode(.middle)
             }
             Spacer(minLength: 0)
+            if agentPending {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(theme.palette.accent.color)
+                    .help("Changed by the agent; waiting for review")
+                    .accessibilityLabel("changed by the agent, waiting for review")
+                    .accessibilityIdentifier("explorer.agentBadge.\(node.name)")
+            }
             if let document = controller.workspace.openDocument(at: node.url), document.isDirty {
                 Circle().fill(theme.palette.accent.color).frame(width: 6, height: 6)
             }

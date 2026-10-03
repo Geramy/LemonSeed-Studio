@@ -247,6 +247,7 @@ struct StatusBar: View {
                 item(encodingName(document) + "  " + document.lineEnding.label, symbol: nil, id: "status.encoding") {}
                 item(document.language.name, symbol: nil, id: "status.language") {}
             }
+            powerItem
             engineItem
             modelItem
         }
@@ -278,6 +279,56 @@ struct StatusBar: View {
                 StatusDot(engineColor(state), live: state.isReady)
                 Text(engineText(state, summary: app.services.telemetry.summary))
             }
+        }
+    }
+
+    /// The GPU's power state (active, suspended, lost) when the engine
+    /// tracks it.
+    @ViewBuilder private var powerItem: some View {
+        let power = app.enginePower
+        if power.recovering || power.state != .unknown {
+            item(nil, symbol: nil, id: "status.power") { controller.show(.gpu) } label: {
+                HStack(spacing: Space.xs) {
+                    Image(systemName: powerSymbol(power))
+                        .foregroundStyle(powerColor(power))
+                    Text(powerText(power))
+                        .lineLimit(1)
+                }
+            }
+            .help(power.lastTransition ?? "GPU power")
+        }
+    }
+
+    private func powerText(_ power: EnginePower) -> String {
+        if power.recovering { return "GPU reset, reloading" }
+        switch power.state {
+        case .active: return "Active"
+        case .suspending: return "Suspending"
+        case .suspended: return "Suspended"
+        case .resuming: return "Resuming"
+        case .lost: return "GPU lost"
+        case .unknown: return "Power n/a"
+        }
+    }
+
+    private func powerSymbol(_ power: EnginePower) -> String {
+        if power.recovering { return "arrow.clockwise" }
+        switch power.state {
+        case .active: return "bolt.fill"
+        case .suspending, .suspended: return "moon.zzz.fill"
+        case .resuming: return "sunrise.fill"
+        case .lost: return "exclamationmark.triangle.fill"
+        case .unknown: return "bolt.slash"
+        }
+    }
+
+    private func powerColor(_ power: EnginePower) -> Color {
+        if power.recovering { return theme.palette.warning.color }
+        switch power.state {
+        case .active: return theme.palette.success.color
+        case .suspending, .suspended, .resuming: return theme.palette.info.color
+        case .lost: return theme.palette.error.color
+        case .unknown: return theme.palette.textTertiary.color
         }
     }
 

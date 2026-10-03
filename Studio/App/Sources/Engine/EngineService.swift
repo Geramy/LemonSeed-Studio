@@ -161,7 +161,36 @@ final class EngineService {
     var servedName: String { launch?.servedName ?? "qwen-q4" }
     var contextWindow: Int { Int(launch?.kvLength ?? 32768) }
 
+    /// Shown while the engine reloads after the GPU lost its memory.
+    private(set) var recoveryNotice: String?
+
+    /// Requests the engine is running now (lse_status requests.active).
+    var activeRequests: Int {
+        guard phase == .ready, let requests = status()["requests"] as? [String: Any] else { return 0 }
+        return requests["active"] as? Int ?? 0
+    }
+
+    /// The GPU's memory went with a host sleep: close the engine and open it
+    /// again with the same configuration. Chats stay; their KV is gone.
+    func recoverAfterDeviceLoss(_ launch: EngineLaunch) {
+        recoveryNotice = "GPU was reset by sleep; reloading model…"
+        engineLog.log("device lost: reloading \(launch.modelID, privacy: .public)")
+        switch phase {
+        case .ready:
+            pendingLaunch = launch
+            stop()
+        case .loading, .stopping:
+            pendingLaunch = launch
+        default:
+            start(launch)
+        }
+    }
+
     var statusLine: String {
+        if let recoveryNotice, phase != .ready {
+            if case .failed(let why) = phase { return "\(recoveryNotice) Failed: \(why)" }
+            return recoveryNotice
+        }
         switch phase {
         case .idle: return "Engine stopped"
         case .waiting(let why): return why
@@ -226,6 +255,7 @@ final class EngineService {
             do {
                 let opened = try await LSEEngine.open(config)
                 box.set(opened)
+                recoveryNotice = nil
                 loadSeconds = Date().timeIntervalSince(started)
                 startedAt = Date()
                 phase = .ready
@@ -467,8 +497,44 @@ final class EngineBox: @unchecked Sendable {
 
     /// One request, blocking until its final event. Relative OpenAI paths
     /// ("chat/completions", "models") are LSE's "/v1/…" routes.
+    /// The engine's code for a refused request: "suspended" (the GPU is in
+    /// low power; nothing started, retry after resume) or "device_lost".
+    static func refusalCode(_ response: ClosureChatTransport.Response) -> String? {
+        guard response.status == 503,
+              let object = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any],
+              let error = object["error"] as? [String: Any] else { return nil }
+        return error["code"] as? String
+    }
+
+    /// How long a request waits for a suspended GPU to resume before it
+    /// gives up (a short app switch resumes well within it).
+    static let suspendedRetryLimit: TimeInterval = 90
+
+    /// One request, blocking until its final event. A refusal because the
+    /// GPU is suspended (the engine started nothing) is retried once a
+    /// second until it resumes; a device lost starts the engine's recovery.
     func perform(method: String, path: String, body: Data?,
                  emit: @Sendable (Data) -> Bool) throws -> ClosureChatTransport.Response {
+        let started = Date()
+        while true {
+            let response = try performOnce(method: method, path: path, body: body, emit: emit)
+            switch Self.refusalCode(response) {
+            case "suspended" where Date().timeIntervalSince(started) < Self.suspendedRetryLimit:
+                Thread.sleep(forTimeInterval: 1)
+                continue
+            case "device_lost":
+                Task { @MainActor in
+                    AppModel.shared.enginePower.recoverFromLoss(reason: "a request was refused: device lost")
+                }
+                return response
+            default:
+                return response
+            }
+        }
+    }
+
+    private func performOnce(method: String, path: String, body: Data?,
+                             emit: @Sendable (Data) -> Bool) throws -> ClosureChatTransport.Response {
         #if canImport(LSEKit)
         guard let engine else { return .init(status: 503, body: Self.unavailable) }
         let route = path.hasPrefix("/") ? path : "/v1/" + path

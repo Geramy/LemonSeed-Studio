@@ -34,3 +34,9 @@ git submodule update --init
 
 mac_linuxgpu fetches its own pinned Linux sources sparsely on first build, so
 its nested kernel submodule does not need to be cloned recursively.
+
+## License
+
+The original code is available under MIT or GPL-2.0-only, at your option.
+See [LICENSE](LICENSE). Bundled and submodule components keep their own
+licenses; see [THIRD_PARTY.md](THIRD_PARTY.md).

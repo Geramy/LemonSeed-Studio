@@ -1,0 +1,23 @@
+LemonSeed Studio
+Copyright (c) 2026 Geramy Loveless
+
+SPDX-License-Identifier: MIT OR GPL-2.0-only
+
+The original code in this repository is available under either the MIT
+license or the GNU General Public License version 2 only, at the
+recipient's option. The full texts are in LICENSES/MIT and
+LICENSES/GPL-2.0.
+
+This applies to the files in this repository that do not carry their own
+license notice. Files that state a different license keep it; in
+particular:
+
+  * third_party/ holds the submodules mac_linuxgpu, LemonSeed Engine and
+    amdgpu_mtopg, each under its own license.
+
+  * Components built from source or bundled into the app (libgit2,
+    libssh2, OpenSSL, LLVM, the wasi-sdk sysroot, WAMR and others) keep
+    their own licenses. THIRD_PARTY.md lists each one with its license.
+
+  * GPU firmware is not part of this repository. It is fetched from
+    linux-firmware at build time and distributed under its own terms.

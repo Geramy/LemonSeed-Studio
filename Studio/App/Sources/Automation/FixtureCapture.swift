@@ -4,7 +4,8 @@ import StudioTelemetry
 
 private let fixtureLog = Logger(subsystem: "com.geramyloveless.LemonSeedStudio", category: "fixtures")
 
-/// Records StudioTelemetry fixtures from the real GPU (`--record-fixtures`).
+/// Records StudioTelemetry fixtures from the real GPU, on request from the
+/// development remote control.
 ///
 /// A read-only observer client (type 1) wrapped in StudioTelemetry's
 /// recording directory is sampled by the package's own TelemetryService at
@@ -13,10 +14,8 @@ private let fixtureLog = Logger(subsystem: "com.geramyloveless.LemonSeedStudio",
 /// Documents/fixtures/<name>.json.
 @MainActor
 enum FixtureCapture {
-    static var requested: Bool { LaunchArguments.has("--record-fixtures") }
-
     static var folder: URL {
-        Automation.documents.appendingPathComponent("fixtures", isDirectory: true)
+        DevSupport.documents.appendingPathComponent("fixtures", isDirectory: true)
     }
 
     /// Records for `seconds` and returns a one-line summary.

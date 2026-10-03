@@ -36,13 +36,14 @@ struct AssistantMessageView: View {
         VStack(alignment: .leading, spacing: 10) {
             if !block.reasoning.isEmpty {
                 ReasoningView(text: block.reasoning, isThinking: block.isStreaming && block.text.isEmpty,
-                              seconds: block.reasoningSeconds)
+                              seconds: block.reasoningSeconds, started: block.reasoningStarted)
             }
             if !block.text.isEmpty {
                 MarkdownView(block.text)
             } else if block.isStreaming && block.reasoning.isEmpty {
                 TypingIndicator()
             }
+            MessageStatsFooter(block: block)
             if let error = block.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(theme.captionFont)
@@ -66,6 +67,7 @@ struct ReasoningView: View {
     let text: String
     let isThinking: Bool
     let seconds: Int?
+    var started: Date? = nil
     @State private var expanded = false
     @Environment(\.agentTheme) private var theme
 
@@ -77,7 +79,15 @@ struct ReasoningView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "brain")
                         .symbolEffect(.pulse, isActive: isThinking)
-                    Text(isThinking ? "Thinking…" : seconds.map { "Thought for \($0) s" } ?? "Thought")
+                    if isThinking, let started {
+                        // The elapsed time ticks while the reasoning streams.
+                        TimelineView(.periodic(from: started, by: 1)) { context in
+                            Text("Thinking… \(max(0, Int(context.date.timeIntervalSince(started)))) s")
+                                .monospacedDigit()
+                        }
+                    } else {
+                        Text(isThinking ? "Thinking…" : seconds.map { "Thought for \($0) s" } ?? "Thought")
+                    }
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10, weight: .semibold))
                         .rotationEffect(.degrees(expanded ? 90 : 0))
@@ -240,5 +250,54 @@ struct FileKindBadge: View {
             .foregroundStyle(color)
             .frame(width: 18, height: 18)
             .background(color.opacity(0.14), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+    }
+}
+
+/// Under an assistant message: live progress while it streams (tokens so
+/// far, decode speed from their arrival), then the engine's final timings
+/// (decode and prefill speed, DFlash2/MTP acceptance).
+struct MessageStatsFooter: View {
+    let block: AssistantBlock
+    @Environment(\.agentTheme) private var theme
+
+    var body: some View {
+        Group {
+            if block.isStreaming, block.firstTokenAt != nil {
+                TimelineView(.periodic(from: .now, by: 0.5)) { context in
+                    line(live: context.date)
+                }
+            } else if !block.isStreaming, block.finalTimings != nil || block.streamedTokens > 0 {
+                line(live: nil)
+            }
+        }
+        .font(theme.captionFont.monospacedDigit())
+        .foregroundStyle(theme.tertiaryText)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("agent.messageStats")
+    }
+
+    private func line(live now: Date?) -> some View {
+        var parts: [String] = []
+        if let now {
+            let phase = block.text.isEmpty && !block.reasoning.isEmpty ? "thinking" : "answering"
+            parts.append("\(phase) · \(block.streamedTokens) tok")
+            if let rate = block.liveTokensPerSecond(now: now) { parts.append(String(format: "%.1f tok/s", rate)) }
+        } else if let t = block.finalTimings {
+            if let n = t.decodeTokens { parts.append("\(n) tok") }
+            if let d = t.decodePerSecond { parts.append(String(format: "%.1f tok/s decode", d)) }
+            if let p = t.promptPerSecond { parts.append(String(format: "%.0f tok/s prefill", p)) }
+            if let a = t.acceptanceRate {
+                parts.append(String(format: "%.0f%% %@ accepted", a * 100, t.speculationMethod ?? "draft"))
+            }
+            if let cached = t.promptCachedTokens, cached > 0 { parts.append("\(cached) cached") }
+        } else {
+            parts.append("\(block.streamedTokens) tok")
+        }
+        return HStack(spacing: 6) {
+            Image(systemName: now != nil ? "waveform" : "bolt")
+                .symbolEffect(.variableColor.iterative, isActive: now != nil)
+            Text(parts.joined(separator: " · "))
+                .lineLimit(2)
+        }
     }
 }

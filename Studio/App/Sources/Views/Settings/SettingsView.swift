@@ -1,4 +1,5 @@
 import SwiftUI
+import StudioAgent
 import StudioCore
 import StudioDesign
 
@@ -349,6 +350,18 @@ private struct ModelSettings: View {
     var body: some View {
         @Bindable var settings = app.settings
         SettingsForm {
+            Section {
+                Picker("Default thinking", selection: $settings.agentThinking) {
+                    ForEach(ThinkingLevel.pickerLevels, id: \.self) { level in
+                        Text(level == .modelDefault ? "Default (model decides)" : level.title).tag(level)
+                    }
+                }
+                .accessibilityIdentifier("settings.thinking")
+            } header: {
+                Text("Agent")
+            } footer: {
+                Text("The thinking level new chats start with (reasoning_effort: Off is none, Max is xhigh; Default sends nothing). Each chat keeps its own level; change it from the brain button in the composer.")
+            }
             Section {
                 TextField("http://127.0.0.1:8080/v1", text: $settings.lseEndpoint)
                     .keyboardType(.URL)

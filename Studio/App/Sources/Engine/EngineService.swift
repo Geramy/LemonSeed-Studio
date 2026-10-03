@@ -71,7 +71,30 @@ final class EngineService {
         case failed(String)
     }
 
-    private(set) var phase: Phase = .idle
+    private(set) var phase: Phase = .idle {
+        didSet { if phase != oldValue { writeStatusFile() } }
+    }
+
+    /// Documents/engine-status.json: the engine's phase, model and memory,
+    /// rewritten when the phase changes, so the Mac can read the state with
+    /// `devicectl device copy from` without driving the UI.
+    private func writeStatusFile() {
+        var object: [String: Any] = ["phase": "\(phase)", "statusLine": statusLine,
+                                     "updated": ISO8601DateFormatter().string(from: Date()),
+                                     "engine": EngineService.engineVersion]
+        if let launch {
+            object["model"] = launch.modelID
+            object["draft"] = launch.draftID ?? NSNull()
+            object["kv"] = "\(launch.kvCacheDType)/\(launch.kvLength)"
+        }
+        if let loadSeconds { object["loadSeconds"] = loadSeconds }
+        if phase == .ready { object["memory"] = memoryLine() }
+        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("engine-status.json")
+        if let data = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
     private(set) var loadProgress: Double?
     private(set) var launch: EngineLaunch?
     private(set) var loadSeconds: Double?
@@ -328,6 +351,40 @@ final class EngineService {
         return c
     }
     #endif
+
+    // MARK: Sessions
+
+    /// Whether the engine answered the session-close route; nil until tried.
+    @ObservationIgnored private var sessionCloseSupported: Bool?
+
+    /// Drops a chat's KV session in the engine (`DELETE /v1/lse/sessions/{id}`,
+    /// LSE's per-session KV). An engine without per-session KV answers 404
+    /// once and is not asked again; it keeps a single resident prefix cache,
+    /// which the next chat with a different prompt replaces anyway.
+    func closeSession(_ id: String) {
+        guard sessionCloseSupported != false, phase == .ready else { return }
+        let box = self.box
+        Task.detached {
+            let response = try? box.perform(method: "DELETE", path: "/v1/lse/sessions/\(id)", body: nil) { _ in true }
+            let status = response?.status ?? 0
+            await MainActor.run {
+                if status == 404 || status == 405 { self.sessionCloseSupported = false }
+                else if (200..<300).contains(status) { self.sessionCloseSupported = true }
+                engineLog.log("close session \(id, privacy: .public): \(status)")
+            }
+        }
+    }
+
+    var supportsSessionClose: Bool { sessionCloseSupported == true }
+
+    /// Device memory live/peak from lse_status, as text.
+    func memoryLine() -> String {
+        guard let m = status()["memory"] as? [String: Any],
+              let live = (m["device_bytes"] as? NSNumber)?.uint64Value else { return "n/a" }
+        let peak = (m["device_peak_bytes"] as? NSNumber)?.uint64Value ?? live
+        let f = { (b: UInt64) in ByteCountFormatter.string(fromByteCount: Int64(b), countStyle: .memory) }
+        return "\(f(live)) live, \(f(peak)) peak"
+    }
 
     // MARK: Chat transport
 

@@ -50,7 +50,7 @@ final class StudioAgentProvider: AgentProviding {
         var endpoint = EndpointConfiguration(model: engine.servedName, toolProtocol: .native,
                                              contextWindow: engine.contextWindow, maxOutputTokens: 2048)
         endpoint.requestTimeout = 1800
-        return AgentConfiguration(endpoint: endpoint, thinking: .low, permissionMode: .review,
+        return AgentConfiguration(endpoint: endpoint, thinking: AppModel.shared.settings.agentThinking, permissionMode: .review,
                                   temperature: engine.launch?.temperature.map(Double.init))
     }
 
@@ -71,6 +71,8 @@ final class StudioAgentProvider: AgentProviding {
         if let existing = models[root] { return existing }
         let workspace = LocalWorkspace(rootURL: root, displayName: displayName, securityScoped: true)
         let model = AgentViewModel(workspace: workspace, client: client(), configuration: configuration())
+        let engine = self.engine
+        model.onSessionDeleted = { id in engine.closeSession(id) }
         model.refreshSessions()
         models[root] = model
         return model

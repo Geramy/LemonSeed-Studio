@@ -58,7 +58,7 @@ final class GPUCoordinator {
         bootstrapped = true
         await library.start()
         gpuLog.log("models: \(self.library.records.map { "\($0.id)[\($0.state)]" }.joined(separator: ", "), privacy: .public)")
-        if engine.autoStart || LaunchArguments.has("--selftest") { startIfPossible() }
+        if engine.autoStart { startIfPossible() }
     }
 
     /// Starts the engine if a driver service and a model are present.
@@ -87,7 +87,7 @@ final class GPUCoordinator {
     private func driverChanged() {
         guard bootstrapped else { return }
         if driver.service != nil {
-            if case .waiting = engine.phase, engine.autoStart || LaunchArguments.has("--selftest") { startIfPossible() }
+            if case .waiting = engine.phase, engine.autoStart { startIfPossible() }
         }
     }
 

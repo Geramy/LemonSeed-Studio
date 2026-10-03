@@ -5,6 +5,7 @@ import GameController
 import StudioCore
 import StudioDesign
 import StudioModels
+import StudioAgent
 
 /// App-wide state shared by every window: settings, the workspace library,
 /// the provider registry, the command registry and input density.
@@ -91,6 +92,8 @@ final class AppSettings {
     var density: Density { didSet { defaults.set(density.rawValue, forKey: "density") } }
     var showActivityBar: Bool { didSet { defaults.set(showActivityBar, forKey: "showActivityBar") } }
     var lseEndpoint: String { didSet { defaults.set(lseEndpoint, forKey: "lseEndpoint") } }
+    /// The thinking level new agent chats start with.
+    var agentThinking: ThinkingLevel { didSet { defaults.set(agentThinking.rawValue, forKey: "agentThinking") } }
     var editor: EditorSettings {
         didSet { if let data = try? JSONEncoder().encode(editor) { defaults.set(data, forKey: "editorSettings") } }
     }
@@ -106,6 +109,7 @@ final class AppSettings {
         density = defaults.string(forKey: "density").flatMap(Density.init(rawValue:)) ?? .automatic
         showActivityBar = defaults.object(forKey: "showActivityBar") as? Bool ?? true
         lseEndpoint = defaults.string(forKey: "lseEndpoint") ?? ModelEndpointProbe.defaultEndpoint.absoluteString
+        agentThinking = defaults.string(forKey: "agentThinking").flatMap(ThinkingLevel.init(rawValue:)) ?? .low
         editor = defaults.data(forKey: "editorSettings").flatMap { try? JSONDecoder().decode(EditorSettings.self, from: $0) } ?? EditorSettings()
     }
 

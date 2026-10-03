@@ -139,9 +139,8 @@ struct StudioSceneView: View {
         }
         .task {
             // Models, then the engine (when auto-start is on and the driver
-            // is present); scripted checks for --selftest / --screenshots.
+            // is present).
             await app.gpu.bootstrap()
-            Automation.startIfRequested(app: app)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { app.activeRouter = router }

@@ -365,8 +365,13 @@ extension LayoutManager {
         }
     }
 
-    func layoutLines(toLocation location: Int) {
-        var nextLine: DocumentLineNode? = lineManager.firstLine
+    /// Typesets the lines from the one containing `startLocation` through the one containing `location`.
+    ///
+    /// Runestone typeset every line from the start of the document, which in a 270,000-line file meant
+    /// laying out half the document (and keeping ~900 MB of Core Text lines) to scroll to its middle.
+    /// Lines above keep their estimated heights; when they are laid out later the content offset is adjusted.
+    func layoutLines(from startLocation: Int = 0, toLocation location: Int) {
+        var nextLine: DocumentLineNode? = lineManager.line(containingCharacterAt: min(startLocation, location)) ?? lineManager.firstLine
         let isLocationEndOfString = location >= stringView.string.length
         while let line = nextLine {
             let lineLocation = line.location

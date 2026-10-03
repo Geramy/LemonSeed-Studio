@@ -159,7 +159,7 @@ public struct EditorTheme: Hashable, Sendable, Identifiable {
         information = palette.blue
         hint = palette.tertiaryText
         minimapBackground = palette.background
-        minimapSlider = palette.text.withAlpha(palette.isDark ? 0.07 : 0.06)
+        minimapSlider = palette.text.withAlpha(palette.isDark ? 0.10 : 0.08)
         minimapSliderActive = palette.text.withAlpha(palette.isDark ? 0.14 : 0.12)
         accent = palette.accent
         syntax = Self.syntaxStyles(for: palette)

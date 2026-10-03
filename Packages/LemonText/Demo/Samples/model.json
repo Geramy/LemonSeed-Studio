@@ -1,0 +1,15 @@
+{
+  "name": "qwen3.8-27b-q4",
+  "architecture": "qwen3.5",
+  "quantization": "Q4",
+  "contextLength": 32768,
+  "draft": {
+    "module": "dflash2-q8",
+    "acceptRate": 0.71
+  },
+  "sha256": "9f2c4e7a0b1d...",
+  "sizeBytes": 16231874560,
+  "recommended": true,
+  "stopSequences": ["<|im_end|>", "<|endoftext|>"],
+  "license": null
+}

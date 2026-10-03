@@ -1,0 +1,32 @@
+/* Lemon Dark, as CSS custom properties for web views. */
+:root {
+  --background: #161618;
+  --text: #e7e4dd;
+  --accent: #f4d03f;
+  --radius: 10px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: #fbfaf6;
+    --text: #2a2925;
+    --accent: #c99a00;
+  }
+}
+
+.console {
+  background: var(--background);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+}
+
+.console .error::before {
+  content: "✕ ";
+  color: #f2777a;
+}
+
+a:hover,
+a:focus-visible {
+  text-decoration: underline 2px var(--accent);
+}

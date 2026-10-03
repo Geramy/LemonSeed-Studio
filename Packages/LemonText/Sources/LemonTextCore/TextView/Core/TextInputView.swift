@@ -555,6 +555,12 @@ final class TextInputView: UIView, UITextInput {
         textSelectionView?.subviews.count == 1
     }
     var lineEndings: LineEnding = .lf
+    /// Replaces the software keyboard when set. See ``TextView/customInputView``.
+    var customInputView: UIView?
+    override var inputView: UIView? {
+        get { customInputView }
+        set { customInputView = newValue }
+    }
     private(set) var isRestoringPreviouslyDeletedText = false
 
     // MARK: - Private
@@ -1196,6 +1202,34 @@ extension TextInputView {
             // By restoring the selected range using the old line position we can better preserve the old selected language.
             moveCaret(to: oldLinePosition)
         }
+    }
+
+    /// Applies non-overlapping replacements as incremental edits grouped into one undo step.
+    ///
+    /// Unlike ``replaceText(in:)``, which swaps in a whole new string, this keeps the line manager,
+    /// layout and syntax tree and only updates what changed, so it suits a few edits in a large document
+    /// (several carets, toggling comments, moving lines).
+    func replaceTextIncrementally(in batchReplaceSet: BatchReplaceSet, selectedRangeAfter: NSRange?, actionName: String) {
+        let replacements = batchReplaceSet.replacements.sorted { $0.range.location > $1.range.location }
+        guard !replacements.isEmpty else {
+            return
+        }
+        let selectedRangeBefore = selectedRange
+        timedUndoManager.endUndoGrouping()
+        timedUndoManager.beginUndoGrouping()
+        timedUndoManager.setActionName(actionName)
+        for replacement in replacements {
+            replaceText(in: replacement.range,
+                        with: prepareTextForInsertion(replacement.text),
+                        selectedRangeAfterUndo: selectedRangeBefore,
+                        undoActionName: actionName)
+        }
+        timedUndoManager.endUndoGrouping()
+        if let selectedRangeAfter {
+            selectedRange = safeSelectionRange(from: selectedRangeAfter)
+        }
+        layoutIfNeeded()
+        delegate?.textInputViewDidChangeSelection(self)
     }
 
     func text(in range: UITextRange) -> String? {

@@ -223,13 +223,16 @@ open class TextView: UIScrollView {
         !textInputView.isFirstResponder && isEditable
     }
     /// The text view's background color.
+    ///
+    /// The color is drawn by the scroll view; the text layer stays transparent so decoration views
+    /// placed between the two (indentation guides, bracket highlights) show through.
     override public var backgroundColor: UIColor? {
         get {
-            textInputView.backgroundColor
+            super.backgroundColor
         }
         set {
             super.backgroundColor = newValue
-            textInputView.backgroundColor = newValue
+            textInputView.backgroundColor = .clear
         }
     }
     /// The point at which the origin of the content view is offset from the origin of the scroll view.

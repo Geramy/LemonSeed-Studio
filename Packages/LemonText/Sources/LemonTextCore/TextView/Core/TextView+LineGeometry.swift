@@ -141,3 +141,61 @@ extension TextInputView {
         layoutManager.layoutIfNeeded()
     }
 }
+
+// MARK: - Incremental edits
+public extension TextView {
+    /// Replaces several ranges as one undo step using incremental edits.
+    ///
+    /// ``replaceText(in:)`` swaps in a whole new string, which re-parses and re-lays out the document.
+    /// This variant updates only the edited lines and the syntax tree incrementally, which keeps edits fast
+    /// in large documents. Prefer ``replaceText(in:)`` for thousands of replacements.
+    /// - Parameters:
+    ///   - batchReplaceSet: Non-overlapping replacements expressed against the current text.
+    ///   - selectedRange: The selection to set afterwards.
+    ///   - actionName: Name of the undo action.
+    func replaceTextIncrementally(in batchReplaceSet: BatchReplaceSet, selectedRange: NSRange? = nil, actionName: String = "Edit") {
+        textInputView.inputDelegate?.selectionWillChange(textInputView)
+        textInputView.replaceTextIncrementally(in: batchReplaceSet, selectedRangeAfter: selectedRange, actionName: actionName)
+        textInputView.inputDelegate?.selectionDidChange(textInputView)
+    }
+}
+
+// MARK: - Rects for locations and ranges
+public extension TextView {
+    /// The caret rectangle at a location, in content coordinates.
+    func caretRect(at location: Int) -> CGRect {
+        let clamped = min(max(location, 0), textLength)
+        return textInputView.caretRect(at: clamped)
+    }
+
+    /// Rectangles covering a range (one per line fragment), in content coordinates.
+    func selectionRects(in range: NSRange) -> [CGRect] {
+        let clampedLocation = min(max(range.location, 0), textLength)
+        let clampedLength = min(max(range.length, 0), textLength - clampedLocation)
+        let indexedRange = IndexedRange(NSRange(location: clampedLocation, length: clampedLength))
+        return textInputView.selectionRects(for: indexedRange).map(\.rect).filter { $0.width > 0 || $0.height > 0 }
+    }
+
+    /// The location closest to a point in content coordinates.
+    func closestLocation(to point: CGPoint) -> Int? {
+        guard let position = textInputView.closestPosition(to: point) as? IndexedPosition else {
+            return nil
+        }
+        return position.index
+    }
+}
+
+// MARK: - Custom input view
+public extension TextView {
+    /// A view that replaces the software keyboard while the text view is first responder, such as a
+    /// row of coding keys, or an empty view to keep the keyboard hidden while a hardware keyboard is the input.
+    var customInputView: UIView? {
+        get { textInputView.customInputView }
+        set {
+            textInputView.customInputView = newValue
+            if textInputView.isFirstResponder {
+                textInputView.reloadInputViews()
+            }
+        }
+    }
+}

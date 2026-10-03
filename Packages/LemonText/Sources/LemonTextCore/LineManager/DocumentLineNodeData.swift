@@ -12,6 +12,8 @@ final class DocumentLineNodeData {
         totalLength - delimiterLength
     }
     var lineHeight: CGFloat
+    /// Hidden lines are folded away: they keep their text but take up no vertical space.
+    var isHidden = false
     var totalLineHeight: CGFloat = 0
     var nodeTotalByteCount = ByteCount(0)
     var startByte: ByteCount {

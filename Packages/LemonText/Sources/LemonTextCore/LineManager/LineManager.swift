@@ -236,7 +236,8 @@ final class LineManager {
     }
 
     @discardableResult
-    func setHeight(of line: DocumentLineNode, to newHeight: CGFloat) -> Bool {
+    func setHeight(of line: DocumentLineNode, to proposedHeight: CGFloat) -> Bool {
+        let newHeight = line.data.isHidden ? 0 : proposedHeight
         if abs(newHeight - line.data.lineHeight) < CGFloat.ulpOfOne {
             return false
         } else {
@@ -244,6 +245,43 @@ final class LineManager {
             documentLineTree.updateAfterChangingChildren(of: line)
             return true
         }
+    }
+
+    /// Hides or shows the lines with the given indices. Hidden lines get a height of zero.
+    /// - Returns: The lines whose hidden state changed.
+    @discardableResult
+    func setHidden(_ isHidden: Bool, forLinesIn rows: ClosedRange<Int>) -> [DocumentLineNode] {
+        guard lineCount > 0 else {
+            return []
+        }
+        let lowerBound = max(rows.lowerBound, 0)
+        let upperBound = min(rows.upperBound, lineCount - 1)
+        guard lowerBound <= upperBound else {
+            return []
+        }
+        var changedLines: [DocumentLineNode] = []
+        for row in lowerBound ... upperBound {
+            let line = line(atRow: row)
+            guard line.data.isHidden != isHidden else {
+                continue
+            }
+            line.data.isHidden = isHidden
+            setHeight(of: line, to: isHidden ? 0 : estimatedLineHeight)
+            changedLines.append(line)
+        }
+        return changedLines
+    }
+
+    /// The index of the first line at or after `row` that is not hidden.
+    func firstVisibleRow(atOrAfter row: Int) -> Int? {
+        var row = row
+        while row < lineCount {
+            if !line(atRow: row).data.isHidden {
+                return row
+            }
+            row += 1
+        }
+        return nil
     }
 
     func lines(in range: NSRange) -> [DocumentLineNode] {

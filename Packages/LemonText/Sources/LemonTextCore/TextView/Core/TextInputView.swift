@@ -558,7 +558,7 @@ final class TextInputView: UIView, UITextInput {
     private(set) var isRestoringPreviouslyDeletedText = false
 
     // MARK: - Private
-    private var languageMode: InternalLanguageMode = PlainTextInternalLanguageMode() {
+    var languageMode: InternalLanguageMode = PlainTextInternalLanguageMode() {
         didSet {
             if languageMode !== oldValue {
                 indentController.languageMode = languageMode
@@ -570,13 +570,13 @@ final class TextInputView: UIView, UITextInput {
     }
     private let lineControllerFactory: LineControllerFactory
     private let lineControllerStorage: LineControllerStorage
-    private let layoutManager: LayoutManager
+    let layoutManager: LayoutManager
     private let timedUndoManager = TimedUndoManager()
     private let indentController: IndentController
     private let lineMovementController: LineMovementController
     private let pageGuideController = PageGuideController()
     private let gutterWidthService: GutterWidthService
-    private let contentSizeService: ContentSizeService
+    let contentSizeService: ContentSizeService
     private let caretRectService: CaretRectService
     private let selectionRectService: SelectionRectService
     private let highlightService: HighlightService

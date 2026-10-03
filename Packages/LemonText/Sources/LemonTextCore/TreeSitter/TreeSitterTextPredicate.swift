@@ -37,6 +37,18 @@ enum TreeSitterTextPredicate {
         }
     }
 
+    struct CaptureEqualsAnyStringParameters {
+        let captureIndex: UInt32
+        let strings: Set<String>
+        let isPositive: Bool
+
+        init(captureIndex: UInt32, strings: Set<String>, isPositive: Bool) {
+            self.captureIndex = captureIndex
+            self.strings = strings
+            self.isPositive = isPositive
+        }
+    }
+
     struct UnsupportedParameters {
         let name: String
 
@@ -48,6 +60,7 @@ enum TreeSitterTextPredicate {
     case captureEqualsString(CaptureEqualsStringParameters)
     case captureEqualsCapture(CaptureEqualsCaptureParameters)
     case captureMatchesPattern(CaptureMatchesPatternParameters)
+    case captureEqualsAnyString(CaptureEqualsAnyStringParameters)
     case unsupported(UnsupportedParameters)
 }
 

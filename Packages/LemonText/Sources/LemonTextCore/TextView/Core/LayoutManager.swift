@@ -114,6 +114,8 @@ final class LayoutManager {
     private var lineFragmentViewReuseQueue = ViewReuseQueue<LineFragmentID, LineFragmentView>()
     private var lineNumberLabelReuseQueue = ViewReuseQueue<DocumentLineNodeID, LineNumberView>()
     private var visibleLineIDs: Set<DocumentLineNodeID> = []
+    /// The first and last line index laid out in the viewport during the latest layout pass.
+    private(set) var visibleLineRows: ClosedRange<Int>?
     private let linesContainerView = UIView()
     private let gutterBackgroundView = GutterBackgroundView()
     private let lineNumbersContainerView = UIView()
@@ -398,6 +400,15 @@ extension LayoutManager {
         var maxY = insetViewport.minY
         var contentOffsetAdjustmentY: CGFloat = 0
         while let line = nextLine, maxY < insetViewport.maxY, constrainingLineWidth > 0 {
+            if line.data.isHidden {
+                // Folded lines take no space. Jump to the next line that is shown.
+                if let nextVisibleRow = lineManager.firstVisibleRow(atOrAfter: line.index + 1) {
+                    nextLine = lineManager.line(atRow: nextVisibleRow)
+                } else {
+                    nextLine = nil
+                }
+                continue
+            }
             appearedLineIDs.insert(line.id)
             // Prepare to line controller to display text.
             let lineLocalViewport = CGRect(x: 0, y: maxY, width: insetViewport.width, height: insetViewport.maxY - maxY)
@@ -439,6 +450,7 @@ extension LayoutManager {
                 nextLine = nil
             }
         }
+        visibleLineRows = appearedLineIDs.isEmpty ? nil : visibleRowRange(of: appearedLineIDs)
         let contentSize = contentSizeService.contentSize
         linesContainerView.frame = CGRect(x: 0, y: 0, width: contentSize.width, height: contentSize.height)
         // Update the visible lines and line fragments. Clean up everything that is not in the viewport anymore.
@@ -534,6 +546,23 @@ extension LayoutManager {
         lineNumbersContainerView.isHidden = !showLineNumbers
         gutterSelectionBackgroundView.isHidden = !lineSelectionDisplayType.shouldShowLineSelection || !showLineNumbers || !isEditing
         lineSelectionBackgroundView.isHidden = !lineSelectionDisplayType.shouldShowLineSelection || !isEditing || selectedLength > 0
+    }
+}
+
+// MARK: - Visible Lines
+private extension LayoutManager {
+    private func visibleRowRange(of lineIDs: Set<DocumentLineNodeID>) -> ClosedRange<Int>? {
+        var minRow = Int.max
+        var maxRow = Int.min
+        for lineID in lineIDs {
+            guard let lineController = lineControllerStorage[lineID] else {
+                continue
+            }
+            let row = lineController.line.index
+            minRow = min(minRow, row)
+            maxRow = max(maxRow, row)
+        }
+        return minRow <= maxRow ? minRow ... maxRow : nil
     }
 }
 

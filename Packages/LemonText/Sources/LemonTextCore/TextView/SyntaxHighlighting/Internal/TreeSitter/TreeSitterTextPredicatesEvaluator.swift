@@ -30,6 +30,10 @@ final class TreeSitterTextPredicatesEvaluator {
                 if !evaluate(using: parameters) {
                     return false
                 }
+            case .captureEqualsAnyString(let parameters):
+                if !evaluate(using: parameters) {
+                    return false
+                }
             case .unsupported(let parameters):
                 #if DEBUG
                 if !Self.previousUnsupportedPredicateNames.contains(parameters.name) {
@@ -61,7 +65,7 @@ private extension TreeSitterTextPredicatesEvaluator {
         guard let lhsCapture = match.capture(forIndex: parameters.lhsCaptureIndex) else {
             return false
         }
-        guard let rhsCapture = match.capture(forIndex: parameters.lhsCaptureIndex) else {
+        guard let rhsCapture = match.capture(forIndex: parameters.rhsCaptureIndex) else {
             return false
         }
         let lhsByteRange = lhsCapture.byteRange
@@ -72,6 +76,16 @@ private extension TreeSitterTextPredicatesEvaluator {
         let rhsContentText = stringView.substring(in: rhsRange)
         let comparisonResult = lhsContentText == rhsContentText
         return comparisonResult == parameters.isPositive
+    }
+
+    func evaluate(using parameters: TreeSitterTextPredicate.CaptureEqualsAnyStringParameters) -> Bool {
+        guard let capture = match.capture(forIndex: parameters.captureIndex) else {
+            return false
+        }
+        guard let contentText = stringView.substring(in: NSRange(capture.byteRange)) else {
+            return false
+        }
+        return parameters.strings.contains(contentText) == parameters.isPositive
     }
 
     func evaluate(using parameters: TreeSitterTextPredicate.CaptureMatchesPatternParameters) -> Bool {

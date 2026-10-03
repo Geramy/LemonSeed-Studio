@@ -97,7 +97,8 @@ final class ToolbarTests: StudioUITestCase {
         tap("explorer.newFolder")
         expect("explorer.rename")
         app.typeText("lib\n")
-        expect("explorer.row.lib")
+        // New items go next to the selected item (main.c is open, so Sources).
+        expect("explorer.row.Sources/lib")
 
         tap("explorer.newFile")
         expect("tab.untitled.txt")
@@ -183,15 +184,18 @@ final class ToolbarTests: StudioUITestCase {
         expectValue("palette.field", ":")
         app.typeText("3\n")
         expect("palette", exists: false)
-        tap("status.branch")
-        expect("sidebar.sourceControl")
+        // The Demo project is not a Git repository, so there is no branch item.
+        XCTAssertFalse(element("status.branch").exists)
     }
 
     func testSearchSidebar() {
         launch()
         tap("activity.search")
-        tap("search.field")
-        app.typeText("add")
+        // The styled field shares its identifier with its icon; type into the field itself.
+        let field = app.textFields["search.field"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("add")
         expect("search.file.Sources/util.c")
         expect("search.summary")
         tap("search.case")

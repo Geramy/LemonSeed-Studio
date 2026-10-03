@@ -33,10 +33,12 @@ final class MenuBarTests: StudioUITestCase {
 
         menu("File", "New Project…")
         XCTAssertTrue(app.alerts["New Project"].waitForExistence(timeout: 5))
-        app.alerts["New Project"].textFields.firstMatch.typeText("Created From Menu")
+        // Projects persist across runs; a fresh name each time.
+        let name = "Menu Project \(Int(Date().timeIntervalSince1970) % 100_000)"
+        app.alerts["New Project"].textFields.firstMatch.typeText(name)
         app.alerts["New Project"].buttons["Create"].tap()
         XCTAssertTrue(element("toolbar.workspaceMenu").waitForExistence(timeout: 5))
-        let renamed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Created From Menu"),
+        let renamed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", name),
                                                 object: element("toolbar.workspaceMenu"))
         XCTAssertEqual(XCTWaiter.wait(for: [renamed], timeout: 5), .completed, "the new project opened")
 

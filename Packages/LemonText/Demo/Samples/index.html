@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Run — LemonSeed</title>
+  <link rel="stylesheet" href="run.css">
+  <style>
+    body { margin: 0; font: 14px ui-monospace, monospace; }
+  </style>
+</head>
+<body>
+  <!-- Output from the WASI program streams into this element. -->
+  <main id="console" aria-live="polite"></main>
+  <script type="module">
+    import { start } from './wasi.js';
+    const output = document.getElementById('console');
+    start('lsx://runtime/program.wasm', {
+      stdout: (line) => output.append(line, document.createElement('br')),
+      exit: (code) => console.log(`exited with ${code}`),
+    });
+  </script>
+</body>
+</html>

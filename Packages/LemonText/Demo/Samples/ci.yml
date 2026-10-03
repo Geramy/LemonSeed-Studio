@@ -1,0 +1,27 @@
+# Continuous integration for the Studio.
+name: studio
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  SIMULATOR: "iPad Pro 13-inch (M5)"
+
+jobs:
+  test:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - name: Test LemonText
+        run: |
+          cd Packages/LemonText
+          xcodebuild test -scheme LemonText \
+            -destination "platform=iOS Simulator,name=${SIMULATOR}"
+      - name: License gate
+        if: ${{ github.event_name == 'pull_request' }}
+        run: ./tools/license-gate.sh --deny GPL-3.0

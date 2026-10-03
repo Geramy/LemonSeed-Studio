@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "qwen38-27b-q4",
+      "name": "Qwen3.8-27B Q4",
+      "summary": "Qwen3.8-27B, MLX affine 4-bit, group size 64. The default model; runs with the DFlash2 draft.",
+      "role": "main",
+      "source": "huggingFace",
+      "repository": "lmstudio-community/Qwen3.8-27B-MLX-4bit",
+      "revision": "6067b15cf581666a4aecf6af3afaba4bb5efc20c",
+      "architecture": "qwen3.5",
+      "quantization": { "kind": "affine", "bits": 4, "groupSize": 64 },
+      "mtpLayers": 1,
+      "drafts": ["qwen38-27b-dflash2-q8", "qwen38-27b-dflash2"],
+      "files": [
+        { "path": "chat_template.jinja", "size": 8952, "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041" },
+        { "path": "config.json", "size": 4932, "sha256": "14b65a0ee06517060a6bbd979bb1a8ff54e7b304b1a1f01d54344b88b8285e85" },
+        { "path": "generation_config.json", "size": 202, "sha256": "e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e" },
+        { "path": "model-00001-of-00003.safetensors", "size": 5343268752, "sha256": "471a9a81b54dddbfef43e8a71960ca24ad3c727891c6b0750a9db9a214aab504" },
+        { "path": "model-00002-of-00003.safetensors", "size": 5354185100, "sha256": "e7474b8f968f4078dfd4889925961c5b0da9939219b614dba08eb63c46590de7" },
+        { "path": "model-00003-of-00003.safetensors", "size": 5357087747, "sha256": "1038989bed1346ecdb541a45c078df2aae99a9509f35bfd51e7a04802a5d8402" },
+        { "path": "model.safetensors.index.json", "size": 218281, "sha256": "13b840162b4cb35c66fef7df072f7dbb4717908204364f5e5d9f9655a2758fa8" },
+        { "path": "tokenizer.json", "size": 19989325, "sha256": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523" }
+      ]
+    },
+    {
+      "id": "qwen38-27b-dflash2",
+      "name": "Qwen3.8-27B DFlash2 draft (BF16 source)",
+      "summary": "The DFlash2 block drafter for Qwen3.8-27B, as published. LSE converts it to Q8 the first time it loads it (about 2 GB more, a few seconds).",
+      "role": "dflash2Draft",
+      "source": "huggingFace",
+      "repository": "incoai/Qwen3.8-27B-DFlash2",
+      "revision": "dedf8df68adfb1afeaf7b7480c0a0243108177b4",
+      "architecture": "dflash2",
+      "quantization": { "kind": "unquantized", "dtype": "bfloat16" },
+      "mtpLayers": 0,
+      "lseConversion": {
+        "cacheDirectory": "lse-q8g64",
+        "outputBytes": 2044950184,
+        "outputSHA256": "cc3b5742f8edf02c4edcc734ef66e7c4c5f660b43438641ee36c5a72f8414188"
+      },
+      "files": [
+        { "path": "config.json", "size": 1239, "sha256": "873e3556509b0da06e29654ba00d4944888d4b5e8a33afde25f7eb27d321e980" },
+        { "path": "model.safetensors", "size": 3848817896, "sha256": "67fc76d68dc5a9415511a4f394ef744d67510cd20e93b37cc2cc7d28e4bab65c" }
+      ]
+    },
+    {
+      "id": "qwen38-27b-dflash2-q8",
+      "name": "Qwen3.8-27B DFlash2 draft (Q8)",
+      "summary": "The DFlash2 draft already converted to MLX affine Q8, group size 64. Not on Hugging Face: copy it from a Mac, or let LSE make it from the BF16 source.",
+      "role": "dflash2Draft",
+      "source": "localOnly",
+      "derivedFrom": "qwen38-27b-dflash2",
+      "architecture": "dflash2",
+      "quantization": { "kind": "affine", "bits": 8, "groupSize": 64 },
+      "mtpLayers": 0,
+      "files": [
+        { "path": "config.json", "size": 1322, "sha256": "411ffd1c02c210843385cd9eb5784554d0c982c8878669083c5e58258073a65d" },
+        { "path": "model.safetensors", "size": 2044950184, "sha256": "cc3b5742f8edf02c4edcc734ef66e7c4c5f660b43438641ee36c5a72f8414188" }
+      ]
+    }
+  ]
+}

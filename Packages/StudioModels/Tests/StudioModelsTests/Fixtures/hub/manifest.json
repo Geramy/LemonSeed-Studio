@@ -1,0 +1,1017 @@
+[
+  {
+    "body" : "ae97739fef30d3733aa0.bin",
+    "key" : "https:\/\/huggingface.co\/0xBakeer\/TandemLLM-Qwen3.8-27B-DFlash2-b16\/resolve\/98759a4995e4949c462f9a6197f59e015fd82530\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "daa273fcb4fbf642c636.bin",
+    "key" : "https:\/\/huggingface.co\/0xBakeer\/TandemLLM-Qwen3.8-27B-DFlash2-b8\/resolve\/ecf60b9b0cfbf7b70e68d8d11b5eb2843c405a98\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "d2fd53ff8c1bf2e58286.bin",
+    "key" : "https:\/\/huggingface.co\/0xMiami305\/Qwen3.8-27B-DFlash2-W4A16-MLP-only\/resolve\/6d2937789337b005a3a74a3f5991ac5896d85192\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "b1cb355cb07c66c1c5f0.bin",
+    "key" : "https:\/\/huggingface.co\/0xWhiteMage\/Qwen3.8-27B-Kearuga-DFlash2\/resolve\/da49a2019cfcadc67821c5e0ebae1833b0069093\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "70fcb7e166a6c74278e7.bin",
+    "key" : "https:\/\/huggingface.co\/JRamirez-UAB\/Qwen3.8-27B-DFlash2-W4A16\/resolve\/c4a22f5c57b29244310e12f7687de0c5f4ff81ed\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "e0ce4b3932aea4e41496.bin",
+    "key" : "https:\/\/huggingface.co\/JetBrains\/Qwen3.8-3.6-27B-blend-MLX-4bit\/resolve\/c2414707f13a861422070ccc2b222312239667ff\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "ef3e9da6507f49067ac5.bin",
+    "key" : "https:\/\/huggingface.co\/JetBrains\/Qwen3.8-3.6-27B-blend-MLX-4bit\/resolve\/c2414707f13a861422070ccc2b222312239667ff\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "d918fabfcc84bed28a4f.bin",
+    "key" : "https:\/\/huggingface.co\/KaedeTai\/dflash2-mlx-quantized-draft\/resolve\/e3c12036c520425facd5c5d79afaa0d5d1518d43\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "39219d150a33cf60af3a.bin",
+    "key" : "https:\/\/huggingface.co\/Mia-AiLab\/Qwen3.8-27B-DFlash2-EXL3-5.0bpw\/resolve\/4f0436269bca761b071f05319e8e04a87cc633f9\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "b03093ce5cf983ec9d7e.bin",
+    "key" : "https:\/\/huggingface.co\/ProCreations\/Ternary-Bonsai-2-27B-DFlash2\/resolve\/4cfb6ad03268fed0f60ca96c1a659c0b1c77e50b\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "401a6f57ec2019bbeda2.bin",
+    "key" : "https:\/\/huggingface.co\/RedHatAI\/Qwen3-4B-speculator.dflash2\/resolve\/27aa911ddb040c61adeeade08e92949e24c9e17b\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "d7ec382147e47b1a1cf5.bin",
+    "key" : "https:\/\/huggingface.co\/Schiltmans\/Ternary-Bonsai-2-27B-DFlash2-ft5-mlx-4bit\/resolve\/67048444ed6fc908dbce7acf063aab1bd718d2af\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "6038a0c95738b3b77fc4.bin",
+    "key" : "https:\/\/huggingface.co\/Secondchancee\/Qwen3.8-27B-DFlash2\/resolve\/aafdefe40153185d94254d111091e0539c6f269a\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "c2c07759fa18453b5398.bin",
+    "key" : "https:\/\/huggingface.co\/Solstice-AI\/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M\/resolve\/6692a90f9420ed4c57f732b8a572c6362d259b5a\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "21ad6d550d16a85cbcf5.bin",
+    "key" : "https:\/\/huggingface.co\/Solstice-AI\/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M\/resolve\/6692a90f9420ed4c57f732b8a572c6362d259b5a\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "b6c3dc494439686fa1e7.bin",
+    "key" : "https:\/\/huggingface.co\/TechPrototyper\/Qwen3.8-27B-DFlash2-fp8-vllm\/resolve\/a59c3ad40eab93501e7704dfe154e7c33e6633ff\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "cc0107bf67bb22b881d8.bin",
+    "key" : "https:\/\/huggingface.co\/YourHighnessLA\/Qwen3.8-27B-DFlash2-NVFP4\/resolve\/a9334054bb4d2195ea75b812944037bc21b1269b\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "2da25e2c3bd56f20d250.bin",
+    "key" : "https:\/\/huggingface.co\/alphakek\/Qwen3.8-27B-heretic-ara-DFlash2\/resolve\/75930a33a8bbbcef25e93f7c4123e5e4424c2da7\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "6a427ab74f4ef9294048.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/0xBakeer\/TandemLLM-Qwen3.8-27B-DFlash2-b16\/tree\/98759a4995e4949c462f9a6197f59e015fd82530?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "01c6bc14c60c6087c810.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/0xBakeer\/TandemLLM-Qwen3.8-27B-DFlash2-b8\/tree\/ecf60b9b0cfbf7b70e68d8d11b5eb2843c405a98?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "e8948ea4e214a279a721.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/0xMiami305\/Qwen3.8-27B-DFlash2-W4A16-MLP-only\/tree\/6d2937789337b005a3a74a3f5991ac5896d85192?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "78576edfed36f2d92446.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/0xWhiteMage\/Qwen3.8-27B-Kearuga-DFlash2\/tree\/da49a2019cfcadc67821c5e0ebae1833b0069093?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "6bbd54810382f3f7708a.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/JRamirez-UAB\/Qwen3.8-27B-DFlash2-W4A16\/tree\/c4a22f5c57b29244310e12f7687de0c5f4ff81ed?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "42c0e6b0c5fef4b50834.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/JetBrains\/Qwen3.8-3.6-27B-blend-MLX-4bit-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "d34a9eb5ff9538974dfe.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/JetBrains\/Qwen3.8-3.6-27B-blend-MLX-4bit\/tree\/c2414707f13a861422070ccc2b222312239667ff?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "14c1b0a2296c22a3197e.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/JetBrains\/Qwen3.8-3.6-27B-blend-MLX-MTP-4bit?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "ad8d8239ee6717b0ee3a.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/KaedeTai\/dflash2-mlx-quantized-draft\/tree\/e3c12036c520425facd5c5d79afaa0d5d1518d43?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "2b48477888f9a768cf15.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/Mia-AiLab\/Qwen3.8-27B-DFlash2-EXL3-5.0bpw\/tree\/4f0436269bca761b071f05319e8e04a87cc633f9?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "c3f3b6f6b01ea196807e.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/ProCreations\/Ternary-Bonsai-2-27B-DFlash2\/tree\/4cfb6ad03268fed0f60ca96c1a659c0b1c77e50b?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "0c681cfef0135b6fbd19.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/RedHatAI\/Qwen3-4B-speculator.dflash2\/tree\/27aa911ddb040c61adeeade08e92949e24c9e17b?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "9ff90b9315b7c84dd73f.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/Schiltmans\/Ternary-Bonsai-2-27B-DFlash2-ft5-mlx-4bit\/tree\/67048444ed6fc908dbce7acf063aab1bd718d2af?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "be871f3fecfb7f64097c.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/Secondchancee\/Qwen3.8-27B-DFlash2\/tree\/aafdefe40153185d94254d111091e0539c6f269a?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "0ae43e4f73c70ba150a8.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/Solstice-AI\/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "81b8e0dbb7740ad8cadc.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/Solstice-AI\/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-1M\/tree\/6692a90f9420ed4c57f732b8a572c6362d259b5a?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "0c99673776e9e995ed2b.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/Solstice-AI\/Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NM-DAU-mlx-oQ8e-MTP-1M?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "08739aa4363ea4599ca1.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/TechPrototyper\/Qwen3.8-27B-DFlash2-fp8-vllm\/tree\/a59c3ad40eab93501e7704dfe154e7c33e6633ff?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "4ab0f92407ce56a68f48.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/YourHighnessLA\/Qwen3.8-27B-DFlash2-NVFP4\/tree\/a9334054bb4d2195ea75b812944037bc21b1269b?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "db56ccfa7927638bb613.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/alphakek\/Qwen3.8-27B-heretic-ara-DFlash2\/tree\/75930a33a8bbbcef25e93f7c4123e5e4424c2da7?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "9eb70e7a4d8ac4ee9976.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/bottlecapai\/ThinkingCap-Qwen3.8-27B-MLX-4bit-DWQ-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "a153e879ea4cb0acb16c.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/bottlecapai\/ThinkingCap-Qwen3.8-27B-MLX-4bit-DWQ\/tree\/93944fefc63a6c6eb3f649bb003286691e78a40c?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "18aa6de2b57004a63c6c.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/bottlecapai\/ThinkingCap-Qwen3.8-27B-MLX-4bit-MTP-DWQ?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "38e13aca6e613da73901.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/canada-quant\/GLM-5.3-Flash-DFlash2-G\/tree\/bd03d3a38c55490fdcd9cafcfe0825b9957933ec?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "09910a8c5cbdf5d30014.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/curvedinf\/Qwen3.8-27B-DFlash2-GPTQ-INT8-W8A8-GS128\/tree\/0da0cdf034ae1b3f55a880b3ceb2aec842f69916?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "de3b039466c7193f877e.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/ddalcu\/Qwen3.8-27B-MLX-Serve-4bit-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "d16b749d19ac5704ddb2.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/ddalcu\/Qwen3.8-27B-MLX-Serve-4bit\/tree\/901aa73a1ff5456752c02e55582609e0040ca470?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "c15df8b2729828844d38.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/ddalcu\/Qwen3.8-27B-MLX-Serve-8bit-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "fd19539081b6bc84ed8d.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/ddalcu\/Qwen3.8-27B-MLX-Serve-8bit\/tree\/7775059e955f60b5a8f5da1b859466390bcad351?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "1c530e27ca0acd778316.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/ddalcu\/Qwen3.8-27B-MLX-Serve-MTP-4bit?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "5712a5817e7ca08b1dc2.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/ddalcu\/Qwen3.8-27B-MLX-Serve-MTP-8bit?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "bb876d67be172d7adee0.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/deepsweet\/Qwen3.8-27B-DFlash2-FP16\/tree\/f38f96b4697e457848ea85883df2c2345328643a?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "63729e483c12e5578020.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/dicksondickson\/Swift-1.5-Qwen3.8-27b-oQ5e-bf16-mtp-MLX-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "51cc62313e0ef4b810fc.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/dicksondickson\/Swift-1.5-Qwen3.8-27b-oQ5e-bf16-mtp-MLX\/tree\/f1e9409e5800c9156e979e4c7dca7913d3bcf6a7?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "a6e5e8a3f2d346219477.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/dicksondickson\/Swift-1.5-Qwen3.8-27b-oQ5e-bf16-mtp-MTP-MLX?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "577da5b743feee5cf832.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/dicksondickson\/Swift-1.5-Qwen3.8-27b-oQ6e-bf16-mtp-MLX-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "40704370df5ed13e004d.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/dicksondickson\/Swift-1.5-Qwen3.8-27b-oQ6e-bf16-mtp-MLX\/tree\/a71e37ae48186e911bf3931a0a7f786d8f68f8dc?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "07a0a92fdf962f26fac9.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/dicksondickson\/Swift-1.5-Qwen3.8-27b-oQ6e-bf16-mtp-MTP-MLX?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "daa8eb0df583e8f312c3.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/doth4580\/Qwen3.8-27B-DFlash2\/tree\/91a59627d8e504687daf82dd341d1e1dcf33671b?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "2ddaf9f3587b3051b033.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/fcmeyer\/Qwen3.8-27B-MLX-oQ4e-MTP-mtp?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "f50ba889d2ea38b9fced.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/fcmeyer\/Qwen3.8-27B-MLX-oQ4e-mtp-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "00064e839b62b1f3998f.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/fcmeyer\/Qwen3.8-27B-MLX-oQ4e-mtp\/tree\/02993567061709709fd60b38d64819e2b8f647a3?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "337ada203b57c9e5785f.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/gorbatjovy\/GLM-5.3-Flash-DFlash2-ablit-fc\/tree\/b55399a038768f92eb11738d8d4aed128697ffaf?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "b6d7d958ba5c9827cc8c.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/gratex\/Qwen3.8-27B-DFlash2-W4A16-g128-sym-GPTQ\/tree\/5564be8081de421f9d106087b82c33046ca22054?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "fab95d0b5c646095fce5.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/incoai\/GLM-5.3-DFlash2\/tree\/425aa615ce320caac34400208b30808c8f14f76c?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "90526da4288234537e4f.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/incoai\/GLM-5.3-Flash-DFlash2\/tree\/bf582e4eacc1810f76656d1811693ff6c6737d2a?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "8ff9653a1851e463b675.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/incoai\/Muse-Glimmer-30B-DFlash2\/tree\/8336acb8dc9b8bf9c25f12d7785ee6df26703119?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "bfe1414bed7bfd53b76f.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/incoai\/Qwen3.6-35B-A3B-DFlash2\/tree\/51ef7b6923ad6c14cb1bb41c37a9041446496ab6?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "5dd5d7a8948c96237d85.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/incoai\/Qwen3.8-27B-DFlash2\/tree\/015e795645c74b1a0eeef3b570031fb62e769bc5?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "731af8b28e96a70ab32d.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/jfan\/Qwen3.8-27B-heretic-dflash2\/tree\/c4d59299601c3d2a180755c1044067500571008d?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "e3f55ad729300882be03.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/josch15366\/Qwen3.8-27B-DFlash2-FP8\/tree\/dc6ca7842ecb88af0e6bf7c09e7be37c9e510a7e?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "07a0e323cc58fda24367.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/jzinno\/Ornith-1.5-35B-A3B-DFlash2\/tree\/9b4852c05fd00b672b7434b1bb105bc03c8682b0?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "5d932f741da94075ea51.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/lightseekorg\/kimi-k3-dflash2\/tree\/e77935fb4804e17eb55085bffd045eae1d779769?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "658f6ca52c38f910488e.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/lmstudio-community\/Qwen3.8-27B-MLX-4bit-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "75e39b61b64f6fa44740.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/lmstudio-community\/Qwen3.8-27B-MLX-4bit\/tree\/6067b15cf581666a4aecf6af3afaba4bb5efc20c?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "6a31a4a0be9c86465e8e.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/lmstudio-community\/Qwen3.8-27B-MLX-6bit-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "961b3bb47463dc89f3a7.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/lmstudio-community\/Qwen3.8-27B-MLX-6bit\/tree\/05f38c1f39e2f39619653616fe8e96a5d676358e?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "3eff685023051fdd5bdd.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/lmstudio-community\/Qwen3.8-27B-MLX-MTP-4bit?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "7b9f0b8e633480c5e2f1.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/lmstudio-community\/Qwen3.8-27B-MLX-MTP-6bit?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "e85d883ad073ea53a963.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/local-inference-lab\/GLM-5.3-Flash-DFlash2\/tree\/713226ab03bc38afdf955c7450436c2f7176f6f8?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "f7ececa051719275c38d.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/lued\/Qwen3.8-27B-DFlash2-W8\/tree\/f454fa8e6a84387bf006f849584f72541cc29118?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "6c886a7cc819dc84e240.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/lukaskremla\/Qwen3.8-27B-3bit-MLX-MTP-TextOnly?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "e288f73dce2a22265637.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/lukaskremla\/Qwen3.8-27B-3bit-MLX-TextOnly-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "184362d103455a72e728.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/lukaskremla\/Qwen3.8-27B-3bit-MLX-TextOnly\/tree\/dc755c911a7716a1db15cd8df8bab46a9dcfffdc?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "deb09a4ef35db4adc676.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/magiccodingman\/Qwen3.8-27B-heretic-ara-DFlash2-fp8\/tree\/b6bbe8a9ceeef4cd140840692befd9546de9d4cb?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "cdfc76ca5b8eeb4192dd.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mgoin\/Qwen3-4B-speculator.dflash2\/tree\/e3e7a18e4f541fa3841c2fb0666a7759079ab6fd?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "c1485363a3ed9c217c49.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.6-35B-A3B-DFlash2-4bit\/tree\/24956b6abc2bcd999509057434b5e22c3abfe450?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "57a962190c73fefb58a6.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-4bit\/tree\/10c35caafbb80f7dc6a7a432cdd11af10a6d4818?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "0250d0afae8fbf1483af.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-8bit\/tree\/815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "331dfc2cd42a142c5b48.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-MTP-4bit\/tree\/b643c01b6d3b094e325edb6ebd832e16c486c575?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "ae1eade37f120aa599b6.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-MTP-4bit?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 200
+  },
+  {
+    "body" : "89cb0b4857a2de9347d2.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-MTP-8bit\/tree\/e88e48d055732ad75d9435f3059139d5279f2064?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "8ee84a3936ee486d8058.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-MTP-8bit?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 200
+  },
+  {
+    "body" : "11fe5565ddeaff134412.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-MTP-mxfp4?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 200
+  },
+  {
+    "body" : "3ce0cb793e4ae309a50e.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-MTP-mxfp8?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 200
+  },
+  {
+    "body" : "17f857163e95e8705834.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-MTP-nvfp4?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 200
+  },
+  {
+    "body" : "681f0313670fcdba2f34.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-OptiQ-4bit-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "1a0332fa4c3d0314810c.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-OptiQ-4bit\/tree\/a97e1450285cb818b0572a3515f0fc59b8cd7228?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "e91516ea82b61765f760.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-OptiQ-MTP-4bit?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "f7d45bf7adea33405fa6.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-Uncensored-OptiQ-4bit-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "721c3173bae4d7fce4c8.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-Uncensored-OptiQ-4bit\/tree\/c8e325be5c198bf210d55285bbf05a2e651df38a?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "d5cc0e2e5aa2b1bd5a36.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-Uncensored-OptiQ-MTP-4bit?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "5cc666a9d1f080fdab35.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-mxfp4-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "63618858eb1b29f194e8.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-mxfp4\/tree\/97ab0819817ab1c61d7d39f9169fc71999915641?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "62d1ec3e1bf3e4d79c9c.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-mxfp8-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "939f921ab35d16999189.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-mxfp8\/tree\/d48d163bcdf24acaf656474854ab88ea17d65bd1?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "b76b3fe95411621130b4.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-nvfp4-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "ea977264bcea4c8e3433.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/mlx-community\/Qwen3.8-27B-nvfp4\/tree\/5ff8ef173ad0d7c3aae92f0be43031a6ab8067c6?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "42fb7cd3648cebdeabe4.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/nightmedia\/Qwen3.8-27B-Brainwaves-2M-qx64-hi-MTP-mlx?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "97b8c3bef344a7bca953.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/nightmedia\/Qwen3.8-27B-Brainwaves-2M-qx64-hi-mlx-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "2cd83100c6facbbb5f5d.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/nightmedia\/Qwen3.8-27B-Brainwaves-2M-qx64-hi-mlx\/tree\/380319981bc29a41fc31cba4e1b1340c9ab2b029?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "26628309d3d367cd7629.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/nightmedia\/Qwen3.8-27B-Fable-Fusion-F711-GAIN-mxfp4-MTP-mlx?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "ddab38bfcea50dbed177.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/nightmedia\/Qwen3.8-27B-Fable-Fusion-F711-GAIN-mxfp4-mlx-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "d1a8fc347197ef647f53.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/nightmedia\/Qwen3.8-27B-Fable-Fusion-F711-GAIN-mxfp4-mlx\/tree\/46bdf0285e9445a4584e000aceeed65f328f40e7?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "13bf9b9815d66afb71c2.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/nightmedia\/Qwen3.8-27B-Holodeck-mxfp4-MTP-mlx?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "a81f7522ac5fd4355810.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/nightmedia\/Qwen3.8-27B-Holodeck-mxfp4-mlx-MTP?expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 401
+  },
+  {
+    "body" : "c6ae2f9b31f49e681350.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/nightmedia\/Qwen3.8-27B-Holodeck-mxfp4-mlx\/tree\/11aae3cb0218a3d953c779c40b671bb0811d19a2?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "41409714c612666a29a2.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/orcarouter\/Qwen3.8-27B-Uncensored-MLX\/tree\/bc60491a36464626020ce82d5556b1b8f8cd90c7?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "4795272b742d89554234.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/r0b0tlab\/GLM-5.3-Flash-DFlash2-EXL3-3.00bpw\/tree\/1be456bebedd45d82356ce90d289bce2be147193?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "b40356276f93be221be8.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/rasyosef\/Qwen3.5-2B-DFlash2\/tree\/96289f15e344f976c720b640f5823b5655eafa83?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "af188626bdce59e02687.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/shanjiaz\/dflash2_qwen3_4b\/tree\/7469b1b0da32b6506d8084bbce95cca950c37dc6?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "dbfe6e4820e069932547.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/syvai\/Qwen3.8-27B-DFlash2-W4A16\/tree\/4d30ec736ffc6b8688dc2ae2b502d9b48bdec279?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "96a8e5de64069681237a.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/taniii1234\/Qwen3.8-27B-Uncensored-DFlash2\/tree\/bd03640a3e49a6eff782e82efafc1ab78e01fedf?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "7c504f00b3404d983b9f.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/tcclaviger\/Qwen3.8-27B-DFlash2-FP8\/tree\/f02593d0ea2e3b7eedbb831fb26f465b1e6238bb?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "6afc28377084e3e3500c.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/tiyuvta\/Qwen3.8-27B-DFlash2-memra\/tree\/911890463b7b6ecf66dfd41f944ea48ad54fff5b?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "4ec70c3785bc5aac5809.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/wyattearp\/Qwen3.8-27B-DFlash2\/tree\/8cae54a849ca1e9c2e7253d2649eabafdd677923?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "144bff5fbae1a713630c.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/z-lab\/Muse-Glimmer-30B-DFlash2\/tree\/b54ffdd11fa9cfe2af370012e5763d492c904128?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "877a5a05ff0488158cec.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models\/z-lab\/Qwen3.8-27B-DFlash2\/tree\/50307d4c4cde6860d4eee73e2547cd786fe8e8a4?recursive=true",
+    "status" : 200
+  },
+  {
+    "body" : "f2d964602ca4d9aad736.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models?search=DFlash2&limit=100&expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 200
+  },
+  {
+    "body" : "ed07e6d111b656201ea4.bin",
+    "key" : "https:\/\/huggingface.co\/api\/models?search=Qwen3.8-27B%20MLX&limit=25&expand%5B%5D=config&expand%5B%5D=sha&expand%5B%5D=downloads&expand%5B%5D=likes&expand%5B%5D=gated&expand%5B%5D=lastModified&expand%5B%5D=cardData&expand%5B%5D=siblings&expand%5B%5D=tags",
+    "status" : 200
+  },
+  {
+    "body" : "e54c841d090ebb1dceeb.bin",
+    "key" : "https:\/\/huggingface.co\/bottlecapai\/ThinkingCap-Qwen3.8-27B-MLX-4bit-DWQ\/resolve\/93944fefc63a6c6eb3f649bb003286691e78a40c\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "30fd67c543e783fd1b98.bin",
+    "key" : "https:\/\/huggingface.co\/bottlecapai\/ThinkingCap-Qwen3.8-27B-MLX-4bit-DWQ\/resolve\/93944fefc63a6c6eb3f649bb003286691e78a40c\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "f61a60135b513ac2d3c0.bin",
+    "key" : "https:\/\/huggingface.co\/canada-quant\/GLM-5.3-Flash-DFlash2-G\/resolve\/bd03d3a38c55490fdcd9cafcfe0825b9957933ec\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "0f71d2e42ce1f6fb3522.bin",
+    "key" : "https:\/\/huggingface.co\/curvedinf\/Qwen3.8-27B-DFlash2-GPTQ-INT8-W8A8-GS128\/resolve\/0da0cdf034ae1b3f55a880b3ceb2aec842f69916\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "06df9b8f6a82362f6103.bin",
+    "key" : "https:\/\/huggingface.co\/ddalcu\/Qwen3.8-27B-MLX-Serve-4bit\/resolve\/901aa73a1ff5456752c02e55582609e0040ca470\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "7927fd15ca3cfd41b688.bin",
+    "key" : "https:\/\/huggingface.co\/ddalcu\/Qwen3.8-27B-MLX-Serve-4bit\/resolve\/901aa73a1ff5456752c02e55582609e0040ca470\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "486d5a5250ea8b1902b5.bin",
+    "key" : "https:\/\/huggingface.co\/ddalcu\/Qwen3.8-27B-MLX-Serve-8bit\/resolve\/7775059e955f60b5a8f5da1b859466390bcad351\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "743ca581afb4aae3aeb2.bin",
+    "key" : "https:\/\/huggingface.co\/ddalcu\/Qwen3.8-27B-MLX-Serve-8bit\/resolve\/7775059e955f60b5a8f5da1b859466390bcad351\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "5bdfe6e827164e8cb014.bin",
+    "key" : "https:\/\/huggingface.co\/deepsweet\/Qwen3.8-27B-DFlash2-FP16\/resolve\/f38f96b4697e457848ea85883df2c2345328643a\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "c01cc4a3a98a15ed03aa.bin",
+    "key" : "https:\/\/huggingface.co\/dicksondickson\/Swift-1.5-Qwen3.8-27b-oQ5e-bf16-mtp-MLX\/resolve\/f1e9409e5800c9156e979e4c7dca7913d3bcf6a7\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "8f5b49b476e59e4316fc.bin",
+    "key" : "https:\/\/huggingface.co\/dicksondickson\/Swift-1.5-Qwen3.8-27b-oQ5e-bf16-mtp-MLX\/resolve\/f1e9409e5800c9156e979e4c7dca7913d3bcf6a7\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "925355a4d91e5da3d81f.bin",
+    "key" : "https:\/\/huggingface.co\/dicksondickson\/Swift-1.5-Qwen3.8-27b-oQ6e-bf16-mtp-MLX\/resolve\/a71e37ae48186e911bf3931a0a7f786d8f68f8dc\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "c37a8ff44e8568bd3009.bin",
+    "key" : "https:\/\/huggingface.co\/dicksondickson\/Swift-1.5-Qwen3.8-27b-oQ6e-bf16-mtp-MLX\/resolve\/a71e37ae48186e911bf3931a0a7f786d8f68f8dc\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "76ffc2b6076af951fcc1.bin",
+    "key" : "https:\/\/huggingface.co\/doth4580\/Qwen3.8-27B-DFlash2\/resolve\/91a59627d8e504687daf82dd341d1e1dcf33671b\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "fa4660badab50336d034.bin",
+    "key" : "https:\/\/huggingface.co\/fcmeyer\/Qwen3.8-27B-MLX-oQ4e-mtp\/resolve\/02993567061709709fd60b38d64819e2b8f647a3\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "1f1a21d21a4344b114b8.bin",
+    "key" : "https:\/\/huggingface.co\/fcmeyer\/Qwen3.8-27B-MLX-oQ4e-mtp\/resolve\/02993567061709709fd60b38d64819e2b8f647a3\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "d83b238b40cde3f29335.bin",
+    "key" : "https:\/\/huggingface.co\/gorbatjovy\/GLM-5.3-Flash-DFlash2-ablit-fc\/resolve\/b55399a038768f92eb11738d8d4aed128697ffaf\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "eeabaf9ecdaf1a4ea66f.bin",
+    "key" : "https:\/\/huggingface.co\/gratex\/Qwen3.8-27B-DFlash2-W4A16-g128-sym-GPTQ\/resolve\/5564be8081de421f9d106087b82c33046ca22054\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "a2e3b4d4be8ce02fe2d6.bin",
+    "key" : "https:\/\/huggingface.co\/incoai\/GLM-5.3-DFlash2\/resolve\/425aa615ce320caac34400208b30808c8f14f76c\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "604c25dd5fad4566c335.bin",
+    "key" : "https:\/\/huggingface.co\/incoai\/GLM-5.3-Flash-DFlash2\/resolve\/bf582e4eacc1810f76656d1811693ff6c6737d2a\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "ea69b8058338bd3cc026.bin",
+    "key" : "https:\/\/huggingface.co\/incoai\/Muse-Glimmer-30B-DFlash2\/resolve\/8336acb8dc9b8bf9c25f12d7785ee6df26703119\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "a56aaafe3a6aacf4dddf.bin",
+    "key" : "https:\/\/huggingface.co\/incoai\/Qwen3.6-35B-A3B-DFlash2\/resolve\/51ef7b6923ad6c14cb1bb41c37a9041446496ab6\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "66c00f4ff3d76e530909.bin",
+    "key" : "https:\/\/huggingface.co\/incoai\/Qwen3.8-27B-DFlash2\/resolve\/015e795645c74b1a0eeef3b570031fb62e769bc5\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "34cb2548c37c740f6ef5.bin",
+    "key" : "https:\/\/huggingface.co\/jfan\/Qwen3.8-27B-heretic-dflash2\/resolve\/c4d59299601c3d2a180755c1044067500571008d\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "1363ba233d8e359c8ef8.bin",
+    "key" : "https:\/\/huggingface.co\/josch15366\/Qwen3.8-27B-DFlash2-FP8\/resolve\/dc6ca7842ecb88af0e6bf7c09e7be37c9e510a7e\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "7d93e7dd7956464fabd5.bin",
+    "key" : "https:\/\/huggingface.co\/jzinno\/Ornith-1.5-35B-A3B-DFlash2\/resolve\/9b4852c05fd00b672b7434b1bb105bc03c8682b0\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "10d1ff445bb379f69645.bin",
+    "key" : "https:\/\/huggingface.co\/lightseekorg\/kimi-k3-dflash2\/resolve\/e77935fb4804e17eb55085bffd045eae1d779769\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "cd1c81b6ac145b7f8c83.bin",
+    "key" : "https:\/\/huggingface.co\/lmstudio-community\/Qwen3.8-27B-MLX-4bit\/resolve\/6067b15cf581666a4aecf6af3afaba4bb5efc20c\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "207e54fa53a300c4ad1b.bin",
+    "key" : "https:\/\/huggingface.co\/lmstudio-community\/Qwen3.8-27B-MLX-4bit\/resolve\/6067b15cf581666a4aecf6af3afaba4bb5efc20c\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "45aa9a519a2d984373e3.bin",
+    "key" : "https:\/\/huggingface.co\/lmstudio-community\/Qwen3.8-27B-MLX-6bit\/resolve\/05f38c1f39e2f39619653616fe8e96a5d676358e\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "e7a48ae9aa56fc1eae0c.bin",
+    "key" : "https:\/\/huggingface.co\/lmstudio-community\/Qwen3.8-27B-MLX-6bit\/resolve\/05f38c1f39e2f39619653616fe8e96a5d676358e\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "de216d40ad83901f1026.bin",
+    "key" : "https:\/\/huggingface.co\/local-inference-lab\/GLM-5.3-Flash-DFlash2\/resolve\/713226ab03bc38afdf955c7450436c2f7176f6f8\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "b93b69e23ed1e3226462.bin",
+    "key" : "https:\/\/huggingface.co\/lued\/Qwen3.8-27B-DFlash2-W8\/resolve\/f454fa8e6a84387bf006f849584f72541cc29118\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "3c37515399ab55e29cc3.bin",
+    "key" : "https:\/\/huggingface.co\/lukaskremla\/Qwen3.8-27B-3bit-MLX-TextOnly\/resolve\/dc755c911a7716a1db15cd8df8bab46a9dcfffdc\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "1feee3af9ecc9233ae7d.bin",
+    "key" : "https:\/\/huggingface.co\/lukaskremla\/Qwen3.8-27B-3bit-MLX-TextOnly\/resolve\/dc755c911a7716a1db15cd8df8bab46a9dcfffdc\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "55a28dbcb78e440a5405.bin",
+    "key" : "https:\/\/huggingface.co\/magiccodingman\/Qwen3.8-27B-heretic-ara-DFlash2-fp8\/resolve\/b6bbe8a9ceeef4cd140840692befd9546de9d4cb\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "af9e4c6c912c157d53d1.bin",
+    "key" : "https:\/\/huggingface.co\/mgoin\/Qwen3-4B-speculator.dflash2\/resolve\/e3e7a18e4f541fa3841c2fb0666a7759079ab6fd\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "4262ad7abc8c41c2db1d.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.6-35B-A3B-DFlash2-4bit\/resolve\/24956b6abc2bcd999509057434b5e22c3abfe450\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "bdd3e5e38e27d4f2baa2.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-4bit\/resolve\/10c35caafbb80f7dc6a7a432cdd11af10a6d4818\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "7fb2fdfeefba22d09899.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-4bit\/resolve\/10c35caafbb80f7dc6a7a432cdd11af10a6d4818\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "a5d1aaa434dcda524c2f.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-8bit\/resolve\/815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "bba8f632a98f5c53452e.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-8bit\/resolve\/815b83c0df8ffd1d1b5244cf75fd6ef14fca9ef9\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "edef53897198824d3719.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-MTP-4bit\/resolve\/b643c01b6d3b094e325edb6ebd832e16c486c575\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "0d70cd30e6bdb63ca3b2.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-MTP-8bit\/resolve\/e88e48d055732ad75d9435f3059139d5279f2064\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "05492efba23c30844aef.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-MTP-mxfp4\/resolve\/0f700ebda697fceb64c2b20847c0886100b0b410\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "5ae39367b02ebd958df8.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-MTP-mxfp8\/resolve\/a50634460045613f166b09b13519466e801c6568\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "9c42c087a986b932c3af.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-MTP-nvfp4\/resolve\/b9b764dada894b8c416f89cbc8cf99bc7e20b831\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "53e85335865461545e35.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-OptiQ-4bit\/resolve\/a97e1450285cb818b0572a3515f0fc59b8cd7228\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "578f45a981abbd04af51.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-OptiQ-4bit\/resolve\/a97e1450285cb818b0572a3515f0fc59b8cd7228\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "c21a52da1eeb3d49c984.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-Uncensored-OptiQ-4bit\/resolve\/c8e325be5c198bf210d55285bbf05a2e651df38a\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "4af17c2ec16883017275.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-Uncensored-OptiQ-4bit\/resolve\/c8e325be5c198bf210d55285bbf05a2e651df38a\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "f490a367550d627f34cc.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-mxfp4\/resolve\/97ab0819817ab1c61d7d39f9169fc71999915641\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "1dcc846557d60d1b9972.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-mxfp4\/resolve\/97ab0819817ab1c61d7d39f9169fc71999915641\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "f4565d37d71660463309.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-mxfp8\/resolve\/d48d163bcdf24acaf656474854ab88ea17d65bd1\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "1a00282686d790ddb804.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-mxfp8\/resolve\/d48d163bcdf24acaf656474854ab88ea17d65bd1\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "b64537f1bc8517348745.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-nvfp4\/resolve\/5ff8ef173ad0d7c3aae92f0be43031a6ab8067c6\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "209a0792349fb83cab57.bin",
+    "key" : "https:\/\/huggingface.co\/mlx-community\/Qwen3.8-27B-nvfp4\/resolve\/5ff8ef173ad0d7c3aae92f0be43031a6ab8067c6\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "6c95d43043923cf32cb9.bin",
+    "key" : "https:\/\/huggingface.co\/nightmedia\/Qwen3.8-27B-Brainwaves-2M-qx64-hi-mlx\/resolve\/380319981bc29a41fc31cba4e1b1340c9ab2b029\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "da55c6c916a8c6666fee.bin",
+    "key" : "https:\/\/huggingface.co\/nightmedia\/Qwen3.8-27B-Brainwaves-2M-qx64-hi-mlx\/resolve\/380319981bc29a41fc31cba4e1b1340c9ab2b029\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "c29520e0e80f81748004.bin",
+    "key" : "https:\/\/huggingface.co\/nightmedia\/Qwen3.8-27B-Fable-Fusion-F711-GAIN-mxfp4-mlx\/resolve\/46bdf0285e9445a4584e000aceeed65f328f40e7\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "ad7816e7ae3d68e97c39.bin",
+    "key" : "https:\/\/huggingface.co\/nightmedia\/Qwen3.8-27B-Fable-Fusion-F711-GAIN-mxfp4-mlx\/resolve\/46bdf0285e9445a4584e000aceeed65f328f40e7\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "b001300aaaf97e636dc9.bin",
+    "key" : "https:\/\/huggingface.co\/nightmedia\/Qwen3.8-27B-Holodeck-mxfp4-mlx\/resolve\/11aae3cb0218a3d953c779c40b671bb0811d19a2\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "e1a1bb08ea793eb66ae1.bin",
+    "key" : "https:\/\/huggingface.co\/nightmedia\/Qwen3.8-27B-Holodeck-mxfp4-mlx\/resolve\/11aae3cb0218a3d953c779c40b671bb0811d19a2\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "d177c69f0e8afd18c768.bin",
+    "key" : "https:\/\/huggingface.co\/orcarouter\/Qwen3.8-27B-Uncensored-MLX\/resolve\/bc60491a36464626020ce82d5556b1b8f8cd90c7\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "a263ee4e26ab5c724d69.bin",
+    "key" : "https:\/\/huggingface.co\/orcarouter\/Qwen3.8-27B-Uncensored-MLX\/resolve\/bc60491a36464626020ce82d5556b1b8f8cd90c7\/model.safetensors.index.json",
+    "status" : 200
+  },
+  {
+    "body" : "9c1a452228d542db4ab4.bin",
+    "key" : "https:\/\/huggingface.co\/r0b0tlab\/GLM-5.3-Flash-DFlash2-EXL3-3.00bpw\/resolve\/1be456bebedd45d82356ce90d289bce2be147193\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "c6130b935ee1e7993d14.bin",
+    "key" : "https:\/\/huggingface.co\/rasyosef\/Qwen3.5-2B-DFlash2\/resolve\/96289f15e344f976c720b640f5823b5655eafa83\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "20bf03d599b8167cfdce.bin",
+    "key" : "https:\/\/huggingface.co\/shanjiaz\/dflash2_qwen3_4b\/resolve\/7469b1b0da32b6506d8084bbce95cca950c37dc6\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "1472c9b697a573f0b095.bin",
+    "key" : "https:\/\/huggingface.co\/syvai\/Qwen3.8-27B-DFlash2-W4A16\/resolve\/4d30ec736ffc6b8688dc2ae2b502d9b48bdec279\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "f8ce468b101a51750b60.bin",
+    "key" : "https:\/\/huggingface.co\/taniii1234\/Qwen3.8-27B-Uncensored-DFlash2\/resolve\/bd03640a3e49a6eff782e82efafc1ab78e01fedf\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "5dc9ec3b19f5c59c8550.bin",
+    "key" : "https:\/\/huggingface.co\/tcclaviger\/Qwen3.8-27B-DFlash2-FP8\/resolve\/f02593d0ea2e3b7eedbb831fb26f465b1e6238bb\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "ca70d3e92c7c73dd4f2f.bin",
+    "key" : "https:\/\/huggingface.co\/tiyuvta\/Qwen3.8-27B-DFlash2-memra\/resolve\/911890463b7b6ecf66dfd41f944ea48ad54fff5b\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "d020658c80e3b1992a0f.bin",
+    "key" : "https:\/\/huggingface.co\/wyattearp\/Qwen3.8-27B-DFlash2\/resolve\/8cae54a849ca1e9c2e7253d2649eabafdd677923\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "56915cea78b185ad8343.bin",
+    "key" : "https:\/\/huggingface.co\/z-lab\/Muse-Glimmer-30B-DFlash2\/resolve\/b54ffdd11fa9cfe2af370012e5763d492c904128\/config.json",
+    "status" : 200
+  },
+  {
+    "body" : "7b95b699b31a086eadaa.bin",
+    "key" : "https:\/\/huggingface.co\/z-lab\/Qwen3.8-27B-DFlash2\/resolve\/50307d4c4cde6860d4eee73e2547cd786fe8e8a4\/config.json",
+    "status" : 200
+  }
+]

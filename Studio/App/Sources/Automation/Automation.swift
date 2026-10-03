@@ -193,6 +193,17 @@ enum Automation {
             write()
         }
         app.engine.refreshTimings()
+        if let held = app.engine.deviceBytes {
+            report.append("     engine device memory: \(ByteCountFormatter.string(fromByteCount: Int64(held.live), countStyle: .memory)) live, \(ByteCountFormatter.string(fromByteCount: Int64(held.peak), countStyle: .memory)) peak")
+        }
+        if let model = app.gpu.selectedModel {
+            let settings = app.models.loadSettings(for: model.id)
+            let draft = app.models.draft(of: model, settings: settings).map { app.models.directory(of: $0) }
+            let estimator = EngineMemoryEstimator.preferred
+            if let e = try? estimator.estimate(modelDirectory: app.models.directory(of: model), draftDirectory: draft, settings: settings) {
+                report.append("     estimate: \(ByteCountFormatter.string(fromByteCount: Int64(e.totalBytes), countStyle: .memory)) (weights \(ByteCountFormatter.string(fromByteCount: Int64(e.weightsBytes), countStyle: .memory)), K/V \(ByteCountFormatter.string(fromByteCount: Int64(e.kvCacheBytes), countStyle: .memory)), draft \(ByteCountFormatter.string(fromByteCount: Int64(e.draftBytes), countStyle: .memory))) from \(e.source)")
+            }
+        }
     }
 
     /// The sample workspace: a few files, one of which holds the code word.

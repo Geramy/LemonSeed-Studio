@@ -1,5 +1,8 @@
 import Foundation
 import LSE
+#if canImport(LSEEstimate)
+import LSEEstimate
+#endif
 
 /// The Lemon Seed Engine running inside this process.
 ///
@@ -83,9 +86,22 @@ public final class LSEEngine: @unchecked Sendable {
     }
 
     public static func openBlocking(_ c: Configuration) throws -> LSEEngine {
+        try withCConfig(c) { cfg in
+            var err: UnsafeMutablePointer<CChar>?
+            guard let engine = lse_open(&cfg, &err) else {
+                let message = err.map { String(cString: $0) } ?? "the engine did not open"
+                lse_free(err)
+                throw OpenError(invalidConfiguration: lse_last_error() == LSE_ERR_INVALID_ARGUMENT,
+                                message: message)
+            }
+            return LSEEngine(handle: engine)
+        }
+    }
+
+    /// Runs `body` with `c` as an lse_config whose strings live for the call.
+    static func withCConfig<T>(_ c: Configuration, _ body: (inout lse_config) throws -> T) rethrows -> T {
         var cfg = lse_config()
         lse_config_init(&cfg)
-        // C strings must outlive lse_open; keep them in one array.
         var strings: [UnsafeMutablePointer<CChar>] = []
         defer { strings.forEach { free($0) } }
         func cString(_ s: String?) -> UnsafePointer<CChar>? {
@@ -121,15 +137,74 @@ public final class LSEEngine: @unchecked Sendable {
         cfg.host = cString(c.host)
         cfg.port = c.port
         cfg.api_key = cString(c.apiKey)
+        return try body(&cfg)
+    }
 
-        var err: UnsafeMutablePointer<CChar>?
-        guard let engine = lse_open(&cfg, &err) else {
-            let message = err.map { String(cString: $0) } ?? "the engine did not open"
-            lse_free(err)
-            throw OpenError(invalidConfiguration: lse_last_error() == LSE_ERR_INVALID_ARGUMENT,
-                            message: message)
+    // MARK: Model info and memory estimates
+
+    /// An lse_model_info or lse_estimate failure.
+    public struct InspectError: Error, CustomStringConvertible, Sendable {
+        public let message: String
+        public init(message: String) { self.message = message }
+        public var description: String { message }
+    }
+
+    /// Whether the linked engine has lse_model_info and lse_estimate (LSE
+    /// 0.5). Without them, callers use their own estimates.
+    public static var supportsEstimates: Bool {
+        #if canImport(LSEEstimate)
+        true
+        #else
+        false
+        #endif
+    }
+
+    #if canImport(LSEEstimate)
+    private static func decodeJSON(_ result: lse_result, _ json: UnsafeMutablePointer<CChar>?,
+                                   _ err: UnsafeMutablePointer<CChar>?, what: String) throws -> [String: Any] {
+        defer { lse_free(json); lse_free(err) }
+        guard result == LSE_OK, let json else {
+            throw InspectError(message: err.map { String(cString: $0) } ?? "\(what) failed (\(result.rawValue))")
         }
-        return LSEEngine(handle: engine)
+        let data = Data(bytes: json, count: strlen(json))
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw InspectError(message: "\(what) returned no JSON object")
+        }
+        return object
+    }
+    #endif
+
+    /// lse_model_info: what LSE's loader makes of a model directory (kind,
+    /// layers, max context, KV bytes per token per format, weights' VRAM,
+    /// MTP and DFlash2 facts). Reads config.json and safetensors headers only.
+    public static func modelInfo(_ model: String) throws -> [String: Any] {
+        #if canImport(LSEEstimate)
+        var json: UnsafeMutablePointer<CChar>?
+        var err: UnsafeMutablePointer<CChar>?
+        let result = lse_model_info(model, &json, &err)
+        return try decodeJSON(result, json, err, what: "lse_model_info")
+        #else
+        throw InspectError(message: "this LSE build has no lse_model_info")
+        #endif
+    }
+
+    /// lse_estimate: what `lse_open` with `configuration` would allocate on
+    /// the device, by component. `options` takes context_tokens, sequences,
+    /// device_arch, kv_storage and device_memory_bytes (which adds "fits"
+    /// and "max_kv_len"). Opens no device.
+    public static func estimate(_ configuration: Configuration, options: [String: Any] = [:]) throws -> [String: Any] {
+        #if canImport(LSEEstimate)
+        let optionsJSON = options.isEmpty ? nil
+            : String(data: try JSONSerialization.data(withJSONObject: options), encoding: .utf8)
+        return try withCConfig(configuration) { cfg in
+            var json: UnsafeMutablePointer<CChar>?
+            var err: UnsafeMutablePointer<CChar>?
+            let result = lse_estimate(&cfg, optionsJSON, &json, &err)
+            return try decodeJSON(result, json, err, what: "lse_estimate")
+        }
+        #else
+        throw InspectError(message: "this LSE build has no lse_estimate")
+        #endif
     }
 
     /// Cancels every request, stops HTTP and releases the model and device.

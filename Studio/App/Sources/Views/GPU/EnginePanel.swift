@@ -142,6 +142,10 @@ struct EnginePanel: View {
             if let seconds = engine.loadSeconds {
                 summaryRow("Load time", String(format: "%.1f s", seconds))
             }
+            if let held = engine.deviceBytes, engine.phase == .ready {
+                summaryRow("Engine VRAM", ByteCountFormatter.string(fromByteCount: Int64(held.live), countStyle: .memory)
+                           + " (peak " + ByteCountFormatter.string(fromByteCount: Int64(held.peak), countStyle: .memory) + ")")
+            }
         }
     }
 

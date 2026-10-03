@@ -3,18 +3,26 @@
 # Puts LSE.xcframework (the engine for iOS arm64) next to Package.swift.
 #
 #   LSE_DIR=<LemonSeed-Engine checkout> ./update-xcframework.sh
+#   LSE_XCFRAMEWORK=<path to an LSE.xcframework> ./update-xcframework.sh
 #
-# Copies $LSE_DIR/build/ios/LSE.xcframework. With BUILD=1 it first runs that
+# Copies $LSE_DIR/build/ios/LSE.xcframework (or $LSE_XCFRAMEWORK, e.g. another
+# checkout's Engine/LSEKit/LSE.xcframework). With BUILD=1 it first runs that
 # repository's scripts/ios/build-ios.sh, which also needs MAC_LINUXGPU_DIR
 # (the mac_linuxgpu checkout whose HSA runtime it links).
 set -euo pipefail
 cd "$(dirname "$0")"
-: "${LSE_DIR:?set LSE_DIR to the LemonSeed-Engine checkout}"
-if [[ "${BUILD:-0}" == 1 ]]; then
-  bash "$LSE_DIR/scripts/ios/build-ios.sh"
+if [[ -n "${LSE_XCFRAMEWORK:-}" ]]; then
+  src="$(cd "$LSE_XCFRAMEWORK" && pwd)"
+  LSE_DIR="$src"
+else
+  : "${LSE_DIR:?set LSE_DIR to the LemonSeed-Engine checkout (or LSE_XCFRAMEWORK)}"
+  if [[ "${BUILD:-0}" == 1 ]]; then
+    bash "$LSE_DIR/scripts/ios/build-ios.sh"
+  fi
+  src="$LSE_DIR/build/ios/LSE.xcframework"
 fi
-src="$LSE_DIR/build/ios/LSE.xcframework"
 [[ -d "$src" ]] || { echo "no $src; run with BUILD=1 or build it in $LSE_DIR" >&2; exit 1; }
+[[ "$src" != "$(pwd)/LSE.xcframework" ]] || { echo "$src is the destination" >&2; exit 1; }
 rm -rf LSE.xcframework
 cp -R "$src" LSE.xcframework
 # Xcode copies a static XCFramework's Headers/ into the products' include/.
@@ -25,5 +33,26 @@ for headers in LSE.xcframework/*/Headers; do
   [[ -f "$headers/module.modulemap" ]] || continue
   mkdir -p "$headers/LSE"
   find "$headers" -maxdepth 1 -type f -exec mv {} "$headers/LSE/" \;
+done
+# LSE 0.5 added lse_model_info and lse_estimate. When the library has them,
+# a second module, LSEEstimate, marks it, so LSEKit can test for it with
+# canImport(LSEEstimate) and older frameworks still build (callers then fall
+# back to their own estimates).
+for slice in LSE.xcframework/*/; do
+  [[ -d "$slice/Headers/LSE" ]] || continue
+  if nm -gU "$slice"/*.a 2>/dev/null | grep -q ' _lse_estimate$'; then
+    mkdir -p "$slice/Headers/LSEEstimate"
+    cat > "$slice/Headers/LSEEstimate/module.modulemap" <<'MAP'
+module LSEEstimate {
+  header "lse_estimate.h"
+  export *
+}
+MAP
+    cat > "$slice/Headers/LSEEstimate/lse_estimate.h" <<'HDR'
+/* Present when the linked libLSE has lse_model_info and lse_estimate
+ * (written by Engine/LSEKit/update-xcframework.sh). */
+#include "../LSE/lse.h"
+HDR
+  fi
 done
 echo "LSEKit: $(pwd)/LSE.xcframework from $(git -C "$LSE_DIR" describe --always --dirty 2>/dev/null || echo "$LSE_DIR")"

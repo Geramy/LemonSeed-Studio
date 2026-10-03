@@ -76,6 +76,8 @@ final class EngineService {
     private(set) var launch: EngineLaunch?
     private(set) var loadSeconds: Double?
     private(set) var lastTimings: EngineTimings?
+    /// Device memory the engine holds (lse_status "memory": live and peak).
+    private(set) var deviceBytes: (live: UInt64, peak: UInt64)?
     private(set) var log: [String] = []
     private(set) var startedAt: Date?
 
@@ -289,7 +291,12 @@ final class EngineService {
     }
 
     func refreshTimings() {
-        let engine = status()["engine"] as? [String: Any]
+        let status = status()
+        if let memory = status["memory"] as? [String: Any],
+           let live = (memory["device_bytes"] as? NSNumber)?.uint64Value {
+            deviceBytes = (live, (memory["device_peak_bytes"] as? NSNumber)?.uint64Value ?? live)
+        }
+        let engine = status["engine"] as? [String: Any]
         if let t = EngineTimings(engine?["last_timings"] as? [String: Any]) { lastTimings = t }
     }
 

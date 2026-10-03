@@ -117,6 +117,11 @@ public struct ModelLoadSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .accessibilityIdentifier("loadSettings.approximate")
+                    } else {
+                        Label("Estimate: \(estimate.source)", systemImage: "checkmark.seal")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityIdentifier("loadSettings.estimateSource")
                     }
                 } else if let estimateError {
                     Label(estimateError, systemImage: "exclamationmark.triangle")

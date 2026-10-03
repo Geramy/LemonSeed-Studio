@@ -156,6 +156,16 @@ extension GitRepository {
         try withCommit(id) { Self.info(of: $0) }
     }
 
+    /// The `gpgsig` signature of a commit and the payload it signs, or
+    /// throws `.notFound` for an unsigned commit.
+    public func commitSignature(_ id: ObjectID) throws -> (signature: String, payload: Data) {
+        var sig = git_buf()
+        var payload = git_buf()
+        var oid = id.oid
+        try check(git_commit_extract_signature(&sig, &payload, handle, &oid, nil), "git_commit_extract_signature")
+        return (sig.takeString(), payload.takeData())
+    }
+
     /// The message Git prepared for an in-progress merge, revert or cherry-pick.
     public func preparedMessage() -> String? {
         var buf = git_buf()

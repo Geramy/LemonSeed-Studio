@@ -111,10 +111,24 @@ final class WorkspaceController: WorkspaceContext {
 
     var sidebarItem: SidebarItem = .explorer
     var isSidebarVisible = true
-    var sidebarWidth: CGFloat = 290
+    /// New windows start at the width last chosen in any window.
+    var sidebarWidth: CGFloat = WorkspaceController.storedSize("sidebarWidth", default: WorkspaceController.defaultSidebarWidth) {
+        didSet { UserDefaults.standard.set(Double(sidebarWidth), forKey: "sidebarWidth") }
+    }
     var isPanelVisible = false
     var panelTab: PanelTab = .terminal
-    var panelHeight: CGFloat = 280
+    var panelHeight: CGFloat = WorkspaceController.storedSize("panelHeight", default: WorkspaceController.defaultPanelHeight) {
+        didSet { UserDefaults.standard.set(Double(panelHeight), forKey: "panelHeight") }
+    }
+
+    static let defaultSidebarWidth: CGFloat = 290
+    static let minSidebarWidth: CGFloat = 200
+    static let defaultPanelHeight: CGFloat = 280
+    static let minPanelHeight: CGFloat = 120
+
+    nonisolated static func storedSize(_ key: String, default value: CGFloat) -> CGFloat {
+        (UserDefaults.standard.object(forKey: key) as? Double).map { CGFloat($0) } ?? value
+    }
     var isPanelMaximized = false
 
     var paletteMode: PaletteMode?

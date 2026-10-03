@@ -162,15 +162,30 @@ final class LSEModel: ObservableObject {
         var seconds = 0.0
     }
 
+    static let defaultPrompt = "Write a short paragraph about lemon trees."
+
+    /// HumanEval-style prompts for repeated `--auto-lse` runs: code, which is
+    /// what the DFlash2 draft is measured on.
+    static let codePrompts = [
+        "Complete this Python function and return only the code:\n\ndef has_close_elements(numbers: list[float], threshold: float) -> bool:\n    \"\"\"Check if in given list of numbers, are any two numbers closer to each other than given threshold.\"\"\"\n",
+        "Complete this Python function and return only the code:\n\ndef separate_paren_groups(paren_string: str) -> list[str]:\n    \"\"\"Input is a string containing multiple groups of nested parentheses. Separate those groups into separate strings and return the list of those. Ignore any spaces.\"\"\"\n",
+        "Complete this Python function and return only the code:\n\ndef below_zero(operations: list[int]) -> bool:\n    \"\"\"You're given a list of deposit and withdrawal operations on a bank account that starts with zero balance. Detect if at any point the balance falls below zero.\"\"\"\n",
+        "Complete this Python function and return only the code:\n\ndef mean_absolute_deviation(numbers: list[float]) -> float:\n    \"\"\"For a given list of input numbers, calculate Mean Absolute Deviation around the mean of this dataset.\"\"\"\n",
+        "Complete this Python function and return only the code:\n\ndef intersperse(numbers: list[int], delimeter: int) -> list[int]:\n    \"\"\"Insert a number 'delimeter' between every two consecutive elements of input list `numbers`.\"\"\"\n",
+        "Complete this Python function and return only the code:\n\ndef parse_nested_parens(paren_string: str) -> list[int]:\n    \"\"\"Input is a string of multiple groups of nested parentheses separated by spaces. For each group, output the deepest level of nesting.\"\"\"\n",
+        "Complete this Python function and return only the code:\n\ndef sum_product(numbers: list[int]) -> tuple[int, int]:\n    \"\"\"For a given list of integers, return a tuple consisting of a sum and a product of all the integers in a list.\"\"\"\n",
+        "Complete this Python function and return only the code:\n\ndef rolling_max(numbers: list[int]) -> list[int]:\n    \"\"\"From a given list of integers, generate a list of rolling maximum element found until given moment in the sequence.\"\"\"\n",
+    ]
+
     /// One chat completion through lse_request (no socket).
-    func testCompletion() async -> Result<Completion, Error> {
+    func testCompletion(prompt: String = LSEModel.defaultPrompt, maxTokens: Int = 256) async -> Result<Completion, Error> {
         guard let engine else { return .failure(LSEEngine.OpenError(invalidConfiguration: false, message: "not running")) }
         testing = true
         defer { testing = false }
         let request: [String: Any] = [
             "model": "qwen-q4",
-            "messages": [["role": "user", "content": "Write a short paragraph about lemon trees."]],
-            "max_tokens": 256,
+            "messages": [["role": "user", "content": prompt]],
+            "max_tokens": maxTokens,
             "temperature": 0.6,
         ]
         let started = Date()
@@ -232,13 +247,29 @@ final class LSEModel: ObservableObject {
             Self.appendReport(report)
             return
         }
-        switch await testCompletion() {
-        case .success(let c):
-            report.append("OK   completion: " + Self.summary(c))
-            report.append("     text: " + c.text.prefix(200).replacingOccurrences(of: "\n", with: " "))
-        case .failure(let error):
-            report.append("FAIL completion: \(error)")
-            report.append(contentsOf: log.suffix(40).map { "  log: \($0)" })
+        // --lse-runs N completions (default 1); with more than one, each
+        // run takes a different code prompt. --lse-max-tokens caps each.
+        let runs = max(1, Self.argument("--lse-runs").flatMap { Int($0) } ?? 1)
+        let maxTokens = Self.argument("--lse-max-tokens").flatMap { Int($0) } ?? 256
+        var jit = jitCounters()
+        for run in 1...runs {
+            let prompt = runs == 1 && Self.argument("--lse-max-tokens") == nil ? Self.defaultPrompt :
+                Self.codePrompts[(run - 1) % Self.codePrompts.count]
+            switch await testCompletion(prompt: prompt, maxTokens: maxTokens) {
+            case .success(let c):
+                let now = jitCounters()
+                let f = Self.footprint()
+                report.append("OK   run \(run)/\(runs): " + Self.summary(c))
+                report.append(String(format: "     jit compiles %d, disk hits %d; draft %.0f ms / verify %.0f ms over %d steps; footprint %@, peak %@",
+                                     now.compiles - jit.compiles, now.diskHits - jit.diskHits,
+                                     now.draftMs, now.verifyMs, now.steps,
+                                     Self.bytes(f.current), Self.bytes(f.peak)))
+                report.append("     text: " + c.text.prefix(200).replacingOccurrences(of: "\n", with: " "))
+                jit = now
+            case .failure(let error):
+                report.append("FAIL run \(run)/\(runs): \(error)")
+                report.append(contentsOf: log.suffix(40).map { "  log: \($0)" })
+            }
         }
         let f = Self.footprint()
         report.append("memory: footprint \(Self.bytes(f.current)), peak \(Self.bytes(f.peak)), available \(Self.bytes(UInt64(os_proc_available_memory())))")
@@ -249,6 +280,22 @@ final class LSEModel: ObservableObject {
             }
         }
         Self.appendReport(report)
+        // --lse-exit: end the process once the report is written, so a remote
+        // launch with --console returns instead of waiting for a timeout.
+        if ProcessInfo.processInfo.arguments.contains("--lse-exit") {
+            engine?.close()
+            exit(0)
+        }
+    }
+
+    /// Cumulative JIT counters and the last request's speculation timings.
+    private func jitCounters() -> (compiles: Int, diskHits: Int, draftMs: Double, verifyMs: Double, steps: Int) {
+        guard let engine,
+              let e = engine.status()["engine"] as? [String: Any],
+              let t = e["last_timings"] as? [String: Any] else { return (0, 0, 0, 0, 0) }
+        return (t["jit_compiles_total"] as? Int ?? 0, t["jit_disk_hits_total"] as? Int ?? 0,
+                t["spec_draft_ms"] as? Double ?? 0, t["spec_verify_ms"] as? Double ?? 0,
+                t["spec_steps"] as? Int ?? 0)
     }
 
     static func appendReport(_ lines: [String]) {

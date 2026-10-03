@@ -46,6 +46,25 @@ final class ProbeModel: ObservableObject {
         probeLog.log("app start; embedded dext: \(self.state.embeddedDext, privacy: .public)")
         refresh()
         watchService()
+        if Self.autoProbe {
+            // Remote runs: probe once the service lookup has settled, then
+            // publish the report on stdout and in Documents for collection.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                guard let self else { return }
+                if self.state.serviceFound { self.probe() } else { self.publishReport() }
+            }
+        }
+    }
+
+    static let autoProbe = ProcessInfo.processInfo.arguments.contains("--auto-probe")
+
+    /// Writes the report to Documents/probe-report.txt and stdout.
+    func publishReport() {
+        let text = report + "\n"
+        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            try? text.write(to: docs.appendingPathComponent("probe-report.txt"), atomically: true, encoding: .utf8)
+        }
+        FileHandle.standardOutput.write(Data(text.utf8))
     }
 
     // MARK: Driver state
@@ -128,6 +147,7 @@ final class ProbeModel: ObservableObject {
                 self.lastProbe = Date()
                 probeLog.log("probe end: \(collected.filter { $0.outcome == .failed }.count) failure(s)")
                 self.refresh()
+                if Self.autoProbe { self.publishReport() }
             }
         }
     }

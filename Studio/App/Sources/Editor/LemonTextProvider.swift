@@ -109,11 +109,7 @@ private struct LemonTextSession: View {
     }
 
     static func postScriptName(_ family: CodeFontFamily) -> String? {
-        switch family {
-        case .sfMono: nil
-        case .jetBrainsMono: "JetBrainsMono-Regular"
-        case .menlo: "Menlo-Regular"
-        }
+        LemonTextSessionNames.postScriptName(family)
     }
 
     private func caretMoved(_ model: LemonTextEditorModel) {
@@ -181,6 +177,17 @@ private struct LemonTextSession: View {
             return LemonText.Diagnostic(id: diagnostic.id.uuidString, range: NSRange(location: lower, length: min(upper, text.length) - lower),
                                         severity: severity, message: diagnostic.message, source: diagnostic.source,
                                         code: diagnostic.code)
+        }
+    }
+}
+
+/// Font names LemonText loads by PostScript name (nil: SF Mono).
+enum LemonTextSessionNames {
+    static func postScriptName(_ family: CodeFontFamily) -> String? {
+        switch family {
+        case .sfMono: nil
+        case .jetBrainsMono: "JetBrainsMono-Regular"
+        case .menlo: "Menlo-Regular"
         }
     }
 }

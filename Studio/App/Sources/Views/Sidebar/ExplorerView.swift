@@ -67,6 +67,8 @@ struct ExplorerRow: View {
     @State private var hovering = false
     @State private var targeted = false
     @State private var draftName = ""
+    @State private var nameSelection: TextSelection?
+    @State private var pendingNameSelection: Range<String.Index>?
     @FocusState private var renameFocused: Bool
 
     private var tree: FileTree { controller.workspace.tree }
@@ -89,7 +91,7 @@ struct ExplorerRow: View {
             .frame(width: 12)
             icon
             if isRenaming {
-                TextField("Name", text: $draftName)
+                TextField("Name", text: $draftName, selection: $nameSelection)
                     .textFieldStyle(.plain)
                     .font(.studio(type.body))
                     .foregroundStyle(theme.palette.textPrimary.color)
@@ -106,9 +108,18 @@ struct ExplorerRow: View {
                     .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(theme.palette.accent.color, lineWidth: 1))
                     .onAppear {
                         draftName = node.name
+                        // Select the name without its extension, as Finder does.
+                        let base = node.isDirectory || !node.name.dropFirst().contains(".")
+                            ? draftName[...] : draftName[..<(draftName.lastIndex(of: ".") ?? draftName.endIndex)]
+                        pendingNameSelection = draftName.startIndex..<base.endIndex
                         renameFocused = true
                     }
                     .onChange(of: renameFocused) { _, focused in
+                        if focused, let range = pendingNameSelection {
+                            // Focusing puts the caret at the end; select the base name after.
+                            pendingNameSelection = nil
+                            Task { @MainActor in nameSelection = TextSelection(range: range) }
+                        }
                         if !focused, isRenaming { controller.rename(node.url, to: draftName) }
                     }
                     .accessibilityIdentifier("explorer.rename")

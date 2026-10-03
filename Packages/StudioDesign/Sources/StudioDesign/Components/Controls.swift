@@ -120,6 +120,8 @@ public struct StudioFieldStyle: TextFieldStyle {
                 Image(systemName: symbol)
                     .font(.system(size: type.caption, weight: .medium))
                     .foregroundStyle(theme.palette.textTertiary.color)
+                    // Decorative: the field's label and identifier belong to the field.
+                    .accessibilityHidden(true)
             }
             configuration
                 .font(.studio(type.body))

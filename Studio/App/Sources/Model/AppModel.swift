@@ -1,8 +1,11 @@
 import SwiftUI
+import UIKit
 import Observation
 import GameController
 import StudioCore
 import StudioDesign
+import StudioModels
+import StudioAgent
 
 /// App-wide state shared by every window: settings, the workspace library,
 /// the provider registry, the command registry and input density.
@@ -17,6 +20,21 @@ final class AppModel {
     let commands = CommandRegistry()
     let input = InputMonitor()
     let driver = DriverMonitor()
+    /// Documents/Models and the Hugging Face catalog (StudioModels).
+    let models = ModelLibrary.standard()
+    /// LSE in this process, on the GPU the driver serves.
+    let engine = EngineService()
+    let gpu: GPUCoordinator
+    /// Keeps the iPad awake while the GPU is in use.
+    let keepAwake = KeepAwake()
+    /// The GPU sidebar's page ("Monitor", "Engine", "Diagnostics").
+    var gpuPage = UserDefaults.standard.string(forKey: "StudioGPUPage") ?? "Engine"
+    /// The model whose load settings sheet is open.
+    var loadSettingsModelID: String?
+    /// The full Models screen (catalog, downloads, Hugging Face search).
+    var isModelsManagerPresented = false
+    /// The full GPU monitor (StudioTelemetry's screen) as a page sheet.
+    var isGPUMonitorPresented = false
     let keyboard = KeyboardMonitor.shared
     let textInput = TextInputCoordinator.shared
     /// The most recently active window's router: the menu bar's fallback
@@ -24,13 +42,35 @@ final class AppModel {
     var activeRouter: SceneRouter?
     /// The launch-argument project opens in the first window only.
     @ObservationIgnored var claimedLaunchProject = false
+    @ObservationIgnored private var discardedRestoredWindows = false
+
+    /// With -StudioResetState, starts from a single window: windows restored
+    /// from earlier runs (Stage Manager keeps them) are discarded, so
+    /// automation always drives the window it launched.
+    func discardRestoredWindowsIfResetting() {
+        guard LaunchOptions.resetState, !discardedRestoredWindows else { return }
+        discardedRestoredWindows = true
+        let application = UIApplication.shared
+        let keep = application.connectedScenes.first { $0.activationState == .foregroundActive }
+            ?? application.connectedScenes.first
+        for session in application.openSessions where session != keep?.session {
+            application.requestSceneSessionDestruction(session, options: nil)
+        }
+    }
 
     private init() {
-        StudioPlugins.register(into: services, settings: settings, driver: driver)
+        gpu = GPUCoordinator(driver: driver, engine: engine, library: models)
+        EngineService.shared = engine
+        StudioPlugins.register(into: services, settings: settings, driver: driver, engine: engine)
         StudioCommands.register(into: commands)
         FontRegistry.registerBundledFonts()
         SampleContent.installIfRequested(library: library)
         if let forced = LaunchOptions.hardwareKeyboard { keyboard.override = forced }
+        #if DEBUG
+        // The development remote control (Settings › Developer).
+        DevServer.shared.startIfEnabled()
+        #endif
+        keepAwake.start(app: self)
     }
 
     /// The density views lay out with (never `.automatic`).
@@ -59,6 +99,8 @@ final class AppSettings {
     var density: Density { didSet { defaults.set(density.rawValue, forKey: "density") } }
     var showActivityBar: Bool { didSet { defaults.set(showActivityBar, forKey: "showActivityBar") } }
     var lseEndpoint: String { didSet { defaults.set(lseEndpoint, forKey: "lseEndpoint") } }
+    /// The thinking level new agent chats start with.
+    var agentThinking: ThinkingLevel { didSet { defaults.set(agentThinking.rawValue, forKey: "agentThinking") } }
     var editor: EditorSettings {
         didSet { if let data = try? JSONEncoder().encode(editor) { defaults.set(data, forKey: "editorSettings") } }
     }
@@ -74,6 +116,7 @@ final class AppSettings {
         density = defaults.string(forKey: "density").flatMap(Density.init(rawValue:)) ?? .automatic
         showActivityBar = defaults.object(forKey: "showActivityBar") as? Bool ?? true
         lseEndpoint = defaults.string(forKey: "lseEndpoint") ?? ModelEndpointProbe.defaultEndpoint.absoluteString
+        agentThinking = defaults.string(forKey: "agentThinking").flatMap(ThinkingLevel.init(rawValue:)) ?? .low
         editor = defaults.data(forKey: "editorSettings").flatMap { try? JSONDecoder().decode(EditorSettings.self, from: $0) } ?? EditorSettings()
     }
 
@@ -153,6 +196,8 @@ enum LaunchOptions {
     static var resetState: Bool { defaults.bool(forKey: "StudioResetState") }
     /// Runs the in-shell keyboard replay (see KeyboardStress).
     static var keyboardStress: Bool { defaults.bool(forKey: "StudioKeyboardStress") }
+    /// Publishes the active document's text as an accessibility element (UI tests).
+    static var exposeEditorText: Bool { defaults.bool(forKey: "StudioExposeEditorText") }
     /// "plain" runs with only the built-in editor (tests of the fallback).
     static var editor: String? { defaults.string(forKey: "StudioEditor") }
     static var density: Density? { defaults.string(forKey: "StudioDensity").flatMap(Density.init(rawValue:)) }

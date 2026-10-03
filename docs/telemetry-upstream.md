@@ -128,7 +128,9 @@ unchanged, so `gen_gpu_metrics.py` + `git diff --exit-code` still guards it).
 ## 4. Tests to bring along
 
 StudioTelemetry's tests run the real transport over fixtures recorded from an
-R9700 (gfx1201, gpu_metrics v1.3) on mac_linuxgpu build 229:
+R9700 (gfx1201, gpu_metrics v1.3) on mac_linuxgpu build 229 or later with
+`Tools/capture_fixtures.sh` (the suites that need a recording are disabled,
+and reported, until one is bundled):
 
 - every recorded gpu_metrics blob decodes by its header; a changed content
   revision, a short blob or a size field that disagrees are refused;
@@ -141,6 +143,11 @@ R9700 (gfx1201, gpu_metrics v1.3) on mac_linuxgpu build 229:
 - hwmon rows use the driver's labels (edge, junction, mem; PPT) and scales;
 - the GPU load equals the GUI_ACTIVE share of the GRBM values replayed;
 - not-ready, older-dext and no-device paths report the driver's own words.
+
+Without any recording, `ReferenceDecodingTests` is `check_linux_model.sh` as
+a unit test: a test-only C target fills upstream `struct gpu_metrics_v1_3`
+(the compiler lays it out, independently of `GPUMetricsLayout.swift`) and the
+model's labels, GRBM fraction and fallbacks are checked on fixed sysfs text.
 
 For mtopg these fit as a SwiftPM test target next to `check_linux_model.sh`,
 or as extra cases in that script fed with a fixture file.

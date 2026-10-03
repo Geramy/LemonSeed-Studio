@@ -3,6 +3,7 @@ import Observation
 import SystemExtensions
 import StudioCore
 import StudioDesign
+import StudioTelemetry
 import os
 
 private let driverLog = Logger(subsystem: "com.geramyloveless.LemonSeedStudio", category: "driver")
@@ -15,8 +16,8 @@ private let driverLog = Logger(subsystem: "com.geramyloveless.LemonSeedStudio", 
 @MainActor
 @Observable
 final class DriverMonitor {
-    static let serviceName = "MacLinuxGPU"
-    static let dextBundleID = "com.geramyloveless.LemonSeedStudio.AMDGpuDriver"
+    nonisolated static let serviceName = "MacLinuxGPU"
+    nonisolated static let dextBundleID = "com.geramyloveless.LemonSeedStudio.AMDGpuDriver"
 
     struct Service: Equatable {
         var className: String
@@ -33,6 +34,8 @@ final class DriverMonitor {
     private(set) var lookupError: String?
     private(set) var lastChecked: Date?
 
+    /// Called after every refresh (the driver's service appeared or went).
+    @ObservationIgnored var onChange: (() -> Void)?
     @ObservationIgnored private var notifyPort: IONotificationPortRef?
     @ObservationIgnored private var iterators: [io_iterator_t] = []
 
@@ -47,8 +50,10 @@ final class DriverMonitor {
         }
         if embeddedDext == nil { return .unknown }
         if isEnabled == false { return .driverNotEnabled }
-        if isEnabled == true { return .noDevice }
-        return .driverNotEnabled
+        // Enabled, or unknown (the system did not say): the driver is not
+        // running, which also happens after a new build is installed until
+        // the GPU is reconnected.
+        return .noDevice
     }
 
     var isSimulator: Bool {
@@ -64,6 +69,7 @@ final class DriverMonitor {
         isEnabled = Self.queryEnabled()
         lookup()
         lastChecked = Date()
+        onChange?()
     }
 
     // MARK: Bundle
@@ -78,7 +84,7 @@ final class DriverMonitor {
 
     // MARK: Enablement
 
-    static func queryEnabled() -> Bool? {
+    nonisolated static func queryEnabled() -> Bool? {
         #if targetEnvironment(simulator)
         return nil
         #else
@@ -166,7 +172,7 @@ final class DriverTelemetryProvider: TelemetryProviding {
     }
 
     var engineState: EngineState { driver.engineState }
-    var summary: GPUSummary? { nil }
+    var summary: StudioCore.GPUSummary? { nil }
 
     func refresh() { driver.refresh() }
 
@@ -232,13 +238,13 @@ struct EngineStatusView: View {
         switch driver.engineState {
         case .deviceMatched(let detail):
             return ("checkmark.seal.fill", p.success.color, "Driver running",
-                    "The MacLinuxGPU service matched an AMD GPU (\(detail)). Start the GPU from here once the engine is installed.")
+                    "The MacLinuxGPU service matched an AMD GPU (\(detail)). The engine starts the GPU when it loads a model.")
         case .driverNotEnabled:
             return ("switch.2", p.warning.color, "Enable the driver",
                     "Open Settings › General › Drivers (or Settings › Apps › LemonSeed Studio › Drivers) and turn on LemonSeed Studio's AMD GPU driver.")
         case .noDevice:
-            return ("cable.connector", p.info.color, "Connect the GPU",
-                    "The driver is enabled but no GPU is attached. Connect the powered enclosure to the Thunderbolt port. Using a dock? Connect the GPU to a Thunderbolt downstream port.")
+            return ("cable.connector", p.info.color, "GPU driver not running",
+                    "The driver is not running. Check that it is on in Settings › General › Drivers and that the powered enclosure is connected to the Thunderbolt port (through a dock: a Thunderbolt downstream port). After installing a new build, unplug the GPU and plug it back in so the updated driver starts.")
         case .unknown:
             if driver.isSimulator {
                 return ("ipad.landscape", p.textTertiary.color, "Simulator build",
@@ -265,7 +271,9 @@ struct EngineStatusView: View {
                 "\($0.className), registry 0x\(String($0.registryID, radix: 16)), \($0.matchCount) match\($0.matchCount == 1 ? "" : "es")"
             } ?? (driver.lookupError ?? "not running"))
             if let server = driver.service?.userServerName {
-                row("Driver process", server == DriverMonitor.dextBundleID ? server : "\(server) (not this app's driver)")
+                row("Driver process", server == DriverMonitor.dextBundleID ? server
+                    : server == "unknown" ? "\(DriverMonitor.dextBundleID) (its registry properties are hidden from apps)"
+                    : "\(server) (not this app's driver)")
             }
         }
         .padding(Space.m)
@@ -292,7 +300,13 @@ struct GPUMonitorWindow: View {
 
     var body: some View {
         NavigationStack {
-            app.services.telemetry.makeGPUView(context: nil)
+            Group {
+                if let provider = app.services.telemetry as? StudioTelemetryProvider {
+                    GPUMonitorView(service: provider.service)
+                } else {
+                    app.services.telemetry.makeGPUView(context: nil)
+                }
+            }
                 .navigationTitle("GPU")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

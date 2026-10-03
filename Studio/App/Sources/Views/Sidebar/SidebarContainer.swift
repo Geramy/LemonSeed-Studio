@@ -29,6 +29,7 @@ struct SidebarContainer: View {
         case .search: SearchSidebar(controller: controller, search: controller.search)
         case .sourceControl: app.services.git.makeSourceControlView(context: controller)
         case .agent: app.services.agent.makePanel(context: controller)
+        case .models: ModelsSidebar()
         case .gpu: app.services.telemetry.makeGPUView(context: controller)
         case .extensions: ExtensionsView()
         }
@@ -61,8 +62,15 @@ struct SidebarContainer: View {
             StudioIconButton(StudioSymbol.refresh, help: "Refresh") { Task { await controller.refreshGitStatus() } }
                 .accessibilityIdentifier("git.refresh")
         case .gpu:
-            StudioIconButton(StudioSymbol.refresh, help: "Refresh") { app.services.telemetry.refresh() }
-                .accessibilityIdentifier("gpu.refresh")
+            HStack(spacing: 0) {
+                StudioIconButton("rectangle.expand.vertical", help: "Open GPU Monitor") { app.isGPUMonitorPresented = true }
+                    .accessibilityIdentifier("gpu.openMonitorHeader")
+                StudioIconButton(StudioSymbol.refresh, help: "Refresh") { app.services.telemetry.refresh() }
+                    .accessibilityIdentifier("gpu.refresh")
+            }
+        case .models:
+            StudioIconButton(StudioSymbol.refresh, help: "Rescan Models") { Task { await app.models.refresh() } }
+                .accessibilityIdentifier("models.refresh")
         case .agent, .extensions:
             EmptyView()
         }

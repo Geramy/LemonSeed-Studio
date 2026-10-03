@@ -14,6 +14,14 @@ struct SearchSidebar: View {
     @State private var focusRequest = FocusRequest()
 
     var body: some View {
+        // Field and summary on top, results directly below them.
+        VStack(alignment: .leading, spacing: Space.s) {
+            controls
+            results
+        }
+    }
+
+    private var controls: some View {
         VStack(alignment: .leading, spacing: Space.s) {
             HStack(spacing: Space.xs) {
                 TextField("Search", text: $search.query)
@@ -71,8 +79,6 @@ struct SearchSidebar: View {
             })
         }
         .onDisappear { TextInputCoordinator.shared.unregister(id: "search") }
-
-        results
     }
 
     private func toggle(_ symbol: String, _ help: String, isOn: Binding<Bool>, id: String) -> some View {

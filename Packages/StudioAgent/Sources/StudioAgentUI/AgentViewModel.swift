@@ -26,6 +26,19 @@ public struct AssistantBlock: Sendable {
     public var reasoningEnded: Date?
     public var stopReason: StopReason?
     public var errorMessage: String?
+    /// When the first streamed token (reasoning or answer) arrived.
+    public var firstTokenAt: Date?
+    /// Streamed deltas so far: about one token each.
+    public var streamedTokens = 0
+    /// The engine's timings for the turn, once it has finished.
+    public var finalTimings: GenerationTimings?
+
+    /// Live decode speed while streaming, from the deltas' arrival times.
+    public func liveTokensPerSecond(now: Date = Date()) -> Double? {
+        guard let first = firstTokenAt, streamedTokens > 1 else { return nil }
+        let seconds = now.timeIntervalSince(first)
+        return seconds > 0.2 ? Double(streamedTokens - 1) / seconds : nil
+    }
 
     public var reasoningSeconds: Int? {
         guard let s = reasoningStarted, let e = reasoningEnded else { return nil }
@@ -81,6 +94,9 @@ public final class AgentViewModel {
     public var mode: PermissionMode {
         didSet { if let agent { Task { await agent.setPermissionMode(mode) } } }
     }
+    /// The session's thinking level (`reasoning_effort`). Fixed per session
+    /// so the engine's prompt cache stays valid; see `setThinking`.
+    public private(set) var thinking: ThinkingLevel
 
     public let workspace: any AgentWorkspace
     public private(set) var configuration: AgentConfiguration
@@ -92,6 +108,14 @@ public final class AgentViewModel {
     private var approvalContinuation: CheckedContinuation<PermissionResponse, Never>?
     private var index: [String: Int] = [:]
     private var currentAssistant: String?
+    private var lastAssistant: String?
+    // Streamed deltas are applied to the transcript at most ~30 times a
+    // second, never held back until the end.
+    private var pendingText = ""
+    private var pendingReasoning = ""
+    private var pendingTokens = 0
+    private var flushTask: Task<Void, Never>?
+    private static let flushInterval: Duration = .milliseconds(33)
 
     public init(workspace: any AgentWorkspace, client: any LLMClient, configuration: AgentConfiguration = .init(),
                 shell: any ShellProviding = InProcessShell()) {
@@ -100,6 +124,7 @@ public final class AgentViewModel {
         self.configuration = configuration
         self.shell = shell
         self.mode = configuration.permissionMode
+        self.thinking = configuration.thinking
         self.isScripted = client is ScriptedLLMClient
         stats.contextWindow = configuration.endpoint.contextWindow
         if isScripted { engine = .scripted }
@@ -134,6 +159,7 @@ public final class AgentViewModel {
     public func newSession() {
         stop()
         agent = nil
+        currentSessionIDCache = nil
         items = []
         index = [:]
         sessionTitle = "New session"
@@ -147,8 +173,10 @@ public final class AgentViewModel {
                                      approver: approver(), configuration: configuration)
             agent = a
             sessionTitle = summary.title
+            currentSessionIDCache = summary.id
             Task {
                 await a.setPermissionMode(mode)
+                self.thinking = await a.configuration.thinking
                 let doc = await a.document
                 self.items = Self.transcript(from: doc)
                 self.reindex()
@@ -158,12 +186,62 @@ public final class AgentViewModel {
         }
     }
 
+    /// Called with a session's id once it is deleted, so the host can tell
+    /// the engine to drop that session's KV cache.
+    public var onSessionDeleted: ((String) -> Void)?
+
+    /// The current session's id (the `session_id` every request carries).
+    public var currentSessionID: String? { currentSessionIDCache }
+    private var currentSessionIDCache: String?
+
     public func deleteSession(_ summary: SessionSummary) {
+        if summary.id == currentSessionIDCache { newSession() }
         try? SessionStore(workspace: workspace).delete(summary.url)
+        onSessionDeleted?(summary.id)
+        refreshSessions()
+    }
+
+    public func renameSession(_ summary: SessionSummary, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        try? SessionStore(workspace: workspace).rename(summary.url, to: trimmed)
+        if summary.id == currentSessionIDCache { sessionTitle = trimmed }
+        refreshSessions()
+    }
+
+    public func setPinned(_ summary: SessionSummary, _ pinned: Bool) {
+        try? SessionStore(workspace: workspace).setPinned(pinned, id: summary.id)
         refreshSessions()
     }
 
     // MARK: Sending
+
+    /// Whether the session already talked to the engine (a thinking change
+    /// then costs one full re-read of the conversation).
+    public var hasHistory: Bool { agent != nil && !items.isEmpty }
+
+    /// Sets the thinking level. Before the first message it simply applies.
+    /// In a session with history it applies from the next request (the
+    /// engine's prompt cache resets once), or starts a new session with it.
+    public func setThinking(_ level: ThinkingLevel, startNewSession: Bool = false) {
+        guard level != thinking else { return }
+        thinking = level
+        configuration.thinking = level
+        guard hasHistory, let agent else { return }
+        if startNewSession {
+            newSession()
+            append(.notice("New session with thinking \(level.title).", isError: false))
+            return
+        }
+        Task {
+            do {
+                try await agent.setThinking(level)
+                append(.notice("Thinking is \(level.title) from the next message. The engine re-reads this conversation once, because the thinking level is part of its cached prompt.", isError: false))
+            } catch {
+                append(.notice("Could not record the thinking change: \(error.localizedDescription)", isError: true))
+            }
+        }
+    }
 
     public var canSend: Bool { !composer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
@@ -183,6 +261,7 @@ public final class AgentViewModel {
         do {
             let a = try agent ?? makeAgent(firstMessage: text)
             agent = a
+            if currentSessionIDCache == nil { Task { self.currentSessionIDCache = await a.document.header.id } }
             isRunning = true
             runTask = Task {
                 for await event in a.prompt(text) { self.apply(event) }
@@ -277,6 +356,20 @@ public final class AgentViewModel {
 
     func apply(_ event: AgentEvent) {
         switch event {
+        case .reasoningDelta(let s):
+            pendingReasoning += s
+            pendingTokens += 1
+            scheduleFlush()
+            return
+        case .textDelta(let s):
+            pendingText += s
+            pendingTokens += 1
+            scheduleFlush()
+            return
+        default:
+            flushDeltas()
+        }
+        switch event {
         case .agentStart:
             break
         case .userMessage(let text, let entryID):
@@ -286,18 +379,11 @@ public final class AgentViewModel {
         case .assistantStart:
             let id = "a-\(UUID().uuidString)"
             currentAssistant = id
+            lastAssistant = id
             items.append(TranscriptItem(id: id, kind: .assistant(AssistantBlock())))
             index[id] = items.count - 1
-        case .reasoningDelta(let s):
-            updateAssistant {
-                if $0.reasoningStarted == nil { $0.reasoningStarted = Date() }
-                $0.reasoning += s
-            }
-        case .textDelta(let s):
-            updateAssistant {
-                if $0.reasoningStarted != nil, $0.reasoningEnded == nil { $0.reasoningEnded = Date() }
-                $0.text += s
-            }
+        case .reasoningDelta, .textDelta:
+            break
         case .toolCallStreamed:
             break
         case .assistantEnd(let m, _):
@@ -341,7 +427,13 @@ public final class AgentViewModel {
             }
         case .turnEnd(_, let timings, _, let contextTokens):
             stats.turns += 1
-            if let timings { stats.lastTimings = timings }
+            if let timings {
+                stats.lastTimings = timings
+                if let id = lastAssistant, let i = index[id], case .assistant(var b) = items[i].kind {
+                    b.finalTimings = timings
+                    items[i].kind = .assistant(b)
+                }
+            }
             stats.contextTokens = contextTokens
         case .compactionStart:
             append(.notice("Compacting the conversation to fit the context window…", isError: false))
@@ -360,6 +452,40 @@ public final class AgentViewModel {
             case .error(let message): append(.notice(message, isError: true))
             }
             updateAllRunningTools()
+        }
+    }
+
+    private func scheduleFlush() {
+        guard flushTask == nil else { return }
+        flushTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.flushInterval)
+            guard let self else { return }
+            self.flushTask = nil
+            self.flushDeltas()
+        }
+    }
+
+    /// Applies the streamed deltas gathered since the last flush.
+    private func flushDeltas() {
+        flushTask?.cancel()
+        flushTask = nil
+        guard !pendingText.isEmpty || !pendingReasoning.isEmpty else { return }
+        let text = pendingText, reasoning = pendingReasoning, tokens = pendingTokens
+        pendingText = ""
+        pendingReasoning = ""
+        pendingTokens = 0
+        updateAssistant {
+            let now = Date()
+            if $0.firstTokenAt == nil { $0.firstTokenAt = now }
+            $0.streamedTokens += tokens
+            if !reasoning.isEmpty {
+                if $0.reasoningStarted == nil { $0.reasoningStarted = now }
+                $0.reasoning += reasoning
+            }
+            if !text.isEmpty {
+                if $0.reasoningStarted != nil, $0.reasoningEnded == nil { $0.reasoningEnded = now }
+                $0.text += text
+            }
         }
     }
 

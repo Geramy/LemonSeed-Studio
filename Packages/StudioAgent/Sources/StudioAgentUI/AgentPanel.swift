@@ -115,13 +115,16 @@ struct AgentHeader: View {
             }
             .foregroundStyle(theme.primaryText)
             .accessibilityLabel("Permission mode")
+            .accessibilityIdentifier("agent.mode")
 
             Button { model.refreshSessions(); showingSessions = true } label: {
                 Image(systemName: "clock.arrow.circlepath")
             }
-            .accessibilityLabel("Sessions")
+            .accessibilityLabel("Chats")
+            .accessibilityIdentifier("agent.sessions")
             Button { model.newSession() } label: { Image(systemName: "square.and.pencil") }
-                .accessibilityLabel("New session")
+                .accessibilityLabel("New chat")
+                .accessibilityIdentifier("agent.newChat")
                 .keyboardShortcut("n", modifiers: [.command, .shift])
         }
         .font(.system(size: 17))
@@ -230,7 +233,7 @@ struct ContextMeter: View {
                     .frame(width: max(3, 56 * fraction))
             }
             .frame(width: 56, height: 5)
-            Text(used == 0 ? "context" : "\(used / 1000).\(used % 1000 / 100)K / \(window / 1024)K")
+            Text("context \(used.formatted()) / \(window.formatted())")
                 .lineLimit(1)
                 .fixedSize()
         }
@@ -244,14 +247,18 @@ struct Composer: View {
     var focused: FocusState<Bool>.Binding
     @Environment(\.agentTheme) private var theme
 
+    @State private var pendingThinking: ThinkingLevel?
+
     var body: some View {
         HStack(alignment: .bottom, spacing: 10) {
+            thinkingMenu
             TextField(model.isRunning ? "Steer the agent…" : "Ask the LemonSeed agent…", text: $model.composer,
                       axis: .vertical)
                 .font(theme.bodyFont)
                 .lineLimit(1...8)
                 .focused(focused)
                 .onSubmit { model.send() }
+                .accessibilityIdentifier("agent.composer")
                 .padding(.vertical, 10)
                 .padding(.leading, 14)
 
@@ -265,6 +272,7 @@ struct Composer: View {
                 }
                 .keyboardShortcut(".", modifiers: .command)
                 .accessibilityLabel("Stop")
+                .accessibilityIdentifier("agent.stop")
                 .padding(5)
             }
             if !model.isRunning || model.canSend {
@@ -278,6 +286,7 @@ struct Composer: View {
                 .disabled(!model.canSend)
                 .keyboardShortcut(.return, modifiers: .command)
                 .accessibilityLabel("Send")
+                .accessibilityIdentifier("agent.send")
                 .padding(5)
             }
         }
@@ -287,6 +296,48 @@ struct Composer: View {
         .padding(.top, 8)
         .padding(.bottom, 12)
         .animation(.snappy(duration: 0.2), value: model.isRunning)
+        .confirmationDialog("Change thinking to \(pendingThinking?.title ?? "")?",
+                            isPresented: Binding(get: { pendingThinking != nil }, set: { if !$0 { pendingThinking = nil } }),
+                            titleVisibility: .visible) {
+            if let level = pendingThinking {
+                Button("Apply from the next message") { model.setThinking(level) }
+                Button("Start a new session") { model.setThinking(level, startNewSession: true) }
+                Button("Cancel", role: .cancel) {}
+            }
+        } message: {
+            Text("The thinking level is part of the engine's cached prompt. Changing it in this session makes the engine re-read the conversation once.")
+        }
+    }
+
+    /// Thinking: Default (the model's own level), Off, Low, Medium, High, Max.
+    private var thinkingMenu: some View {
+        Menu {
+            Picker("Thinking", selection: Binding(get: { model.thinking }, set: { choose($0) })) {
+                ForEach(ThinkingLevel.pickerLevels, id: \.self) { level in
+                    Text(level == .modelDefault ? "Default (model decides)" : level.title).tag(level)
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: model.thinking == .off ? "brain" : "brain.fill")
+                Text(model.thinking.title)
+            }
+            .font(theme.captionFont)
+            .foregroundStyle(model.thinking == .off ? theme.tertiaryText : theme.accent)
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .background(theme.hairline.opacity(0.6), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .accessibilityLabel("Thinking: \(model.thinking.title)")
+        .accessibilityIdentifier("agent.thinking")
+        .padding(.leading, 6)
+        .padding(.bottom, 5)
+    }
+
+    private func choose(_ level: ThinkingLevel) {
+        guard level != model.thinking else { return }
+        if model.hasHistory { pendingThinking = level } else { model.setThinking(level) }
     }
 }
 

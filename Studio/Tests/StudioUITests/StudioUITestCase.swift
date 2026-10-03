@@ -10,6 +10,7 @@ class StudioUITestCase: XCTestCase {
 
     override func setUp() async throws {
         continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
     }
 
     /// Launches with the Demo project and `files` open (";" separates tabs).
@@ -19,7 +20,11 @@ class StudioUITestCase: XCTestCase {
         if let files { app.launchArguments += ["-StudioOpenFiles", files] }
         app.launchArguments += extra
         app.launch()
-        XCTAssertTrue(element("toolbar.workspaceMenu").waitForExistence(timeout: 15), "the workspace window opened")
+        if !element("toolbar.workspaceMenu").waitForExistence(timeout: 15) {
+            // Another app sharing the simulator may have come forward.
+            ensureForeground()
+        }
+        XCTAssertTrue(element("toolbar.workspaceMenu").waitForExistence(timeout: 10), "the workspace window opened")
     }
 
     func launchWelcome(extra: [String] = []) {
@@ -40,7 +45,9 @@ class StudioUITestCase: XCTestCase {
         dismissMenuBar()
         let target = element(identifier)
         XCTAssertTrue(target.waitForExistence(timeout: 5), "\(identifier) exists", file: file, line: line)
-        XCTAssertTrue(target.isHittable, "\(identifier) is hittable", file: file, line: line)
+        // Sheets and panels may still be animating in.
+        let hittable = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: target)
+        XCTAssertEqual(XCTWaiter.wait(for: [hittable], timeout: 3), .completed, "\(identifier) is hittable", file: file, line: line)
         target.tap()
     }
 
@@ -71,8 +78,16 @@ class StudioUITestCase: XCTestCase {
                        "toast should say \(text), says \(toast.exists ? toast.label : "nothing")", file: file, line: line)
     }
 
+    /// Whatever has keyboard focus (the editor's text view, a field).
+    var focusedElement: XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "hasKeyboardFocus == true")).firstMatch
+    }
+
+    /// Waits briefly for the element to report the selected trait.
     func isSelected(_ identifier: String) -> Bool {
-        element(identifier).isSelected
+        let target = element(identifier)
+        let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: target)
+        return XCTWaiter.wait(for: [selected], timeout: 3) == .completed
     }
 
     /// Other apps share the simulator; bring the Studio back if one took over.
@@ -91,8 +106,20 @@ class StudioUITestCase: XCTestCase {
         ensureForeground()
         let file = springboard.buttons["File"].firstMatch
         guard file.exists, file.isHittable else { return }
-        let frame = element("toolbar.workspaceMenu").exists ? element("editor.pane.0").frame : app.frame
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.maxY - 30)).tap()
+        // An inert spot inside whatever is in front: a sheet's title bar, the
+        // top bar's empty middle, or the welcome screen's header. Never a
+        // spot outside a sheet, which would dismiss it.
+        let sheet = element("settings")
+        let menuButton = element("toolbar.workspaceMenu")
+        let point: CGVector
+        if sheet.exists {
+            point = CGVector(dx: sheet.frame.midX + 120, dy: sheet.frame.minY + 22)
+        } else if menuButton.exists {
+            point = CGVector(dx: menuButton.frame.maxX + 60, dy: menuButton.frame.midY)
+        } else {
+            point = CGVector(dx: app.frame.midX, dy: app.frame.minY + 300)
+        }
+        app.coordinate(withNormalizedOffset: .zero).withOffset(point).tap()
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == false"), object: file)
         _ = XCTWaiter.wait(for: [gone], timeout: 3)
     }
@@ -102,9 +129,13 @@ class StudioUITestCase: XCTestCase {
         ensureForeground()
         let file = springboard.buttons["File"].firstMatch
         if file.exists, file.isHittable { return }
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.0))
-        start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.18)))
-        XCTAssertTrue(file.waitForExistence(timeout: 5), "the menu bar appeared")
+        for _ in 0..<3 {
+            ensureForeground()
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.0))
+            start.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.18)))
+            if file.waitForExistence(timeout: 3), file.isHittable { return }
+        }
+        XCTAssertTrue(file.exists && file.isHittable, "the menu bar appeared")
     }
 
     /// Chooses `menu` › `item` in the menu bar. Items are matched by title
@@ -132,8 +163,11 @@ class StudioUITestCase: XCTestCase {
     func dismissPalette() {
         expect("palette")
         dismissMenuBar()
-        let frame = element("palette").frame
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.maxY + 40)).tap()
+        let palette = element("palette")
+        if palette.exists {
+            let frame = palette.frame
+            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.maxY + 40)).tap()
+        }
         expect("palette", exists: false)
     }
 

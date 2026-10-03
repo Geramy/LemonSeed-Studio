@@ -44,6 +44,8 @@ public struct EditorConfiguration: Hashable, Sendable {
     public var showMinimap = true
     public var matchBrackets = true
     public var autoClosePairs = true
+    /// Shows completions as you type an identifier, not only on ⌃Space or a trigger character.
+    public var suggestsWhileTyping = true
     public var showFoldingControls = true
     public var tabWidth = 4
     public var insertSpaces = true

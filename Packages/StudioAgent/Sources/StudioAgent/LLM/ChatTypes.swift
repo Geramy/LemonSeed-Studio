@@ -87,17 +87,39 @@ public struct ToolDefinition: Sendable, Hashable {
 /// system-prompt instruction, so the level is part of the cached prefix and
 /// should stay fixed within a session.
 public enum ThinkingLevel: String, Sendable, Hashable, Codable, CaseIterable {
+    /// Sends no `reasoning_effort`: the model thinks at its own level.
+    case modelDefault = "default"
     case off, minimal, low, medium, high
+    /// LSE's `xhigh`, the most thinking it allows.
+    case max
 
-    var reasoningEffort: String {
+    /// The `reasoning_effort` value, or nil for the model's default.
+    public var reasoningEffort: String? {
         switch self {
+        case .modelDefault: nil
         case .off: "none"
         case .minimal: "minimal"
         case .low: "low"
         case .medium: "medium"
         case .high: "high"
+        case .max: "xhigh"
         }
     }
+
+    public var title: String {
+        switch self {
+        case .modelDefault: "Default"
+        case .off: "Off"
+        case .minimal: "Minimal"
+        case .low: "Low"
+        case .medium: "Medium"
+        case .high: "High"
+        case .max: "Max"
+        }
+    }
+
+    /// The levels the thinking picker offers.
+    public static let pickerLevels: [ThinkingLevel] = [.modelDefault, .off, .low, .medium, .high, .max]
 }
 
 public enum ToolChoice: Sendable, Hashable {
@@ -160,7 +182,7 @@ public struct ChatRequest: Sendable, Hashable {
             o["parallel_tool_calls"] = .bool(parallelToolCalls)
         }
         if let temperature { o["temperature"] = .number(temperature) }
-        if let thinking { o["reasoning_effort"] = .string(thinking.reasoningEffort) }
+        if let effort = thinking?.reasoningEffort { o["reasoning_effort"] = .string(effort) }
         if !stop.isEmpty { o["stop"] = .array(stop.map(JSONValue.string)) }
         if let sessionID { o["session_id"] = .string(sessionID) }
         return .object(o)

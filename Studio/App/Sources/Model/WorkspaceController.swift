@@ -4,7 +4,7 @@ import StudioCore
 import StudioDesign
 
 enum SidebarItem: String, CaseIterable, Identifiable, Codable {
-    case explorer, search, sourceControl, agent, gpu, extensions
+    case explorer, search, sourceControl, agent, models, gpu, extensions
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Codable {
         case .search: "Search"
         case .sourceControl: "Source Control"
         case .agent: "AI"
+        case .models: "Models"
         case .gpu: "GPU"
         case .extensions: "Extensions"
         }
@@ -25,6 +26,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Codable {
         case .search: StudioSymbol.search
         case .sourceControl: StudioSymbol.sourceControl
         case .agent: StudioSymbol.agent
+        case .models: "shippingbox"
         case .gpu: StudioSymbol.gpu
         case .extensions: StudioSymbol.extensions
         }
@@ -36,6 +38,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Codable {
         case .search: KeyShortcut("f", [.command, .shift])
         case .sourceControl: KeyShortcut("g", [.command, .shift])
         case .agent: KeyShortcut("l")
+        case .models: KeyShortcut("o", [.command, .shift])
         case .gpu: KeyShortcut("u", [.command, .shift])
         case .extensions: KeyShortcut("x", [.command, .shift])
         }
@@ -108,10 +111,24 @@ final class WorkspaceController: WorkspaceContext {
 
     var sidebarItem: SidebarItem = .explorer
     var isSidebarVisible = true
-    var sidebarWidth: CGFloat = 290
+    /// New windows start at the width last chosen in any window.
+    var sidebarWidth: CGFloat = WorkspaceController.storedSize("sidebarWidth", default: WorkspaceController.defaultSidebarWidth) {
+        didSet { UserDefaults.standard.set(Double(sidebarWidth), forKey: "sidebarWidth") }
+    }
     var isPanelVisible = false
     var panelTab: PanelTab = .terminal
-    var panelHeight: CGFloat = 280
+    var panelHeight: CGFloat = WorkspaceController.storedSize("panelHeight", default: WorkspaceController.defaultPanelHeight) {
+        didSet { UserDefaults.standard.set(Double(panelHeight), forKey: "panelHeight") }
+    }
+
+    static let defaultSidebarWidth: CGFloat = 290
+    static let minSidebarWidth: CGFloat = 200
+    static let defaultPanelHeight: CGFloat = 280
+    static let minPanelHeight: CGFloat = 120
+
+    nonisolated static func storedSize(_ key: String, default value: CGFloat) -> CGFloat {
+        (UserDefaults.standard.object(forKey: key) as? Double).map { CGFloat($0) } ?? value
+    }
     var isPanelMaximized = false
 
     var paletteMode: PaletteMode?
@@ -527,8 +544,13 @@ final class WorkspaceController: WorkspaceContext {
             }
         }
         if let mode = LaunchOptions.palette {
-            showPalette(mode == "commands" ? .commands : mode == "line" ? .goToLine : .files,
-                        query: LaunchOptions.paletteQuery)
+            // After the first layout: opening it while the editors are
+            // still loading lands in a render that reads the old state.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                showPalette(mode == "commands" ? .commands : mode == "line" ? .goToLine : .files,
+                            query: LaunchOptions.paletteQuery)
+            }
         }
         if LaunchOptions.showSettings { router?.isSettingsPresented = true }
         if LaunchOptions.keyboardStress {

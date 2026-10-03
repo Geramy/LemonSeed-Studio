@@ -1,9 +1,11 @@
 import SwiftUI
+import StudioGitUI
+import StudioAgent
 import StudioCore
 import StudioDesign
 
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case appearance, editor, keyboard, accounts, model, engine, about
+    case appearance, editor, keyboard, accounts, model, engine, developer, about
 
     var id: String { rawValue }
 
@@ -15,6 +17,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .accounts: "Accounts"
         case .model: "Model Endpoint"
         case .engine: "GPU Driver"
+        case .developer: "Developer"
         case .about: "About"
         }
     }
@@ -27,6 +30,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .accounts: "person.crop.circle"
         case .model: StudioSymbol.agent
         case .engine: StudioSymbol.gpu
+        case .developer: "hammer"
         case .about: "info.circle"
         }
     }
@@ -44,22 +48,30 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            List(SettingsPage.allCases, selection: $page) { page in
-                Label(page.title, systemImage: page.symbol)
-                    .tag(page)
-                    .accessibilityIdentifier("settings.page.\(page.rawValue)")
-            }
-            .navigationTitle("Settings")
-            .scrollContentBackground(.hidden)
-            .background(theme.palette.chrome.color)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                        .accessibilityIdentifier("settings.done")
+        // A fixed page list beside the page, at any sheet width: a split
+        // view would collapse to a stack in a narrow sheet and hide the list.
+        HStack(spacing: 0) {
+            NavigationStack {
+                List(SettingsPage.allCases, selection: $page) { page in
+                    Label(page.title, systemImage: page.symbol)
+                        .tag(page)
+                        // One element per row, so the identifier is not shared with the icon.
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("settings.page.\(page.rawValue)")
+                }
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .scrollContentBackground(.hidden)
+                .background(theme.palette.chrome.color)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { dismiss() }
+                            .accessibilityIdentifier("settings.done")
+                    }
                 }
             }
-        } detail: {
+            .frame(width: 240)
+            Hairline(.vertical)
             NavigationStack {
                 Group {
                     switch page ?? .appearance {
@@ -68,6 +80,7 @@ struct SettingsView: View {
                     case .keyboard: KeyboardSettings()
                     case .accounts: AccountsSettings()
                     case .model: ModelSettings()
+                    case .developer: DeveloperSettings()
                     case .engine: EngineSettings()
                     case .about: AboutSettings()
                     }
@@ -75,8 +88,8 @@ struct SettingsView: View {
                 .navigationTitle((page ?? .appearance).title)
                 .navigationBarTitleDisplayMode(.inline)
             }
+            .id(page)
         }
-        .navigationSplitViewStyle(.balanced)
         .presentationSizing(.page)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("settings")
@@ -288,6 +301,8 @@ private struct KeyboardSettings: View {
             }
         }
         .searchable(text: $filter, prompt: "Filter commands")
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("settings.keyboard")
     }
 
     private var filtered: [StudioCommand] {
@@ -301,30 +316,22 @@ private struct KeyboardSettings: View {
 // MARK: - Accounts
 
 private struct AccountsSettings: View {
-    var body: some View {
-        SettingsForm {
-            Section {
-                account("GitHub", symbol: "chevron.left.forwardslash.chevron.right", detail: "github.com and GitHub Enterprise")
-                account("GitLab", symbol: "chevron.left.forwardslash.chevron.right", detail: "gitlab.com and self-hosted GitLab")
-            } footer: {
-                Text("Sign-in, SSH keys in the Secure Enclave and multiple accounts arrive with the Git package. Credentials are kept in the Keychain on this iPad only.")
-            }
-        }
-    }
+    @Environment(AppModel.self) private var app
 
-    private func account(_ name: String, symbol: String, detail: String) -> some View {
-        HStack {
-            Label {
-                VStack(alignment: .leading) {
-                    Text(name)
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
+    var body: some View {
+        if let git = app.services.git as? StudioGitProvider {
+            // StudioGit's accounts: GitHub/GitLab sign-in (personal access
+            // token, or the device flow once a client ID is set), the commit
+            // identity and SSH keys.
+            AccountsView(services: git.services)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("settings.accounts")
+        } else {
+            SettingsForm {
+                Section {
+                    Text("Source control accounts need the Git package.").foregroundStyle(.secondary)
                 }
-            } icon: {
-                Image(systemName: symbol)
             }
-            Spacer()
-            Button("Sign In") {}
-                .disabled(true)
         }
     }
 }
@@ -339,6 +346,18 @@ private struct ModelSettings: View {
     var body: some View {
         @Bindable var settings = app.settings
         SettingsForm {
+            Section {
+                Picker("Default thinking", selection: $settings.agentThinking) {
+                    ForEach(ThinkingLevel.pickerLevels, id: \.self) { level in
+                        Text(level == .modelDefault ? "Default (model decides)" : level.title).tag(level)
+                    }
+                }
+                .accessibilityIdentifier("settings.thinking")
+            } header: {
+                Text("Agent")
+            } footer: {
+                Text("The thinking level new chats start with (reasoning_effort: Off is none, Max is xhigh; Default sends nothing). Each chat keeps its own level; change it from the brain button in the composer.")
+            }
             Section {
                 TextField("http://127.0.0.1:8080/v1", text: $settings.lseEndpoint)
                     .keyboardType(.URL)
@@ -388,13 +407,72 @@ private struct EngineSettings: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
+        @Bindable var keepAwake = app.keepAwake
         ScrollView {
-            EngineStatusView(driver: app.driver)
-                .padding(Space.l)
+            VStack(alignment: .leading, spacing: Space.l) {
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    Toggle("Keep iPad awake while the GPU is in use", isOn: $keepAwake.enabled)
+                        .accessibilityIdentifier("settings.keepAwake")
+                    Text("While the driver is attached, the engine is loaded or a reply is generating, the screen stays on. A sleeping iPad suspends the app in the middle of its GPU session, which can leave the driver needing a reconnect. "
+                         + (keepAwake.isHoldingAwake ? "Now: awake (\(keepAwake.reasons.joined(separator: ", ")))." : "Now: the iPad can sleep."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(Space.m)
+                .elevatedSurface()
+                EngineStatusView(driver: app.driver)
+            }
+            .padding(Space.l)
         }
         .background(Color(.systemGroupedBackground).opacity(0))
     }
 }
+
+// MARK: - Developer
+
+private struct DeveloperSettings: View {
+    var body: some View {
+        SettingsForm {
+            #if DEBUG
+            DevServerSection(server: DevServer.shared)
+            #else
+            Section {
+                Text("The development remote control is only in debug builds.")
+                    .foregroundStyle(.secondary)
+            }
+            #endif
+        }
+    }
+}
+
+#if DEBUG
+private struct DevServerSection: View {
+    @Bindable var server: DevServer
+
+    var body: some View {
+        Section {
+            Toggle("Remote control", isOn: $server.enabled)
+                .accessibilityIdentifier("settings.devServer")
+            LabeledContent("State", value: server.state)
+            LabeledContent("Address", value: server.addresses.isEmpty ? "n/a"
+                           : server.addresses.map { "\($0):\(DevServer.port)" }.joined(separator: ", "))
+            LabeledContent("Bonjour", value: DevServer.serviceType)
+            LabeledContent("Token") {
+                Text(server.token)
+                    .font(.system(.footnote, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+            LabeledContent("Requests", value: "\(server.requestCount)")
+            Button("New Token") { server.regenerateToken() }
+        } header: {
+            Text("Development remote control")
+        } footer: {
+            Text("Studio/scripts/studioctl on the Mac drives the app over Wi-Fi: UI tree, taps, typing, screenshots, engine and chat. Every request needs this launch's token, also written to Documents/devserver.json. Debug builds only; never on cellular.")
+        }
+    }
+}
+#endif
 
 // MARK: - About
 

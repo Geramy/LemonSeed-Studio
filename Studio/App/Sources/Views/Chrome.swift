@@ -305,7 +305,7 @@ struct StatusBar: View {
         switch state {
         case .unknown: return "GPU: n/a"
         case .driverNotEnabled: return "GPU: driver off"
-        case .noDevice: return "GPU: not connected"
+        case .noDevice: return "GPU: driver not running"
         case .deviceMatched: return "GPU: ready to start"
         case .initializing: return "GPU: starting…"
         case .ready:

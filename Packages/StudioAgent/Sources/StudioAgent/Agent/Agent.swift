@@ -135,6 +135,16 @@ public actor Agent {
 
     public var permissionMode: PermissionMode { policy.mode }
 
+    /// Changes the thinking level from the next request on, recorded in the
+    /// session. The level is part of the engine's prompt prefix, so the next
+    /// request re-reads the conversation once instead of reusing the cache.
+    public func setThinking(_ level: ThinkingLevel) throws {
+        guard level != configuration.thinking else { return }
+        configuration.thinking = level
+        let e = document.append(.thinkingLevelChange(level.rawValue))
+        try sessionStore.append([e], to: sessionURL)
+    }
+
     /// Injects a message after the current tool batch.
     public func steer(_ text: String) { steering.append(text) }
 

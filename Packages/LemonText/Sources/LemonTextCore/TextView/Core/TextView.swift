@@ -900,14 +900,14 @@ open class TextView: UIScrollView {
         resignFirstResponder()
         becomeFirstResponder()
         let line = textInputView.lineManager.line(atRow: lineIndex)
-        textInputView.layoutLines(toLocation: line.location)
+        textInputView.layoutLines(from: line.location, toLocation: line.location)
         scrollLocationToVisible(line.location)
         layoutIfNeeded()
         switch selection {
         case .beginning:
             textInputView.selectedRange = NSRange(location: line.location, length: 0)
         case .end:
-            textInputView.selectedRange = NSRange(location: line.data.length, length: line.data.length)
+            textInputView.selectedRange = NSRange(location: line.location + line.data.length, length: 0)
         case .line:
             textInputView.selectedRange = NSRange(location: line.location, length: line.data.length)
         }
@@ -1133,7 +1133,7 @@ extension TextView {
     /// - Parameters:
     ///   - range: The range of text to scroll into view.
     public func scrollRangeToVisible(_ range: NSRange) {
-        textInputView.layoutLines(toLocation: range.upperBound)
+        textInputView.layoutLines(from: range.lowerBound, toLocation: range.upperBound)
         justScrollRangeToVisible(range)
     }
 }

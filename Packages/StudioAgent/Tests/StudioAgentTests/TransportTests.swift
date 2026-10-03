@@ -56,6 +56,51 @@ struct TransportTests {
         #expect(stopped.withLock { $0 })
     }
 
+    /// Reasoning and answer deltas reach the consumer while the engine is
+    /// still generating: the in-process path never accumulates a response.
+    @Test func reasoningAndAnswerStreamIncrementally() async throws {
+        let produced = Mutex(0)
+        let transport = ClosureChatTransport { _, _, _, emit in
+            let think = Data(#"{"choices":[{"delta":{"reasoning_content":"hmm "},"index":0}]}"#.utf8)
+            let say = Data(#"{"choices":[{"delta":{"content":"tok "},"index":0}]}"#.utf8)
+            for i in 0..<200 {
+                produced.withLock { $0 = i + 1 }
+                if !emit(i < 100 ? think : say) { break }
+                Thread.sleep(forTimeInterval: 0.002)
+            }
+            return .init()
+        }
+        let client = OpenAICompatibleClient(configuration: .lseDefault, transport: transport)
+        var reasoning = 0, text = 0
+        var producedAtFirstText: Int?
+        for try await event in client.stream(request) {
+            switch event {
+            case .reasoningDelta: reasoning += 1
+            case .contentDelta:
+                text += 1
+                if producedAtFirstText == nil { producedAtFirstText = produced.withLock { $0 } }
+            default: break
+            }
+        }
+        #expect(reasoning == 100 && text == 100)
+        // The first answer token arrived long before the last one was made.
+        #expect((producedAtFirstText ?? 200) < 150)
+    }
+
+    @Test func thinkingLevelsMapToReasoningEffort() throws {
+        func effort(_ level: ThinkingLevel?) throws -> JSONValue? {
+            var r = request
+            r.thinking = level
+            return try JSONValue.parse(OpenAICompatibleClient(configuration: .lseDefault, transport: ClosureChatTransport { _, _, _, _ in .init() })
+                .encode(r))["reasoning_effort"]
+        }
+        #expect(try effort(.modelDefault) == nil)
+        #expect(try effort(nil) == nil)
+        #expect(try effort(.off) == "none")
+        #expect(try effort(.low) == "low")
+        #expect(try effort(.max) == "xhigh")
+    }
+
     @Test func errorStatusesAndStreamErrorsSurface() async throws {
         let rejecting = ClosureChatTransport { _, _, _, _ in
             .init(status: 400, body: Data(#"{"error":{"message":"max_tokens 9000 exceeds this server's cap of 4096","type":"invalid_request_error"}}"#.utf8))

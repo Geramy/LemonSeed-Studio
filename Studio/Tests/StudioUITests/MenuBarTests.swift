@@ -33,10 +33,12 @@ final class MenuBarTests: StudioUITestCase {
 
         menu("File", "New Project…")
         XCTAssertTrue(app.alerts["New Project"].waitForExistence(timeout: 5))
-        app.alerts["New Project"].textFields.firstMatch.typeText("Created From Menu")
+        // Projects persist across runs; a fresh name each time.
+        let name = "Menu Project \(Int(Date().timeIntervalSince1970) % 100_000)"
+        app.alerts["New Project"].textFields.firstMatch.typeText(name)
         app.alerts["New Project"].buttons["Create"].tap()
         XCTAssertTrue(element("toolbar.workspaceMenu").waitForExistence(timeout: 5))
-        let renamed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", "Created From Menu"),
+        let renamed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", name),
                                                 object: element("toolbar.workspaceMenu"))
         XCTAssertEqual(XCTWaiter.wait(for: [renamed], timeout: 5), .completed, "the new project opened")
 
@@ -53,6 +55,9 @@ final class MenuBarTests: StudioUITestCase {
         launch()
         menu("File", "New Window")
         expect("welcome", timeout: 10, "a new window opens on the welcome screen")
+        // Close it again so later launches start with one window.
+        menu("Window", "Close")
+        expect("toolbar.workspaceMenu", timeout: 10)
     }
 
     func testViewMenuChrome() {
@@ -148,14 +153,17 @@ final class MenuBarTests: StudioUITestCase {
         dismissSettings()
         menu("LemonSeed Studio", "Keyboard Shortcuts")
         expect("settings")
-        XCTAssertTrue(app.staticTexts["Go: Show All Commands"].waitForExistence(timeout: 3), "opens on the keymap")
+        expect("settings.keyboard", "opens on the keymap")
         dismissSettings()
     }
 
     /// ⌘W is also the system's Window › Close: in the Studio it must close
     /// the editor tab, never the window.
-    func testCommandWClosesTheTabNotTheWindow() {
+    func testCommandWClosesTheTabNotTheWindow() throws {
         launch()
+        if element("toolbar.keyboard").exists {
+            throw XCTSkip("XCUITest delivers ⌘-shortcuts only with a hardware keyboard connected (scripts/simulator-keyboard.sh on)")
+        }
         expect("tab.main.c")
         app.typeKey("w", modifierFlags: .command)
         expect("tab.main.c", exists: false)

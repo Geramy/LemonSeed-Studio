@@ -52,6 +52,14 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- Debug builds: the development remote control listens on the Wi-Fi
+	     network (port 8765) and advertises itself with Bonjour. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Debug builds of LemonSeed Studio accept development commands from your Mac on the local network.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_lemonseed-dev._tcp</string>
+	</array>
 	<!-- The simulator reaches lse-server on the Mac over plain HTTP on loopback. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>

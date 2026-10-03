@@ -45,6 +45,39 @@ struct ContentView: View {
                         Text("Last probe \(last.formatted(date: .omitted, time: .standard))")
                     }
                 }
+
+                Section {
+                    if model.bringingUp || model.driverBusy {
+                        HStack {
+                            ProgressView()
+                            Text(model.bringUpProgress.isEmpty ? "Initializing..." : model.bringUpProgress)
+                                .font(.system(.footnote, design: .monospaced))
+                        }
+                    } else if model.bringUpResults.isEmpty {
+                        Text("Initialize GPU runs the upstream amdgpu probe inside the driver and serves it the bundled firmware. It takes control of the GPU.")
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(model.bringUpResults) { result in
+                        ResultRow(result: result)
+                    }
+                    if let log = model.driverLog {
+                        DisclosureGroup("Driver log (\(log.text.utf8.count) bytes, \(log.errorLines.count) error lines)") {
+                            ScrollView {
+                                Text(log.text)
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 420)
+                        }
+                    }
+                } header: {
+                    Text("GPU bring-up")
+                } footer: {
+                    if let last = model.lastBringUp {
+                        Text("Last bring-up \(last.formatted(date: .omitted, time: .standard))")
+                    }
+                }
             }
             .navigationTitle("LemonSeed Studio")
             .toolbar {
@@ -59,8 +92,10 @@ struct ContentView: View {
                         }
                     }
                     Button("Probe", systemImage: "bolt.horizontal") { model.probe() }
+                        .disabled(model.probing || model.bringingUp || model.driverBusy)
+                    Button("Initialize GPU", systemImage: "cpu") { model.bringUp() }
                         .buttonStyle(.borderedProminent)
-                        .disabled(model.probing)
+                        .disabled(model.probing || model.bringingUp || model.driverBusy || !model.state.serviceFound)
                 }
             }
         }

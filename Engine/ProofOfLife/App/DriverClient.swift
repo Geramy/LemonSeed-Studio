@@ -1,7 +1,9 @@
 import Foundation
 
 /// The mac_linuxgpu user-client ABI used by this milestone. Numbers match
-/// dext/sources/MacLinuxGPUXcode.mm and dext/sources/session_state.h.
+/// dext/sources/MacLinuxGPUXcode.mm, dext/sources/dext_compute.h and
+/// dext/sources/session_state.h, and the macOS host
+/// (host/MacLinuxGPUHostApp.swift, scripts/read-driver-log.py).
 enum MLG {
     static let serviceName = "MacLinuxGPU"
     static let dextBundleID = "com.geramyloveless.LemonSeedStudio.AMDGpuDriver"
@@ -15,6 +17,9 @@ enum MLG {
         case ping = 0
         case getIdentity = 1
         case getBARInfo = 2
+        /// Runs the upstream amdgpu PCI probe. Upstream requests firmware by
+        /// name from inside it, so a firmware servicer must run meanwhile.
+        case initDevice = 9
         case queryInfo = 21
         case getReBARInfo = 41
         case runtimeBuild = 43
@@ -23,7 +28,14 @@ enum MLG {
     static let pingMagic: UInt64 = 0xA117_AB1E
     static let queryProbeStatus: UInt64 = 0x4C50_524F  // 'LPRO'
     static let querySessionState: UInt64 = 0x4C53_4553 // 'LSES'
+    static let queryKernelLog: UInt64 = 0x4C4C_4F47    // 'LLOG': tag, byte cursor
     static let sessionStateWords = 9
+    static let probeStatusWords = 5
+
+    static let flagClosing: UInt64 = 1 << 0
+    static let flagQuarantined: UInt64 = 1 << 1
+    static let flagReleasable: UInt64 = 1 << 6
+    static let flagRestartRequired: UInt64 = 1 << 7
 
     static let sessionFlags: [(UInt64, String)] = [
         (1 << 0, "closing"),
@@ -58,6 +70,37 @@ enum MLG {
 
     static func name(_ table: [String], _ value: UInt64) -> String {
         value < UInt64(table.count) ? table[Int(value)] : "unknown(\(value))"
+    }
+
+    /// QueryInfo 'LPRO': attempted, modules running, probe result (negative
+    /// errno), PCI transport fault, fault offset.
+    static func describeProbeStatus(_ s: [UInt64]) -> String {
+        "attempted \(s[0]) modules-running \(s[1]) result \(Int64(bitPattern: s[2])) "
+            + "transport-fault \(s[3]) fault-offset 0x\(String(s[4], radix: 16))"
+    }
+
+    /// QueryInfo 'LSES' (the cached session snapshot).
+    static func describeSessionState(_ s: [UInt64]) -> String {
+        "v\(s[0]) flags 0x\(String(s[1], radix: 16)) [\(describeFlags(s[1]))], "
+            + "quarantine \(name(quarantineCauses, s[2])) code \(Int64(bitPattern: s[3])) step \(s[4]), "
+            + "isolation \(Int64(bitPattern: s[5])), release \(name(releaseBlockers, s[6])), "
+            + "generation \(s[7]), participants \(s[8])"
+    }
+
+    /// The host's advice for a quarantined session, or nil. A quarantined
+    /// driver must never be killed: it can hold the GPU's PCI function.
+    static func quarantineAdvice(_ s: [UInt64]) -> String? {
+        let flags = s[1]
+        if flags & flagRestartRequired != 0 {
+            return "restart required (quarantine \(name(quarantineCauses, s[2]))); do not kill the driver"
+        }
+        if flags & flagReleasable != 0 {
+            return "quarantined but quiescent (\(name(quarantineCauses, s[2]))); release it or turn the driver off and on, do not kill it"
+        }
+        if flags & flagQuarantined != 0 {
+            return "quarantined, release pending (\(name(releaseBlockers, s[6]))); do not kill the driver"
+        }
+        return nil
     }
 
     static func barType(_ type: UInt64) -> String {
@@ -191,5 +234,69 @@ final class UserClient {
 
     func close() -> kern_return_t {
         IOServiceClose(connection)
+    }
+
+    /// QueryInfo 'LPRO'. Cached; allowed on session and observer clients.
+    func probeStatus() -> (kern_return_t, [UInt64]?) {
+        let (kr, s) = call(.queryInfo, [MLG.queryProbeStatus], outputs: MLG.probeStatusWords)
+        return (kr, kr == KERN_SUCCESS && s.count >= MLG.probeStatusWords ? s : nil)
+    }
+
+    /// QueryInfo 'LSES'. Cached; allowed on session and observer clients.
+    func sessionState() -> (kern_return_t, [UInt64]?) {
+        let (kr, s) = call(.queryInfo, [MLG.querySessionState], outputs: MLG.sessionStateWords)
+        return (kr, kr == KERN_SUCCESS && s.count >= MLG.sessionStateWords ? s : nil)
+    }
+
+    /// The driver's retained log (the linuxu printk ring, the last 16 KiB).
+    /// A port of read_snapshot() in mac_linuxgpu scripts/read-driver-log.py:
+    /// QueryInfo 'LLOG' with a byte cursor returns end, next cursor, byte
+    /// count and up to 104 bytes of text packed into the following scalars.
+    /// Reads up to the end observed by the first call.
+    func kernelLog(from start: UInt64 = 0) -> KernelLogRead {
+        var read = KernelLogRead(first: start, next: start)
+        var cursor = start
+        var target: UInt64?
+        var bytes: [UInt8] = []
+        for _ in 0..<4096 {
+            let (kr, v) = call(.queryInfo, [MLG.queryKernelLog, cursor], outputs: 16)
+            guard kr == KERN_SUCCESS else { read.error = describeIOReturn(kr); break }
+            guard v.count >= 3 else { read.error = "invalid log snapshot (\(v.count) words)"; break }
+            let end = v[0], next = v[1], size = v[2]
+            guard size <= UInt64(v.count - 3) * 8, size <= 104, size <= next else {
+                read.error = "invalid log byte count \(size)"; break
+            }
+            let chunkStart = next - size
+            if target == nil { target = end; read.first = chunkStart }
+            let goal = target!
+            var chunk: [UInt8] = []
+            for word in v[3...] { withUnsafeBytes(of: word.littleEndian) { chunk.append(contentsOf: $0) } }
+            chunk = Array(chunk.prefix(Int(size)))
+            if goal > chunkStart { bytes.append(contentsOf: chunk.prefix(Int(min(goal - chunkStart, size)))) }
+            cursor = min(next, goal)
+            if next >= goal || size == 0 { break }
+        }
+        read.next = cursor
+        read.text = String(decoding: bytes, as: UTF8.self)
+        return read
+    }
+}
+
+struct KernelLogRead {
+    /// Byte offset of the first byte returned (older bytes were overwritten).
+    var first: UInt64
+    /// Cursor to resume at.
+    var next: UInt64
+    var text = ""
+    var error: String?
+
+    /// Lines that report a failure, for the report's summary.
+    var errorLines: [Substring] {
+        let marks = ["error", "fail", "timed out", "timeout", "not provided", "stopped responding",
+                     "quarantine", "fault", "unable", "invalid"]
+        return text.split(separator: "\n").filter { line in
+            let lower = line.lowercased()
+            return marks.contains { lower.contains($0) }
+        }
     }
 }

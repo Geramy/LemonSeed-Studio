@@ -38,6 +38,17 @@ final class ProbeModel: ObservableObject {
     @Published private(set) var probing = false
     @Published private(set) var lastProbe: Date?
 
+    // Bring-up (InitDevice with the firmware servicer).
+    @Published private(set) var bringUpResults: [ProbeResult] = []
+    @Published private(set) var bringingUp = false
+    /// A driver call from the bring-up is still outstanding (InitDevice or a
+    /// read timed out). No new session is opened until it returns.
+    @Published private(set) var driverBusy = false
+    @Published private(set) var bringUpProgress = ""
+    @Published private(set) var lastBringUp: Date?
+    @Published private(set) var driverLog: KernelLogRead?
+    private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+
     private var notifyPort: IONotificationPortRef?
     private var notifyIterators: [io_iterator_t] = []
 
@@ -46,9 +57,10 @@ final class ProbeModel: ObservableObject {
         probeLog.log("app start; embedded dext: \(self.state.embeddedDext, privacy: .public)")
         refresh()
         watchService()
-        if Self.autoProbe {
+        if Self.autoProbe || Self.autoBringUp {
             // Remote runs: probe once the service lookup has settled, then
             // publish the report on stdout and in Documents for collection.
+            // --auto-bringup initializes the GPU after the probe.
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                 guard let self else { return }
                 if self.state.serviceFound { self.probe() } else { self.publishReport() }
@@ -57,14 +69,24 @@ final class ProbeModel: ObservableObject {
     }
 
     static let autoProbe = ProcessInfo.processInfo.arguments.contains("--auto-probe")
+    static let autoBringUp = ProcessInfo.processInfo.arguments.contains("--auto-bringup")
 
     /// Writes the report to Documents/probe-report.txt and stdout.
     func publishReport() {
+        let text = writeReportFile()
+        FileHandle.standardOutput.write(Data(text.utf8))
+    }
+
+    /// Rewrites Documents/probe-report.txt only. The bring-up checkpoints it
+    /// before and after InitDevice, so a hung or panicked run still leaves
+    /// the last step on disk.
+    @discardableResult
+    func writeReportFile() -> String {
         let text = report + "\n"
         if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
             try? text.write(to: docs.appendingPathComponent("probe-report.txt"), atomically: true, encoding: .utf8)
         }
-        FileHandle.standardOutput.write(Data(text.utf8))
+        return text
     }
 
     // MARK: Driver state
@@ -133,7 +155,7 @@ final class ProbeModel: ObservableObject {
     // MARK: Probe
 
     func probe() {
-        guard !probing else { return }
+        guard !probing, !bringingUp, !driverBusy else { return }
         probing = true
         results = []
         probeLog.log("probe begin")
@@ -147,9 +169,85 @@ final class ProbeModel: ObservableObject {
                 self.lastProbe = Date()
                 probeLog.log("probe end: \(collected.filter { $0.outcome == .failed }.count) failure(s)")
                 self.refresh()
-                if Self.autoProbe { self.publishReport() }
+                if Self.autoBringUp {
+                    self.writeReportFile()
+                    self.bringUp()
+                } else if Self.autoProbe {
+                    self.publishReport()
+                }
             }
         }
+    }
+
+    // MARK: Bring-up
+
+    /// Initialize the GPU: InitDevice with the firmware servicer, then the
+    /// probe status and driver log. Runs off the main thread.
+    func bringUp() {
+        guard !probing, !bringingUp, !driverBusy else { return }
+        bringingUp = true
+        driverBusy = true
+        bringUpResults = []
+        driverLog = nil
+        bringUpProgress = "Starting"
+        lastBringUp = Date()
+        // The servicer must keep polling while the probe runs: a suspended
+        // app stops its heartbeat and the dext then fails firmware requests.
+        UIApplication.shared.isIdleTimerDisabled = true
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "GPU bring-up") { [weak self] in
+            guard let self else { return }
+            UIApplication.shared.endBackgroundTask(self.backgroundTask)
+            self.backgroundTask = .invalid
+        }
+        probeLog.log("bring-up begin")
+        let config = BringUpConfig.fromArguments()
+        let sink = BringUpSink(
+            emit: { [weak self] result, checkpoint in
+                probeLog.log("\(result.line, privacy: .public)")
+                print("[bring-up] \(result.line)")
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.bringUpResults.append(result)
+                    if checkpoint { self.writeReportFile() }
+                }
+            },
+            progress: { [weak self] text in
+                DispatchQueue.main.async { self?.bringUpProgress = text }
+            },
+            driverLog: { [weak self] log in
+                DispatchQueue.main.async { self?.driverLog = log }
+            },
+            settled: { [weak self] late in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.driverBusy = false
+                    if late { self.finishBringUp(late: true) }
+                }
+            })
+        Thread.detachNewThread { [weak self] in
+            BringUpRun.run(config: config, sink: sink)
+            DispatchQueue.main.async { self?.finishBringUp(late: false) }
+        }
+    }
+
+    private func finishBringUp(late: Bool) {
+        if !late {
+            bringingUp = false
+            bringUpProgress = driverBusy ? "Waiting for the driver to answer" : ""
+        } else {
+            bringUpProgress = ""
+        }
+        if !driverBusy {
+            UIApplication.shared.isIdleTimerDisabled = false
+            if backgroundTask != .invalid {
+                UIApplication.shared.endBackgroundTask(backgroundTask)
+                backgroundTask = .invalid
+            }
+        }
+        let failures = bringUpResults.filter { $0.outcome == .failed }.count
+        probeLog.log("bring-up \(late ? "late completion" : "end", privacy: .public): \(failures) failure(s)")
+        refresh()
+        if Self.autoBringUp { publishReport() } else { writeReportFile() }
     }
 
     // MARK: Report
@@ -173,12 +271,30 @@ final class ProbeModel: ObservableObject {
         } else {
             lines.append(contentsOf: results.map(\.line))
         }
+        if let lastBringUp {
+            lines.append("")
+            lines.append("== GPU bring-up \(ISO8601DateFormatter().string(from: lastBringUp)) ==")
+            lines.append(contentsOf: bringUpResults.map(\.line))
+            if bringingUp || driverBusy {
+                lines.append("(in progress: \(bringUpProgress.isEmpty ? "running" : bringUpProgress))")
+            }
+        }
+        if let driverLog {
+            let errors = driverLog.errorLines
+            lines.append("")
+            lines.append("== Driver log errors (\(errors.count)) ==")
+            lines.append(contentsOf: errors.map(String.init))
+            lines.append("")
+            lines.append("== Driver log (bytes \(driverLog.first)..<\(driverLog.next); the driver keeps the last 16 KiB) ==")
+            lines.append(driverLog.text.hasSuffix("\n") ? String(driverLog.text.dropLast()) : driverLog.text)
+            if let error = driverLog.error { lines.append("(read stopped: \(error))") }
+        }
         return lines.joined(separator: "\n")
     }
 
     func copyReport() {
         UIPasteboard.general.string = report
-        probeLog.log("report copied (\(self.results.count) result lines)")
+        probeLog.log("report copied (\(self.results.count + self.bringUpResults.count) result lines)")
     }
 
     static func machine() -> String {
@@ -274,11 +390,9 @@ enum ProbeRun {
             add("Open observer client (type 1)", .ok, String(format: "connection 0x%x", observer.connection))
             readSessionState(observer, label: "while session open", add: add, failed: failed)
 
-            let (statusKR, status) = observer.call(.queryInfo, [MLG.queryProbeStatus], outputs: 5)
-            if statusKR == KERN_SUCCESS, status.count >= 5 {
-                add("QueryInfo probe status (0x4c50524f)", .ok,
-                    "attempted \(status[0]) modules-running \(status[1]) result \(Int64(bitPattern: status[2])) "
-                    + "transport-fault \(status[3]) fault-offset 0x\(String(status[4], radix: 16))")
+            let (statusKR, status) = observer.probeStatus()
+            if let status {
+                add("QueryInfo probe status (0x4c50524f)", .ok, MLG.describeProbeStatus(status))
             } else { failed("QueryInfo probe status (0x4c50524f)", statusKR) }
 
             let (buildKR, build) = observer.call(.runtimeBuild, outputs: 3)
@@ -312,12 +426,8 @@ enum ProbeRun {
                                          add: (String, ProbeResult.Outcome, String) -> Void,
                                          failed: (String, kern_return_t) -> Void) {
         let step = "QueryInfo session state (0x4c534553) \(label)"
-        let (kr, s) = observer.call(.queryInfo, [MLG.querySessionState], outputs: MLG.sessionStateWords)
-        guard kr == KERN_SUCCESS, s.count >= MLG.sessionStateWords else { return failed(step, kr) }
-        add(step, .ok,
-            "v\(s[0]) flags 0x\(String(s[1], radix: 16)) [\(MLG.describeFlags(s[1]))], "
-            + "quarantine \(MLG.name(MLG.quarantineCauses, s[2])) code \(Int64(bitPattern: s[3])) step \(s[4]), "
-            + "isolation \(Int64(bitPattern: s[5])), release \(MLG.name(MLG.releaseBlockers, s[6])), "
-            + "generation \(s[7]), participants \(s[8])")
+        let (kr, state) = observer.sessionState()
+        guard let state else { return failed(step, kr) }
+        add(step, .ok, MLG.describeSessionState(state))
     }
 }

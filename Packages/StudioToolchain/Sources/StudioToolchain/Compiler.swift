@@ -135,8 +135,9 @@ public final class Compiler: Sendable {
       linkMilliseconds: timings.link_ms, totalMilliseconds: 0)
   }
 
-  /// clang expects about 8 MB of stack; secondary threads on iOS get 512 KB.
-  static func onCompilerThread<T: Sendable>(_ body: @escaping @Sendable () -> T) async -> T {
+  /// Runs body on a new thread with an 8 MB stack (clang and clangd expect
+  /// about that; secondary threads on iOS get 512 KB).
+  public static func onCompilerThread<T: Sendable>(_ body: @escaping @Sendable () -> T) async -> T {
     await withCheckedContinuation { continuation in
       let thread = Thread { continuation.resume(returning: body()) }
       thread.stackSize = 8 << 20

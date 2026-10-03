@@ -2,6 +2,7 @@ import XCTest
 import SwiftUI
 import StudioCore
 import StudioDesign
+import LemonText
 @testable import LemonSeedStudio
 
 @MainActor
@@ -222,5 +223,39 @@ final class DriverMonitorTests: XCTestCase {
         XCTAssertNil(monitor.service)
         XCTAssertEqual(monitor.engineState, .unknown)
         XCTAssertNotNil(monitor.lastChecked)
+    }
+}
+
+@MainActor
+final class LemonTextBridgeTests: XCTestCase {
+    func testThemeMapsStudioColors() {
+        for theme in StudioDesign.Theme.builtIn {
+            let editor = LemonText.EditorTheme(studio: theme)
+            XCTAssertEqual(editor.isDark, theme.appearance == .dark, theme.name)
+            XCTAssertEqual(editor.background.red, theme.palette.editor.red, accuracy: 0.001, theme.name)
+            XCTAssertEqual(editor.caret.green, theme.palette.accent.green, accuracy: 0.001, theme.name)
+            XCTAssertEqual(editor.style(forCapture: "keyword.control")?.color.red ?? -1, theme.syntax.keyword.red, accuracy: 0.001)
+            XCTAssertEqual(editor.style(forCapture: "string")?.color.blue ?? -1, theme.syntax.string.blue, accuracy: 0.001)
+            XCTAssertEqual(editor.style(forCapture: "comment")?.isItalic, true)
+        }
+    }
+
+    func testProviderClaimsLoadedTextOnly() async throws {
+        let provider = LemonTextEditorProvider()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("bridge-\(UUID().uuidString).c")
+        try Data("int x;".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let document = EditorDocument(url: url)
+        XCTAssertNil(provider.priority(for: document), "not while loading")
+        await document.load()
+        XCTAssertEqual(provider.priority(for: document), 100)
+        let services = StudioServices()
+        services.register(editor: provider)
+        XCTAssertTrue(services.editor(for: document) === provider, "LemonText wins over the plain editor")
+    }
+
+    func testFontFamiliesMapToPostScriptNames() {
+        XCTAssertNil(LemonTextSessionNames.postScriptName(.sfMono))
+        XCTAssertEqual(LemonTextSessionNames.postScriptName(.jetBrainsMono), "JetBrainsMono-Regular")
     }
 }

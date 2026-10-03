@@ -288,6 +288,8 @@ private struct KeyboardSettings: View {
             }
         }
         .searchable(text: $filter, prompt: "Filter commands")
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("settings.keyboard")
     }
 
     private var filtered: [StudioCommand] {

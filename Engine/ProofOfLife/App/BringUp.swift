@@ -282,6 +282,37 @@ enum BringUpRun {
                 "error \(startErr) (\(String(cString: strerror(-startErr)))); embedded fallback only")
         }
 
+        // Host window: reserve the GART aperture's size in this process and
+        // hand its base to the driver before InitDevice, exactly as the HSA
+        // runtime's initializeDevice does. Only a placement hint, released
+        // once InitDevice returns.
+        var reservation: (UnsafeMutableRawPointer, Int)?
+        let (queryKR, query) = session.call(.hostWindow, [0], outputs: 3)
+        if queryKR == KERN_SUCCESS, query.count == 3 {
+            let bytes = query[1]
+            if bytes >= 16384, bytes & (bytes - 1) == 0, bytes <= 1 << 45,
+               let raw = mmap(nil, Int(bytes) * 2, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0),
+               raw != MAP_FAILED {
+                reservation = (raw, Int(bytes) * 2)
+                let base = (UInt64(UInt(bitPattern: raw)) + bytes - 1) & ~(bytes - 1)
+                if base >= 1 << 32, base < (1 << 47) - bytes {
+                    let (setKR, set) = session.call(.hostWindow, [base], outputs: 3)
+                    if setKR == KERN_SUCCESS, set.count == 3, set[0] == base, set[1] == bytes {
+                        add("Host window (54)", .ok, String(format: "base 0x%llx, %llu MiB", base, bytes >> 20))
+                    } else if setKR == KERN_SUCCESS {
+                        add("Host window (54)", .failed, String(format: "driver answered base 0x%llx size 0x%llx", set.first ?? 0, set.count > 1 ? set[1] : 0))
+                    } else { failed("Host window (54)", setKR) }
+                } else {
+                    add("Host window (54)", .failed, String(format: "reserved base 0x%llx is outside [4 GiB, 128 TiB)", base))
+                }
+            } else {
+                add("Host window (54)", .failed, String(format: "cannot reserve 0x%llx bytes (errno %d)", bytes, errno))
+            }
+        } else { failed("Host window query (54)", queryKR) }
+        func releaseHostWindow() {
+            if let (raw, length) = reservation { munmap(raw, length); reservation = nil }
+        }
+
         // InitDevice.
         add("InitDevice (9)", .info,
             "started; timeout \(Int(config.initTimeout)) s. A hang or panic leaves this as the last line.",
@@ -305,6 +336,7 @@ enum BringUpRun {
 
         // Everything after InitDevice: also the late path when it timed out.
         func finish(_ kr: kern_return_t, late: Bool) {
+            releaseHostWindow()
             let duration = elapsed(initStart)
             if kr == KERN_SUCCESS {
                 add("InitDevice (9)", .ok, "upstream PCI probe completed in \(duration)\(late ? " (after the timeout)" : "")")

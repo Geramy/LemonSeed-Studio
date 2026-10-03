@@ -21,6 +21,9 @@ enum MLG {
         /// name from inside it, so a firmware servicer must run meanwhile.
         case initDevice = 9
         case queryInfo = 21
+        /// Host window: 0 queries the GART aperture size; a nonzero base
+        /// places it before InitDevice, as the HSA runtime does.
+        case hostWindow = 54
         case getReBARInfo = 41
         case runtimeBuild = 43
     }

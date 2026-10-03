@@ -69,6 +69,24 @@ enum Automation {
         }
         report.append("launch: \(launch.modelID) draft=\(launch.draftID ?? "none") kv=\(launch.kvCacheDType)/\(launch.kvLength) batch=\(launch.batchSize)/\(launch.ubatchSize) temp=\(launch.temperature.map { String($0) } ?? "default")")
         app.gpu.selectedModelID = model.id
+        // The driver starts when the GPU is connected (after a new build is
+        // installed: when it is reconnected). Wait for it.
+        if app.driver.service == nil {
+            report.append("wait: driver service not running; waiting for the GPU (reconnect it after installing a new build)")
+            write()
+            let waitStart = Date()
+            while app.driver.service == nil, Date().timeIntervalSince(waitStart) < 4 * 3600 {
+                try? await Task.sleep(for: .seconds(2))
+                if Int(Date().timeIntervalSince(waitStart)) % 30 < 2 { app.driver.refresh() }
+            }
+            guard let service = app.driver.service else {
+                fail("the driver service did not appear in 4 hours")
+                return
+            }
+            report.append(String(format: "OK   driver service %@ 0x%llx after %.0f s", service.className, service.registryID,
+                                 Date().timeIntervalSince(waitStart)))
+            write()
+        }
         if app.engine.launch != launch || app.engine.phase != .ready {
             if app.engine.phase == .ready { app.engine.reload(launch) } else { app.engine.start(launch) }
         }
@@ -95,6 +113,9 @@ enum Automation {
                              Date().timeIntervalSince(loadStart)))
         write()
 
+        // StudioTelemetry fixtures from this GPU: idle, then during decode.
+        if FixtureCapture.requested { await recordFixtures(app: app) }
+
         // 2. A plain completion through the agent's transport, for speed.
         await timedCompletion(app: app)
 
@@ -103,6 +124,42 @@ enum Automation {
 
         report.append(String(format: "total %.1f s", Date().timeIntervalSince(started)))
         write()
+    }
+
+    private static func recordFixtures(app: AppModel) async {
+        try? await Task.sleep(for: .seconds(5))
+        report.append(await FixtureCapture.record(
+            name: "r9700-idle",
+            description: "AMD Radeon AI PRO R9700 over Thunderbolt on an iPad, upstream amdgpu in a session, no GPU work",
+            seconds: 60))
+        write()
+        // Keep the GPU decoding for the whole recording.
+        let transport = app.engine.chatTransport()
+        let body: [String: Any] = [
+            "model": app.engine.servedName,
+            "messages": [["role": "user", "content": "Write a long, detailed tutorial on implementing a red-black tree in C, with complete code for insertion, deletion and all rotations."]],
+            "max_tokens": 4096,
+            "temperature": 0.6,
+        ]
+        let data = (try? JSONSerialization.data(withJSONObject: body)) ?? Data()
+        let load = Task.detached {
+            var runs = 0
+            while !Task.isCancelled && runs < 8 {
+                _ = try? await transport.request(method: "POST", path: "chat/completions", body: data, timeout: 900)
+                runs += 1
+            }
+        }
+        try? await Task.sleep(for: .seconds(8))
+        report.append(await FixtureCapture.record(
+            name: "r9700-load",
+            description: "AMD Radeon AI PRO R9700 over Thunderbolt on an iPad while LemonSeed Engine decodes (Qwen3.8-27B Q4 + DFlash2)",
+            seconds: 60))
+        load.cancel()
+        write()
+        // Let the request in flight finish before the timed runs.
+        while (app.engine.status()["requests"] as? [String: Any])?["active"] as? Int ?? 0 > 0 {
+            try? await Task.sleep(for: .seconds(1))
+        }
     }
 
     private static func timedCompletion(app: AppModel) async {

@@ -1,0 +1,4 @@
+# Built by the LemonSeed-Engine repository; see update-xcframework.sh.
+/LSE.xcframework/
+/.build/
+/.swiftpm/

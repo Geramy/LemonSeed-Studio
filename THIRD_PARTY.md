@@ -92,7 +92,8 @@ Notes:
 | `kgd_pp_interface.h` (Linux `drivers/gpu/drm/amd/include/`, vendored in amdgpu_mtopg) | Source of the gpu_metrics struct layouts above; not compiled into the Studio | MIT (X11-style), Copyright 2017 Advanced Micro Devices, Inc. | layouts only |
 | [mac_linuxgpu](https://github.com/lemonade-sdk/mac_linuxgpu) observer ABI (`dext/sources/session_state.h`) | Selector numbers, op codes and limits in `Transport/ObserverConnection.swift` | MIT OR GPL-2.0-only (used under MIT) | constants only |
 | mac_linuxgpu `scripts/read-sysfs.py` | Imported at run time by `Tools/capture_fixture.py` (a developer tool, not shipped); nothing is copied | MIT OR GPL-2.0-only | no |
-| Recorded fixtures (`Resources/Fixtures/*.json`) | Sysfs, gpu_metrics and GRBM_STATUS payloads recorded from the project owner's own AMD Radeon AI PRO R9700 through mac_linuxgpu; no third-party content | project's own data | yes (fixture mode) |
+| Recorded fixtures (`Resources/Fixtures/*.json`, recorded with `Tools/capture_fixtures.sh`) | Sysfs, gpu_metrics and GRBM_STATUS payloads from the project owner's own AMD Radeon AI PRO R9700 through mac_linuxgpu; no third-party content | project's own data | yes (fixture mode) |
+| `Tests/CGPUMetricsReference` | Test-only excerpt of `kgd_pp_interface.h` (`metrics_table_header`, `gpu_metrics_v1_3`) with its AMD MIT notice | MIT (X11-style), Copyright 2017 Advanced Micro Devices, Inc. | no |
 
 System frameworks only otherwise: SwiftUI, Observation, Synchronization,
 Foundation, IOKit and CoreFoundation (through the `CMacLinuxGPUObserver` C

@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>LemonSeed WASI runtime</title>
+<script src="wasi.js"></script>
+</head>
+<body>
+<script>
+  // Tell the app the runtime is loaded and what the engine offers.
+  window.webkit.messageHandlers.lsx.postMessage({
+    type: "ready",
+    webAssembly: typeof WebAssembly === "object",
+    crossOriginIsolated: self.crossOriginIsolated === true,
+    sharedArrayBuffer: typeof SharedArrayBuffer === "function",
+    userAgent: navigator.userAgent
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+# Toolchain spike demo: edit hello.c, build it in process with clang and
+# wasm-ld, and run the .wasm in a hidden WKWebView and in WAMR.
+#
+# Generate and build with ./build.sh. Before the first build, run:
+#   ../scripts/build-llvm-ios.sh      (LemonSeedLLVM.xcframework, long)
+#   ../scripts/build-wamr-ios.sh      (LemonSeedWAMR.xcframework)
+#   ../scripts/fetch-wasi-sysroot.sh  (WASIToolchain resources)
+#   ../scripts/build-sample-wasm.sh   (Mac-built hello.wasm used when the app
+#                                      is built without LLVM)
+
+name: ToolchainDemo
+
+options:
+  deploymentTarget:
+    iOS: "26.2"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+packages:
+  StudioToolchain:
+    path: ../../Packages/StudioToolchain
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  ToolchainDemo:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.2"
+    sources:
+      - path: App
+      # A folder reference: Xcode would try to compile a loose .c resource.
+      - path: ../samples
+        type: folder
+        buildPhase: resources
+      - path: ../build/resources/WASIToolchain
+        type: folder
+        buildPhase: resources
+        optional: true
+      - path: ../build/resources/prebuilt
+        type: folder
+        buildPhase: resources
+        optional: true
+    dependencies:
+      - package: StudioToolchain
+    settings:
+      base:
+        PRODUCT_NAME: ToolchainDemo
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.LemonSeedStudio.ToolchainDemo
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Toolchain Spike
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        # The LLVM and WAMR XCFrameworks carry arm64 slices only.
+        ARCHS: arm64
+        DEAD_CODE_STRIPPING: YES
+        CODE_SIGNING_ALLOWED: NO
+        # Clangd spike (App/ClangdSpike.cpp) compiles against the staged LLVM
+        # headers of the matching slice and must match LLVM's build flags.
+        SWIFT_OBJC_BRIDGING_HEADER: App/ToolchainDemo-Bridging-Header.h
+        LST_LLVM_SLICE: sim
+        "LST_LLVM_SLICE[sdk=iphoneos*]": device
+        LST_LLVM_INCLUDE: $(SRCROOT)/../build/llvm-install-$(LST_LLVM_SLICE)/include
+        HEADER_SEARCH_PATHS:
+          - $(LST_LLVM_INCLUDE)
+          - $(LST_LLVM_INCLUDE)/clang-tools-extra/clangd
+          - $(LST_LLVM_INCLUDE)/clang-tools-extra/include-cleaner/include
+        CLANG_CXX_LANGUAGE_STANDARD: c++17
+        GCC_ENABLE_CPP_RTTI: NO
+        GCC_PREPROCESSOR_DEFINITIONS: ["NDEBUG=1"]
+        OTHER_CPLUSPLUSFLAGS: ["-Wno-deprecated-declarations", "-Wno-unused-parameter"]

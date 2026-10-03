@@ -3,6 +3,7 @@ import Observation
 import GameController
 import StudioCore
 import StudioDesign
+import StudioModels
 
 /// App-wide state shared by every window: settings, the workspace library,
 /// the provider registry, the command registry and input density.
@@ -17,6 +18,17 @@ final class AppModel {
     let commands = CommandRegistry()
     let input = InputMonitor()
     let driver = DriverMonitor()
+    /// Documents/Models and the Hugging Face catalog (StudioModels).
+    let models = ModelLibrary.standard()
+    /// LSE in this process, on the GPU the driver serves.
+    let engine = EngineService()
+    let gpu: GPUCoordinator
+    /// The GPU sidebar's page ("Monitor", "Engine", "Diagnostics").
+    var gpuPage = UserDefaults.standard.string(forKey: "StudioGPUPage") ?? "Engine"
+    /// The model whose load settings sheet is open.
+    var loadSettingsModelID: String?
+    /// The full Models screen (catalog, downloads, Hugging Face search).
+    var isModelsManagerPresented = false
     let keyboard = KeyboardMonitor.shared
     let textInput = TextInputCoordinator.shared
     /// The most recently active window's router: the menu bar's fallback
@@ -26,7 +38,9 @@ final class AppModel {
     @ObservationIgnored var claimedLaunchProject = false
 
     private init() {
-        StudioPlugins.register(into: services, settings: settings, driver: driver)
+        gpu = GPUCoordinator(driver: driver, engine: engine, library: models)
+        EngineService.shared = engine
+        StudioPlugins.register(into: services, settings: settings, driver: driver, engine: engine)
         StudioCommands.register(into: commands)
         FontRegistry.registerBundledFonts()
         SampleContent.installIfRequested(library: library)

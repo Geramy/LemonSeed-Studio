@@ -1,6 +1,18 @@
 import SwiftUI
+import UIKit
 import StudioCore
 import StudioDesign
+import StudioModels
+
+/// Forwards the models' background URLSession events to StudioModels.
+final class StudioAppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                     completionHandler: @escaping () -> Void) {
+        MainActor.assumeIsolated {
+            AppModel.shared.models.handleBackgroundEvents(identifier: identifier, completion: completionHandler)
+        }
+    }
+}
 
 enum StudioScenes {
     static let workspace = "workspace"
@@ -9,6 +21,7 @@ enum StudioScenes {
 
 @main
 struct LemonSeedStudioApp: App {
+    @UIApplicationDelegateAdaptor(StudioAppDelegate.self) private var appDelegate
     @State private var app = AppModel.shared
 
     var body: some Scene {
@@ -80,6 +93,20 @@ struct StudioSceneView: View {
                 .modifier(StudioEnvironment())
                 .environment(app)
         }
+        .sheet(isPresented: Binding(get: { app.loadSettingsModelID != nil && app.activeRouter === router },
+                                    set: { if !$0 { app.loadSettingsModelID = nil } })) {
+            if let id = app.loadSettingsModelID, let model = app.models.record(id),
+               let telemetry = app.services.telemetry as? StudioTelemetryProvider {
+                LoadSettingsSheet(model: model, provider: telemetry) { app.loadSettingsModelID = nil }
+                    .environment(app)
+            }
+        }
+        .sheet(isPresented: Binding(get: { app.isModelsManagerPresented && app.activeRouter === router },
+                                    set: { app.isModelsManagerPresented = $0 })) {
+            ModelsManagerSheet()
+                .environment(app)
+                .presentationSizing(.page)
+        }
         .alert("New Project", isPresented: $router.isNewProjectPresented) {
             TextField("Name", text: $newProjectName)
                 .accessibilityIdentifier("newProject.name")
@@ -102,6 +129,12 @@ struct StudioSceneView: View {
             router.onReferenceChange = { referenceID = $0 }
             app.activeRouter = router
             openInitialWorkspace()
+        }
+        .task {
+            // Models, then the engine (when auto-start is on and the driver
+            // is present); scripted checks for --selftest / --screenshots.
+            await app.gpu.bootstrap()
+            Automation.startIfRequested(app: app)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { app.activeRouter = router }

@@ -8,19 +8,53 @@
 # defaults it to third_party/mac_linuxgpu); its first build runs
 # `make lib-dext` there.
 
+#
+# Device builds also carry the GPU engine, which has no simulator slice:
+# LSEKit (LSE.xcframework, in-process LSE with the mac_linuxgpu HSA runtime),
+# the bundled linux-firmware set the HSA runtime serves from the app
+# bundle's Firmware/ directory, and mac_linuxgpu's firmware servicer for the
+# Diagnostics screen's manual bring-up. Swift code reaches them under the
+# LEMONSEED_DEVICE compilation condition.
+
 settings:
   base:
     MAC_LINUXGPU_DIR: "${MAC_LINUXGPU_DIR}"
     DEXT_ENTITLEMENTS: ../Engine/ProofOfLife/Dext/MacLinuxGPU-iPad.entitlements
 
+packages:
+  LSEKit:
+    path: ../../Engine/LSEKit
+
 targets:
   LemonSeedStudio:
+    sources:
+      # mac_linuxgpu's user-space firmware servicer, compiled unchanged from
+      # the checkout (as Engine/ProofOfLife does).
+      - path: ${MAC_LINUXGPU_DIR}/host
+        name: mac_linuxgpu host
+        includes:
+          - fw_mailbox_service.c
+          - fw_mailbox_service.h
+          - fw_mailbox_iokit.c
     dependencies:
       - target: MacLinuxGPU
         embed: true
+      - package: LSEKit
+    postCompileScripts:
+      - name: Bundle firmware
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          # The firmware.lock set, SHA-256 checked, as the servicer's root.
+          "$SRCROOT/../Engine/ProofOfLife/scripts/bundle-firmware.sh" "$MAC_LINUXGPU_DIR" \
+            "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Firmware"
     settings:
       base:
         SUPPORTED_PLATFORMS: iphoneos
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) LEMONSEED_DEVICE"
+        HEADER_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(MAC_LINUXGPU_DIR)/host"
 
   MacLinuxGPU:
     type: driver-extension

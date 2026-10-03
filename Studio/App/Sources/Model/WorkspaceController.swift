@@ -4,7 +4,7 @@ import StudioCore
 import StudioDesign
 
 enum SidebarItem: String, CaseIterable, Identifiable, Codable {
-    case explorer, search, sourceControl, agent, gpu, extensions
+    case explorer, search, sourceControl, agent, models, gpu, extensions
 
     var id: String { rawValue }
 
@@ -14,6 +14,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Codable {
         case .search: "Search"
         case .sourceControl: "Source Control"
         case .agent: "AI"
+        case .models: "Models"
         case .gpu: "GPU"
         case .extensions: "Extensions"
         }
@@ -25,6 +26,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Codable {
         case .search: StudioSymbol.search
         case .sourceControl: StudioSymbol.sourceControl
         case .agent: StudioSymbol.agent
+        case .models: "shippingbox"
         case .gpu: StudioSymbol.gpu
         case .extensions: StudioSymbol.extensions
         }
@@ -36,6 +38,7 @@ enum SidebarItem: String, CaseIterable, Identifiable, Codable {
         case .search: KeyShortcut("f", [.command, .shift])
         case .sourceControl: KeyShortcut("g", [.command, .shift])
         case .agent: KeyShortcut("l")
+        case .models: KeyShortcut("o", [.command, .shift])
         case .gpu: KeyShortcut("u", [.command, .shift])
         case .extensions: KeyShortcut("x", [.command, .shift])
         }

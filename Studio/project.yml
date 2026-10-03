@@ -44,6 +44,14 @@ packages:
     path: ../Packages/StudioTerminal
   LemonText:
     path: ../Packages/LemonText
+  StudioAgent:
+    path: ../Packages/StudioAgent
+  StudioModels:
+    path: ../Packages/StudioModels
+  StudioGit:
+    path: ../Packages/StudioGit
+  StudioTelemetry:
+    path: ../Packages/StudioTelemetry
 
 targets:
   LemonSeedStudio:
@@ -60,6 +68,21 @@ targets:
       - package: StudioCore
       - package: StudioTerminal
       - package: LemonText
+      - package: StudioAgent
+        product: StudioAgent
+      - package: StudioAgent
+        product: StudioAgentUI
+      - package: StudioModels
+        product: StudioModels
+      - package: StudioModels
+        product: StudioModelsUI
+      - package: StudioGit
+        product: GitKit
+      - package: StudioGit
+        product: Forge
+      - package: StudioGit
+        product: StudioGitUI
+      - package: StudioTelemetry
       - sdk: IOKit.framework
       - sdk: SystemExtensions.framework
       - sdk: GameController.framework

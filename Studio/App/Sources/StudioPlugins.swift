@@ -25,7 +25,8 @@ import LemonText
 ///    `AppModel.shared.commands.register(StudioCommand(...))`.
 @MainActor
 enum StudioPlugins {
-    static func register(into services: StudioServices, settings: AppSettings, driver: DriverMonitor) {
+    static func register(into services: StudioServices, settings: AppSettings, driver: DriverMonitor,
+                         engine: EngineService) {
         // The editor: LemonText for every loaded text document. The plain
         // text view stays registered as the last resort.
         if LaunchOptions.editor != "plain" {
@@ -34,13 +35,13 @@ enum StudioPlugins {
 
         // Built into the shell.
         services.terminal = SwiftTermTerminalProvider()
-        services.telemetry = DriverTelemetryProvider(driver: driver)
-        services.agent = EndpointAgentProvider(endpoint: settings.lseEndpointURL)
 
-        // Packages register here, e.g.:
-        // services.git = StudioGitProvider()
-        // services.agent = StudioAgentProvider(endpoint: settings.lseEndpointURL)
-        // services.telemetry = StudioTelemetryProvider(fallback: driver)
+        // StudioTelemetry's GPU monitor over the driver monitor and the engine.
+        services.telemetry = StudioTelemetryProvider(driver: driver, engine: engine)
+        // StudioAgent on the in-process engine (lse_request, no HTTP).
+        services.agent = StudioAgentProvider(engine: engine)
+        // StudioGit: libgit2, GitHub/GitLab accounts, the Source Control panel.
+        services.git = StudioGitProvider()
     }
 }
 

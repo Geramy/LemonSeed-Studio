@@ -8,9 +8,12 @@
 # build.sh defaults it to third_party/mac_linuxgpu. Its build-dk/ must hold
 # libmacamgdu-dk.a (`make lib-dext`), which the dext's first build phase runs.
 #
-# Bundle identifiers are fixed: the PCI transport entitlement is granted to
-# the App ID com.geramyloveless.MacAMDGPUHost.MacAMDGPU, and the dext must be
-# embedded in an app whose identifier is its prefix.
+# Identifiers are the iPad app's own, separate from the macOS driver's: the
+# app is com.geramyloveless.LemonSeedStudio and the dext, whose identifier
+# must have the app's as its prefix, is
+# com.geramyloveless.LemonSeedStudio.AMDGpuDriver.
+# The dext App ID needs its own com.apple.developer.driverkit.transport.pci
+# grant before a profile can carry it.
 
 name: ProofOfLife
 
@@ -27,6 +30,7 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
     MAC_LINUXGPU_DIR: "${MAC_LINUXGPU_DIR}"
+    DEXT_ENTITLEMENTS: Dext/MacLinuxGPU-iPad.entitlements
     CLANG_CXX_LANGUAGE_STANDARD: gnu++20
     GCC_C_LANGUAGE_STANDARD: gnu11
 
@@ -45,7 +49,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: LemonSeedStudio
-        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.MacAMDGPUHost
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.LemonSeedStudio
         INFOPLIST_FILE: App/Info.plist
         CODE_SIGN_ENTITLEMENTS: App/LemonSeedStudio.entitlements
         SWIFT_OBJC_BRIDGING_HEADER: App/ProofOfLife-Bridging-Header.h
@@ -59,8 +63,11 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: YES
 
   MacLinuxGPU:
-    # The same DriverKit binary as the macOS build (arm64-apple-driverkit);
-    # only the entitlements differ (Dext/MacLinuxGPU-iPad.entitlements).
+    # The same DriverKit sources and library as the macOS build
+    # (arm64-apple-driverkit). mac_linuxgpu's dext/Info.plist takes
+    # CFBundleIdentifier and IOUserServerName from PRODUCT_BUNDLE_IDENTIFIER,
+    # so only the identifier and entitlements differ. The IOUserClass stays
+    # MacLinuxGPU: clients find the service by that name.
     type: driver-extension
     platform: macOS
     settingPresets: none
@@ -97,10 +104,11 @@ targets:
         ARCHS: arm64
         "EXCLUDED_ARCHS[sdk=driverkit*]": x86_64
         ONLY_ACTIVE_ARCH: NO
-        PRODUCT_NAME: com.geramyloveless.MacAMDGPUHost.MacAMDGPU
-        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.MacAMDGPUHost.MacAMDGPU
+        PRODUCT_NAME: com.geramyloveless.LemonSeedStudio.AMDGpuDriver
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.LemonSeedStudio.AMDGpuDriver
         INFOPLIST_FILE: "$(MAC_LINUXGPU_DIR)/dext/Info.plist"
-        CODE_SIGN_ENTITLEMENTS: Dext/MacLinuxGPU-iPad.entitlements
+        # DEXT_ENTITLEMENTS selects the entitlements file (see build.sh).
+        CODE_SIGN_ENTITLEMENTS: $(DEXT_ENTITLEMENTS)
         OTHER_CODE_SIGN_FLAGS: "-o library,runtime"
         CLANG_ENABLE_OBJC_ARC: NO
         CLANG_ENABLE_MODULES: YES

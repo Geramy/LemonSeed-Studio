@@ -3,7 +3,7 @@ import Combine
 import UIKit
 import os
 
-let probeLog = Logger(subsystem: "com.geramyloveless.MacAMDGPUHost", category: "probe")
+let probeLog = Logger(subsystem: "com.geramyloveless.LemonSeedStudio", category: "probe")
 
 struct ProbeResult: Identifiable {
     enum Outcome { case ok, failed, info }
@@ -67,9 +67,9 @@ final class ProbeModel: ObservableObject {
         let (found, kr) = DriverLookup.find()
         if let found {
             state.serviceFound = true
-            state.service = String(format: "running: %@ registry 0x%llx (%d match%@)",
+            state.service = String(format: "running: %@ registry 0x%llx (%d match%@), server %@",
                                    found.className, found.registryID, found.matchCount,
-                                   found.matchCount == 1 ? "" : "es")
+                                   found.matchCount == 1 ? "" : "es", found.serverDescription)
             IOObjectRelease(found.service)
         } else if kr != KERN_SUCCESS {
             state.serviceFound = false
@@ -192,8 +192,8 @@ enum ProbeRun {
         }
         defer { IOObjectRelease(found.service) }
         add("Find service \"\(MLG.serviceName)\"", .ok,
-            String(format: "%@ registry 0x%llx, %d match(es)", found.className,
-                   found.registryID, found.matchCount))
+            String(format: "%@ registry 0x%llx, %d match(es), server %@", found.className,
+                   found.registryID, found.matchCount, found.serverDescription))
 
         // Session client (type 0).
         let (sessionClient, openKR) = UserClient.open(found.service, type: .session)

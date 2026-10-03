@@ -4,7 +4,7 @@ import Foundation
 /// dext/sources/MacLinuxGPUXcode.mm and dext/sources/session_state.h.
 enum MLG {
     static let serviceName = "MacLinuxGPU"
-    static let dextBundleID = "com.geramyloveless.MacAMDGPUHost.MacAMDGPU"
+    static let dextBundleID = "com.geramyloveless.LemonSeedStudio.AMDGpuDriver"
 
     enum ClientType: UInt32 {
         case session = 0
@@ -119,7 +119,13 @@ struct DriverService {
     let service: io_service_t
     let registryID: UInt64
     let className: String
+    let userServerName: String
     let matchCount: Int
+
+    /// The dext process serving it; this app's driver is MLG.dextBundleID.
+    var serverDescription: String {
+        userServerName == MLG.dextBundleID ? userServerName : "\(userServerName) (not this app's driver)"
+    }
 }
 
 enum DriverLookup {
@@ -143,8 +149,12 @@ enum DriverLookup {
         IORegistryEntryGetRegistryEntryID(first, &registryID)
         var name = [CChar](repeating: 0, count: 128)
         IOObjectGetClass(first, &name)
+        let server = IORegistryEntryCreateCFProperty(first, "IOUserServerName" as CFString,
+                                                     kCFAllocatorDefault, 0)?
+            .takeRetainedValue() as? String ?? "unknown"
         return (DriverService(service: first, registryID: registryID,
-                              className: String(cString: name), matchCount: count), KERN_SUCCESS)
+                              className: String(cString: name), userServerName: server,
+                              matchCount: count), KERN_SUCCESS)
     }
 }
 

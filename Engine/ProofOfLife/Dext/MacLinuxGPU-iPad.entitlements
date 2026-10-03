@@ -5,8 +5,10 @@
 	<!--
 	    iPadOS signing of the mac_linuxgpu dext.
 
-	    transport.pci must equal the match the App ID's DriverKit profile
-	    grants, the same wildcard as dext/mac_linuxgpu.entitlements. Which
+	    transport.pci must equal the match the DriverKit profile of
+	    com.geramyloveless.LemonSeedStudio.AMDGpuDriver grants once Apple
+	    approves it: the same wildcard as the macOS driver's
+	    dext/mac_linuxgpu.entitlements. Which
 	    functions the dext binds is decided by the vendor/class personality
 	    in dext/Info.plist.
 

@@ -215,7 +215,6 @@ final class EngineService {
         loadProgress = nil
         loadSeconds = nil
         log.removeAll()
-        UIApplication.shared.isIdleTimerDisabled = true
         statusTimer?.invalidate()
         statusTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
             Task { @MainActor [weak self] in self?.pollLoadStatus() }
@@ -238,7 +237,6 @@ final class EngineService {
             statusTimer?.invalidate()
             statusTimer = nil
             loadProgress = nil
-            UIApplication.shared.isIdleTimerDisabled = false
             if stopAfterLoad {
                 stopAfterLoad = false
                 stop()

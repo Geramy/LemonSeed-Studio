@@ -46,6 +46,8 @@ final class DevServer {
     private(set) var state = "stopped"
     private(set) var addresses: [String] = []
     private(set) var requestCount = 0
+    /// When the last authorized request arrived (keeps the iPad awake).
+    private(set) var lastRequestAt: Date?
     var enabled: Bool {
         didSet {
             UserDefaults.standard.set(enabled, forKey: "dev.serverEnabled")
@@ -172,6 +174,7 @@ final class DevServer {
         guard (bearer ?? request.headers["x-token"] ?? request.query["token"]) == token else {
             return .error("missing or wrong token", status: 401)
         }
+        lastRequestAt = Date()
         DevLog.shared.append("\(request.method) \(request.path)", source: "devserver")
         let body = request.json()
         switch (request.method, request.path) {

@@ -407,9 +407,23 @@ private struct EngineSettings: View {
     @Environment(AppModel.self) private var app
 
     var body: some View {
+        @Bindable var keepAwake = app.keepAwake
         ScrollView {
-            EngineStatusView(driver: app.driver)
-                .padding(Space.l)
+            VStack(alignment: .leading, spacing: Space.l) {
+                VStack(alignment: .leading, spacing: Space.xs) {
+                    Toggle("Keep iPad awake while the GPU is in use", isOn: $keepAwake.enabled)
+                        .accessibilityIdentifier("settings.keepAwake")
+                    Text("While the driver is attached, the engine is loaded or a reply is generating, the screen stays on. A sleeping iPad suspends the app in the middle of its GPU session, which can leave the driver needing a reconnect. "
+                         + (keepAwake.isHoldingAwake ? "Now: awake (\(keepAwake.reasons.joined(separator: ", ")))." : "Now: the iPad can sleep."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(Space.m)
+                .elevatedSurface()
+                EngineStatusView(driver: app.driver)
+            }
+            .padding(Space.l)
         }
         .background(Color(.systemGroupedBackground).opacity(0))
     }

@@ -25,6 +25,8 @@ final class AppModel {
     /// LSE in this process, on the GPU the driver serves.
     let engine = EngineService()
     let gpu: GPUCoordinator
+    /// Keeps the iPad awake while the GPU is in use.
+    let keepAwake = KeepAwake()
     /// The GPU sidebar's page ("Monitor", "Engine", "Diagnostics").
     var gpuPage = UserDefaults.standard.string(forKey: "StudioGPUPage") ?? "Engine"
     /// The model whose load settings sheet is open.
@@ -68,6 +70,7 @@ final class AppModel {
         // The development remote control (Settings › Developer).
         DevServer.shared.startIfEnabled()
         #endif
+        keepAwake.start(app: self)
     }
 
     /// The density views lay out with (never `.automatic`).

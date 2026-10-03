@@ -198,7 +198,7 @@ final class ProbeModel: ObservableObject {
         lastBringUp = Date()
         // The servicer must keep polling while the probe runs: a suspended
         // app stops its heartbeat and the dext then fails firmware requests.
-        UIApplication.shared.isIdleTimerDisabled = true
+        AppModel.shared.keepAwake.hold("GPU bring-up")
         backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "GPU bring-up") { [weak self] in
             guard let self else { return }
             UIApplication.shared.endBackgroundTask(self.backgroundTask)
@@ -243,7 +243,7 @@ final class ProbeModel: ObservableObject {
             bringUpProgress = ""
         }
         if !driverBusy {
-            UIApplication.shared.isIdleTimerDisabled = false
+            AppModel.shared.keepAwake.release("GPU bring-up")
             if backgroundTask != .invalid {
                 UIApplication.shared.endBackgroundTask(backgroundTask)
                 backgroundTask = .invalid

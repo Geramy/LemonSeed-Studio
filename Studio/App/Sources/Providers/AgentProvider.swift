@@ -78,6 +78,9 @@ final class StudioAgentProvider: AgentProviding {
         return model
     }
 
+    /// Whether any chat is generating.
+    var isGenerating: Bool { models.values.contains(where: \.isRunning) }
+
     func makePanel(context: any WorkspaceContext) -> AnyView {
         AnyView(StudioAgentPanel(provider: self, root: context.rootURL, name: context.displayName))
     }

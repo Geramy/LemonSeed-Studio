@@ -32,8 +32,12 @@ final class StudioTelemetryProvider: TelemetryProviding {
     }
 
     var engineState: EngineState {
+        let power = AppModel.shared.enginePower
+        if power.recovering { return .initializing("GPU was reset by sleep; reloading model") }
         switch engine.phase {
         case .ready:
+            if power.state == .lost { return .faulted("GPU lost to sleep") }
+            if power.state.isPaused { return .initializing("GPU \(power.state.rawValue)") }
             return .ready(engine.launch?.modelName ?? "engine running")
         case .loading:
             return .initializing(engine.statusLine)

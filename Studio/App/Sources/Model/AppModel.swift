@@ -27,6 +27,8 @@ final class AppModel {
     let gpu: GPUCoordinator
     /// Keeps the iPad awake while the GPU is in use.
     let keepAwake = KeepAwake()
+    /// GPU low power in the background, and recovery from a device lost to sleep.
+    let enginePower = EnginePower()
     /// The GPU sidebar's page ("Monitor", "Engine", "Diagnostics").
     var gpuPage = UserDefaults.standard.string(forKey: "StudioGPUPage") ?? "Engine"
     /// The model whose load settings sheet is open.
@@ -71,6 +73,7 @@ final class AppModel {
         DevServer.shared.startIfEnabled()
         #endif
         keepAwake.start(app: self)
+        enginePower.start(engine: engine, gpu: gpu)
     }
 
     /// The density views lay out with (never `.automatic`).

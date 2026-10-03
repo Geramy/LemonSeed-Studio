@@ -6,6 +6,9 @@ import LSEEstimate
 #if canImport(LSESessions)
 import LSESessions
 #endif
+#if canImport(LSEPower)
+import LSEPower
+#endif
 
 /// The Lemon Seed Engine running inside this process.
 ///
@@ -165,6 +168,78 @@ public final class LSEEngine: @unchecked Sendable {
         #else
         return false
         #endif
+    }
+
+    // MARK: Device power
+
+    /// The GPU's power state as the engine reports it (lse_status "power").
+    public enum PowerState: String, Sendable {
+        case active, suspending, suspended, resuming, lost, unknown
+    }
+
+    /// Whether the linked engine can pause the GPU for the background and
+    /// report a device lost to sleep (LSE feature/power-aware).
+    public static var supportsPower: Bool {
+        #if canImport(LSEPower)
+        true
+        #else
+        false
+        #endif
+    }
+
+    public struct PowerResult: Sendable {
+        public var state: PowerState
+        public var json: [String: Any]?
+        public var error: String?
+        public init(state: PowerState, json: [String: Any]?, error: String?) {
+            self.state = state
+            self.json = json
+            self.error = error
+        }
+    }
+
+    private static func powerResult(_ result: Int32, _ json: UnsafeMutablePointer<CChar>?,
+                                    _ err: UnsafeMutablePointer<CChar>?) -> PowerResult {
+        defer { lse_free(json); lse_free(err) }
+        var object: [String: Any]?
+        if let json {
+            object = (try? JSONSerialization.jsonObject(with: Data(bytes: json, count: strlen(json)))) as? [String: Any]
+        }
+        let state = PowerState(rawValue: object?["state"] as? String ?? "") ?? .unknown
+        return PowerResult(state: state, json: object, error: err.map { String(cString: $0) })
+    }
+
+    /// Before the app stops using the GPU (background): waits up to
+    /// `drainMilliseconds` for submitted work, then pauses every queue.
+    /// Device memory is kept; requests meanwhile answer 503 (retryable).
+    public func prepareLowPower(drainMilliseconds: UInt32) -> PowerResult {
+        #if canImport(LSEPower)
+        var json: UnsafeMutablePointer<CChar>?
+        var err: UnsafeMutablePointer<CChar>?
+        let r = lse_power_prepare(handle, drainMilliseconds, &json, &err)
+        return Self.powerResult(Int32(bitPattern: r.rawValue), json, err)
+        #else
+        return PowerResult(state: .unknown, json: nil, error: "this LSE build has no power control")
+        #endif
+    }
+
+    /// When the app is active again. `.lost` when the device's memory went
+    /// with a sleep: close the engine and open it again.
+    public func resumeFromLowPower() -> PowerResult {
+        #if canImport(LSEPower)
+        var json: UnsafeMutablePointer<CChar>?
+        var err: UnsafeMutablePointer<CChar>?
+        let r = lse_power_resume(handle, &json, &err)
+        return Self.powerResult(Int32(bitPattern: r.rawValue), json, err)
+        #else
+        return PowerResult(state: .unknown, json: nil, error: "this LSE build has no power control")
+        #endif
+    }
+
+    /// The power state from lse_status.
+    public func powerState() -> PowerState {
+        let power = status()["power"] as? [String: Any]
+        return PowerState(rawValue: power?["state"] as? String ?? "") ?? .unknown
     }
 
     // MARK: Model info and memory estimates

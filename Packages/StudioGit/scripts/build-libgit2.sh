@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Build libgit2 for iPadOS from pinned source releases and package it as
-# Clibgit2.xcframework (iOS device arm64 + iOS simulator arm64).
+# Clibgit2.xcframework: iOS device arm64, iOS simulator arm64, and macOS arm64
+# (the macOS slice is for running the test suites with `swift test`).
 #
 #   Packages/StudioGit/scripts/build-libgit2.sh            build (cached)
 #   Packages/StudioGit/scripts/build-libgit2.sh clean      remove build/
@@ -28,7 +29,8 @@
 # private, so another OpenSSL elsewhere in the app cannot collide with it.
 #
 # Environment:
-#   IOS_MIN      deployment target (default 26.2)
+#   IOS_MIN      iOS deployment target (default 26.2)
+#   MACOS_MIN    macOS deployment target of the host slice (default 15.0)
 #   JOBS         parallel jobs (default: CPU count)
 #   SOURCE_CACHE where tarballs are kept (default build/src-cache)
 set -euo pipefail
@@ -49,11 +51,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 PKG="$(cd "$HERE/.." && pwd)"
 BUILD="$PKG/build"
 : "${IOS_MIN:=26.2}"
+: "${MACOS_MIN:=15.0}"
 : "${JOBS:=$(sysctl -n hw.ncpu)}"
 : "${SOURCE_CACHE:=$BUILD/src-cache}"
 XCFRAMEWORK="$BUILD/Clibgit2.xcframework"
 STAMP="$BUILD/.clibgit2-stamp"
-STAMP_VALUE="libgit2-$LIBGIT2_VERSION libssh2-$LIBSSH2_VERSION openssl-$OPENSSL_VERSION ios-$IOS_MIN script-$(shasum -a 256 "$0" | cut -c1-16)"
+STAMP_VALUE="libgit2-$LIBGIT2_VERSION libssh2-$LIBSSH2_VERSION openssl-$OPENSSL_VERSION ios-$IOS_MIN macos-$MACOS_MIN script-$(shasum -a 256 "$0" | cut -c1-16)"
 
 if [[ "${1:-}" == clean ]]; then
   rm -rf "$BUILD"
@@ -94,16 +97,22 @@ fetch libgit2 "$LIBGIT2_URL" "$LIBGIT2_SHA256"
 fetch libssh2 "$LIBSSH2_URL" "$LIBSSH2_SHA256"
 fetch openssl "$OPENSSL_URL" "$OPENSSL_SHA256"
 
-build_platform() { # sdk  (iphoneos | iphonesimulator)
+build_platform() { # sdk  (iphoneos | iphonesimulator | macosx)
   local sdk="$1"
   local root="$BUILD/$sdk"
   local prefix="$root/prefix"
   local sysroot min_flag target cmake_sysroot
   sysroot="$(xcrun --sdk "$sdk" --show-sdk-path)"
+  local system=iOS deployment="$IOS_MIN" ld_platform=ios
   if [[ "$sdk" == iphoneos ]]; then
     min_flag="-mios-version-min=$IOS_MIN"
     target="arm64-apple-ios$IOS_MIN"
+  elif [[ "$sdk" == macosx ]]; then
+    min_flag="-mmacosx-version-min=$MACOS_MIN"
+    target="arm64-apple-macos$MACOS_MIN"
+    system=Darwin deployment="$MACOS_MIN" ld_platform=macos
   else
+    ld_platform=ios-simulator
     min_flag="-mios-simulator-version-min=$IOS_MIN"
     target="arm64-apple-ios$IOS_MIN-simulator"
   fi
@@ -116,6 +125,7 @@ build_platform() { # sdk  (iphoneos | iphonesimulator)
   unpack openssl "$root/openssl"
   local ossl_target=ios64-xcrun
   [[ "$sdk" == iphonesimulator ]] && ossl_target=iossimulator-arm64-xcrun
+  [[ "$sdk" == macosx ]] && ossl_target=darwin64-arm64-cc
   (
     cd "$root/openssl"
     ./Configure "$ossl_target" \
@@ -129,10 +139,10 @@ build_platform() { # sdk  (iphoneos | iphonesimulator)
 
   local cmake_common=(
     -G Ninja
-    -DCMAKE_SYSTEM_NAME=iOS
+    -DCMAKE_SYSTEM_NAME="$system"
     -DCMAKE_OSX_SYSROOT="$cmake_sysroot"
     -DCMAKE_OSX_ARCHITECTURES=arm64
-    -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_MIN"
+    -DCMAKE_OSX_DEPLOYMENT_TARGET="$deployment"
     -DCMAKE_C_FLAGS="-target $target"
     -Wno-dev
     -DCMAKE_BUILD_TYPE=Release
@@ -204,7 +214,7 @@ build_platform() { # sdk  (iphoneos | iphonesimulator)
     | grep ' external ' | grep -v 'private external' \
     | awk '{print $NF}' | sort -u >"$exports"
   xcrun --sdk "$sdk" ld -r -arch arm64 \
-    -platform_version "$([[ $sdk == iphoneos ]] && echo ios || echo ios-simulator)" "$IOS_MIN" "$IOS_MIN" \
+    -platform_version "$ld_platform" "$deployment" "$deployment" \
     -exported_symbols_list "$exports" \
     -o "$root/Clibgit2.o" \
     -all_load "$prefix/lib/libgit2.a" "$prefix/lib/libssh2.a" "$prefix/lib/libssl.a" "$prefix/lib/libcrypto.a"
@@ -217,6 +227,8 @@ build_platform() { # sdk  (iphoneos | iphonesimulator)
 
 build_platform iphoneos
 build_platform iphonesimulator
+# A macOS slice lets `swift test` run the suites on the Mac.
+build_platform macosx
 
 # Headers + module map ------------------------------------------------------
 log "headers"
@@ -256,6 +268,7 @@ rm -rf "$XCFRAMEWORK"
 xcodebuild -create-xcframework \
   -library "$BUILD/iphoneos/lib/libClibgit2.a" -headers "$HEADERS" \
   -library "$BUILD/iphonesimulator/lib/libClibgit2.a" -headers "$HEADERS" \
+  -library "$BUILD/macosx/lib/libClibgit2.a" -headers "$HEADERS" \
   -output "$XCFRAMEWORK" >/dev/null
 
 # License texts for the acknowledgements screen.

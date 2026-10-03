@@ -9,6 +9,9 @@
 //
 // Clibgit2.xcframework is built from source by scripts/build-libgit2.sh and
 // is not committed. Run that script once before building this package.
+//
+// The product targets iPadOS; the macOS platform exists so the test suites
+// run on the Mac with `swift test` (scripts/test.sh).
 
 import PackageDescription
 
@@ -19,7 +22,7 @@ let swiftSettings: [SwiftSetting] = [
 
 let package = Package(
     name: "StudioGit",
-    platforms: [.iOS("26.2")],
+    platforms: [.iOS("26.2"), .macOS(.v15)],
     products: [
         .library(name: "GitKit", targets: ["GitKit"]),
         .library(name: "Forge", targets: ["Forge"]),

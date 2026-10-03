@@ -9,8 +9,8 @@
 # The server runs as the current user on port $PORT (default 2222) with a
 # fresh host key, no passwords, and an authorized_keys file the tests write
 # their freshly generated public keys into. It serves a bare repository at
-# $DIR/server.git. The simulator shares the host's file system and loopback,
-# so tests reach both directly.
+# $DIR/server.git. The tests run on the Mac (`swift test`); with
+# `scripts/test.sh --ios` the simulator reaches the same loopback and files.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 : "${PORT:=2222}"
@@ -47,7 +47,7 @@ if [[ "${1:-test}" == serve ]]; then
   echo "export STUDIOGIT_SSH_TEST_DIR=$DIR STUDIOGIT_SSH_TEST_PORT=$PORT STUDIOGIT_SSH_TEST_USER=$(whoami)"
   while kill -0 "$(cat "$DIR/sshd.pid")" 2>/dev/null; do sleep 1; done
 else
-  "$HERE/scripts/test.sh" GitKitTests/SSHTransportTests || { tail -30 "$DIR/sshd.log"; exit 1; }
+  "$HERE/scripts/test.sh" SSHTransportTests || { tail -30 "$DIR/sshd.log"; exit 1; }
   # Cross-check GitKit's sshsig commit signatures with Git and OpenSSH.
   for repo in "$DIR"/signed-*; do
     git -C "$repo" -c gpg.format=ssh -c gpg.ssh.allowedSignersFile="$repo/allowed_signers" verify-commit HEAD

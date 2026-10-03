@@ -91,6 +91,13 @@ case "${1:-build}" in
     if [[ "$1" != device ]]; then
       [[ "$PROVISIONING" != unsigned ]] || { echo "an unsigned build cannot be installed" >&2; exit 2; }
       : "${DEVICE:?set DEVICE to the CoreDevice identifier of the iPad}"
+      # Replacing the app kills its process; with an engine open that can
+      # leave the GPU driver quarantined. Close the running app's engine
+      # first through the debug remote control, when it answers.
+      if STUDIO_DEVICE="$DEVICE" /usr/bin/timeout 20 "$HERE/scripts/studioctl" engine stop >/dev/null 2>&1; then
+        echo "stopped the running app's engine"
+        sleep 3
+      fi
       xcrun devicectl device install app --device "$DEVICE" "$app"
       if [[ "$1" == launch ]]; then
         xcrun devicectl device process launch --device "$DEVICE" --terminate-existing "$BUNDLE_ID" "${@:2}"

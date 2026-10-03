@@ -334,6 +334,14 @@ def cmd_driver(cl, a):
         print(report)
 
 
+def cmd_probe(cl, a):
+    print(cl.call("POST", "/driver/probe", {}, timeout=60)["report"])
+
+
+def cmd_telemetry(cl, a):
+    out(cl.call("GET", "/gpu/telemetry"))
+
+
 def cmd_record_fixture(cl, a):
     r = cl.call("POST", "/fixtures/record", {"name": a.name, "seconds": a.seconds, "description": a.description},
                 timeout=a.seconds + 120)
@@ -407,6 +415,8 @@ def main():
     s = sub.add_parser("logs"); s.add_argument("--since", type=int, default=0); s.add_argument("--follow", "-f", action="store_true")
     s.set_defaults(fn=cmd_logs)
     s = sub.add_parser("driver"); s.add_argument("--report", action="store_true"); s.set_defaults(fn=cmd_driver)
+    sub.add_parser("probe", help="the Diagnostics probe (engine stopped)").set_defaults(fn=cmd_probe)
+    sub.add_parser("telemetry").set_defaults(fn=cmd_telemetry)
     s = sub.add_parser("record-fixture"); s.add_argument("name"); s.add_argument("--seconds", type=float, default=60)
     s.add_argument("--description", default=""); s.add_argument("--out"); s.set_defaults(fn=cmd_record_fixture)
     s = sub.add_parser("get", help="a file under the app's Documents"); s.add_argument("path"); s.add_argument("out")

@@ -259,6 +259,26 @@ final class DevServer {
             return .json(["lines": lines.map { ["seq": $0.seq, "time": f.string(from: $0.time), "source": $0.source, "text": $0.text] }])
         case ("GET", "/driver/status"):
             return .json(driverStatus())
+        case ("POST", "/driver/probe"):
+            #if LEMONSEED_DEVICE
+            switch app.engine.phase {
+            case .loading, .ready, .stopping:
+                return .error("the engine holds the GPU; stop it first", status: 409)
+            default: break
+            }
+            let probe = ProbeModel.shared
+            probe.probe()
+            for _ in 0..<100 where probe.probing { try? await Task.sleep(for: .milliseconds(200)) }
+            return .json(["report": probe.report])
+            #else
+            return .error("no driver in this build", status: 409)
+            #endif
+        case ("GET", "/gpu/telemetry"):
+            guard let telemetry = app.services.telemetry as? StudioTelemetryProvider else { return .error("no telemetry") }
+            let state = telemetry.service.state
+            return .json(["availability": "\(state.availability)", "device": state.deviceName ?? NSNull(),
+                          "vramUsedGiB": state.summary.vram?.used ?? NSNull(), "vramTotalGiB": state.summary.vram?.total ?? NSNull(),
+                          "load": state.summary.load ?? NSNull(), "source": state.sourceName])
         case ("POST", "/fixtures/record"):
             guard app.driver.service != nil else { return .error("the driver is not running", status: 409) }
             let name = body["name"] as? String ?? "r9700-idle"

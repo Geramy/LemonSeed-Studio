@@ -1,0 +1,54 @@
+# AgentDemo: the LemonSeed agent on a sample workspace, for the iPad simulator.
+#
+#   xcodegen generate && open AgentDemo.xcodeproj
+#
+# Launch arguments (Scheme > Run > Arguments, or `simctl launch … -arg value`):
+#   -endpoint URL        OpenAI-compatible base URL (default http://127.0.0.1:8080/v1)
+#   -model NAME          model id (default qwen-q4)
+#   -scripted YES        replay a built-in script instead of calling an engine
+#   -autoPrompt TEXT     send TEXT on launch
+#   -mode NAME           readOnly | ask | review | autopilot
+#   -screen NAME         chat | sessions | inline (initial surface, for screenshots)
+#   -resetWorkspace YES  restore the sample workspace before launching
+name: AgentDemo
+
+options:
+  deploymentTarget:
+    iOS: "26.2"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+packages:
+  StudioAgent:
+    path: ../..
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGN_IDENTITY: ""
+
+targets:
+  AgentDemo:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.2"
+    sources:
+      - path: App
+      - path: SampleWorkspace
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: StudioAgent
+        product: StudioAgent
+      - package: StudioAgent
+        product: StudioAgentUI
+    settings:
+      base:
+        PRODUCT_NAME: AgentDemo
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.LemonSeedStudio.AgentDemo
+        TARGETED_DEVICE_FAMILY: "2"
+        INFOPLIST_FILE: App/Info.plist
+        SUPPORTS_MACCATALYST: NO

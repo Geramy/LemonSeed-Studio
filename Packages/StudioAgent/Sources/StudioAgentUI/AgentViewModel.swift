@@ -1,0 +1,444 @@
+import Foundation
+import Observation
+import StudioAgent
+
+/// One row of the chat transcript.
+public struct TranscriptItem: Identifiable, Sendable {
+    public enum Kind: Sendable {
+        case user(text: String, entryID: String?)
+        case assistant(AssistantBlock)
+        case tool(ToolCard)
+        case notice(String, isError: Bool)
+        case compaction(summary: String)
+        case changes(ChangeSet)
+    }
+
+    public var id: String
+    public var kind: Kind
+}
+
+/// A streaming or finished assistant message.
+public struct AssistantBlock: Sendable {
+    public var text = ""
+    public var reasoning = ""
+    public var isStreaming = true
+    public var reasoningStarted: Date?
+    public var reasoningEnded: Date?
+    public var stopReason: StopReason?
+    public var errorMessage: String?
+
+    public var reasoningSeconds: Int? {
+        guard let s = reasoningStarted, let e = reasoningEnded else { return nil }
+        return max(1, Int(e.timeIntervalSince(s).rounded()))
+    }
+}
+
+/// A tool call with its live output and result.
+public struct ToolCard: Sendable {
+    public enum Status: Sendable, Equatable { case running, awaitingApproval, done, failed }
+    public var callID: String
+    public var name: String
+    public var arguments: JSONValue
+    public var effect: ToolEffect?
+    public var status: Status
+    public var liveOutput = ""
+    public var result: ToolOutput?
+}
+
+/// Where the model is and how it is doing, shown in the panel header.
+public enum EngineStatus: Sendable, Equatable {
+    case unknown
+    case online(model: String, detail: String?)
+    case offline(String)
+    /// A scripted client (previews, offline demo). Never labeled as the engine.
+    case scripted
+}
+
+/// Generation statistics from LSE's timings. Nil fields render as "n/a".
+public struct AgentStats: Sendable, Equatable {
+    public var lastTimings: GenerationTimings?
+    public var contextTokens = 0
+    public var contextWindow = 32768
+    public var turns = 0
+}
+
+/// Drives the agent views: owns the `Agent`, folds its events into a
+/// transcript, and bridges permission prompts and reviews to the UI.
+@MainActor @Observable
+public final class AgentViewModel {
+    public private(set) var items: [TranscriptItem] = []
+    public var composer = ""
+    public private(set) var isRunning = false
+    public private(set) var stats = AgentStats()
+    public private(set) var engine: EngineStatus = .unknown
+    public private(set) var sessions: [SessionSummary] = []
+    public private(set) var sessionTitle = "New session"
+    public private(set) var pendingApproval: PermissionRequest?
+    /// Set to present the review sheet.
+    public var review: ChangeSet?
+    /// Set to present the session list.
+    public var isShowingSessions = false
+    public var mode: PermissionMode {
+        didSet { if let agent { Task { await agent.setPermissionMode(mode) } } }
+    }
+
+    public let workspace: any AgentWorkspace
+    public private(set) var configuration: AgentConfiguration
+    private let client: any LLMClient
+    private let shell: any ShellProviding
+    private let isScripted: Bool
+    private var agent: Agent?
+    private var runTask: Task<Void, Never>?
+    private var approvalContinuation: CheckedContinuation<PermissionResponse, Never>?
+    private var index: [String: Int] = [:]
+    private var currentAssistant: String?
+
+    public init(workspace: any AgentWorkspace, client: any LLMClient, configuration: AgentConfiguration = .init(),
+                shell: any ShellProviding = InProcessShell()) {
+        self.workspace = workspace
+        self.client = client
+        self.configuration = configuration
+        self.shell = shell
+        self.mode = configuration.permissionMode
+        self.isScripted = client is ScriptedLLMClient
+        stats.contextWindow = configuration.endpoint.contextWindow
+        if isScripted { engine = .scripted }
+    }
+
+    // MARK: Engine and sessions
+
+    public func checkEngine() async {
+        guard !isScripted else { engine = .scripted; return }
+        guard let http = client as? OpenAICompatibleClient else { engine = .online(model: configuration.endpoint.model, detail: nil); return }
+        if let health = await http.health(), health.ok {
+            let models = (try? await http.models()) ?? []
+            let model = models.contains(configuration.endpoint.model) ? configuration.endpoint.model : (models.first ?? configuration.endpoint.model)
+            engine = .online(model: model, detail: health.speculation)
+        } else {
+            engine = .offline("No engine at \(configuration.endpoint.baseURL.host() ?? "?"):\(configuration.endpoint.baseURL.port.map(String.init) ?? "")")
+        }
+    }
+
+    public func refreshSessions() {
+        sessions = SessionStore(workspace: workspace).list()
+    }
+
+    private func approver() -> any PermissionApprover {
+        ApprovalBridge { [weak self] request in
+            guard let self else { return .deny(reason: nil) }
+            return await self.ask(request)
+        }
+    }
+
+    /// Starts a fresh session (the next message creates it).
+    public func newSession() {
+        stop()
+        agent = nil
+        items = []
+        index = [:]
+        sessionTitle = "New session"
+        stats = AgentStats(contextWindow: configuration.endpoint.contextWindow)
+    }
+
+    public func open(_ summary: SessionSummary) {
+        stop()
+        do {
+            let a = try Agent.resume(url: summary.url, workspace: workspace, client: client, shell: shell,
+                                     approver: approver(), configuration: configuration)
+            agent = a
+            sessionTitle = summary.title
+            Task {
+                await a.setPermissionMode(mode)
+                let doc = await a.document
+                self.items = Self.transcript(from: doc)
+                self.reindex()
+            }
+        } catch {
+            append(.notice("Could not open the session: \(error.localizedDescription)", isError: true))
+        }
+    }
+
+    public func deleteSession(_ summary: SessionSummary) {
+        try? SessionStore(workspace: workspace).delete(summary.url)
+        refreshSessions()
+    }
+
+    // MARK: Sending
+
+    public var canSend: Bool { !composer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    public func send() {
+        let text = composer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        composer = ""
+        send(text)
+    }
+
+    public func send(_ text: String) {
+        if isRunning, let agent {
+            Task { await agent.steer(text) }
+            append(.notice("Steering: the agent will read this after its current step.", isError: false))
+            return
+        }
+        do {
+            let a = try agent ?? makeAgent(firstMessage: text)
+            agent = a
+            isRunning = true
+            runTask = Task {
+                for await event in a.prompt(text) { self.apply(event) }
+                self.isRunning = false
+                self.runTask = nil
+                self.refreshSessions()
+            }
+        } catch {
+            append(.notice("Could not start a session: \(error.localizedDescription)", isError: true))
+        }
+    }
+
+    private func makeAgent(firstMessage: String) throws -> Agent {
+        var config = configuration
+        config.permissionMode = mode
+        let title = String(firstMessage.split(separator: "\n").first ?? "").prefix(60)
+        sessionTitle = String(title)
+        return try Agent.start(workspace: workspace, client: client, shell: shell, approver: approver(),
+                               configuration: config, name: String(title))
+    }
+
+    /// Stops the run at the next token.
+    public func stop() {
+        if let c = approvalContinuation {
+            approvalContinuation = nil
+            pendingApproval = nil
+            c.resume(returning: .deny(reason: "The user stopped the agent."))
+        }
+        if let agent { Task { await agent.abort() } }
+    }
+
+    // MARK: Permission prompts
+
+    private func ask(_ request: PermissionRequest) async -> PermissionResponse {
+        await withCheckedContinuation { c in
+            approvalContinuation?.resume(returning: .deny(reason: nil))
+            approvalContinuation = c
+            pendingApproval = request
+            updateTool(request.callID) { $0.status = .awaitingApproval }
+        }
+    }
+
+    public func respond(_ response: PermissionResponse) {
+        guard let c = approvalContinuation, let request = pendingApproval else { return }
+        approvalContinuation = nil
+        pendingApproval = nil
+        updateTool(request.callID) { $0.status = .running }
+        c.resume(returning: response)
+    }
+
+    // MARK: Review
+
+    public func openLatestReview() {
+        guard let agent else { return }
+        Task { self.review = await agent.latestChangeSet() }
+    }
+
+    public func applyReview(_ changes: ChangeSet, decisions: ChangeSet.Decisions) {
+        guard let agent else { return }
+        Task {
+            do {
+                try await agent.applyReview(changes, decisions: decisions)
+                let rejected = decisions.rejected.values.reduce(0) { $0 + $1.count }
+                append(.notice(rejected == 0 ? "Review applied: all changes kept."
+                               : "Review applied: \(rejected) hunk\(rejected == 1 ? "" : "s") reverted.", isError: false))
+            } catch {
+                append(.notice("Could not apply the review: \(error.localizedDescription)", isError: true))
+            }
+            review = nil
+        }
+    }
+
+    /// Rewinds to before a user message, restoring files; returns its text
+    /// to the composer.
+    public func rewind(to item: TranscriptItem) {
+        guard !isRunning, let agent, case .user(_, let entryID?) = item.kind else { return }
+        Task {
+            do {
+                if let text = try await agent.rewind(toUserEntry: entryID) {
+                    let doc = await agent.document
+                    items = Self.transcript(from: doc)
+                    reindex()
+                    composer = text
+                }
+            } catch {
+                append(.notice("Could not rewind: \(error.localizedDescription)", isError: true))
+            }
+        }
+    }
+
+    // MARK: Events
+
+    func apply(_ event: AgentEvent) {
+        switch event {
+        case .agentStart:
+            break
+        case .userMessage(let text, let entryID):
+            append(.user(text: text, entryID: entryID))
+        case .turnStart:
+            break
+        case .assistantStart:
+            let id = "a-\(UUID().uuidString)"
+            currentAssistant = id
+            items.append(TranscriptItem(id: id, kind: .assistant(AssistantBlock())))
+            index[id] = items.count - 1
+        case .reasoningDelta(let s):
+            updateAssistant {
+                if $0.reasoningStarted == nil { $0.reasoningStarted = Date() }
+                $0.reasoning += s
+            }
+        case .textDelta(let s):
+            updateAssistant {
+                if $0.reasoningStarted != nil, $0.reasoningEnded == nil { $0.reasoningEnded = Date() }
+                $0.text += s
+            }
+        case .toolCallStreamed:
+            break
+        case .assistantEnd(let m, _):
+            updateAssistant {
+                if $0.reasoningStarted != nil, $0.reasoningEnded == nil { $0.reasoningEnded = Date() }
+                $0.isStreaming = false
+                $0.stopReason = m.stopReason
+                $0.errorMessage = m.errorMessage
+                $0.text = m.text
+            }
+            if let id = currentAssistant, let i = index[id], case .assistant(let b) = items[i].kind,
+               b.text.isEmpty, b.reasoning.isEmpty, b.errorMessage == nil {
+                items.remove(at: i)
+                reindex()
+            }
+            currentAssistant = nil
+        case .permissionRequested:
+            break
+        case .toolExecutionStart(let callID, let name, let arguments, let effect):
+            if index[callID] == nil {
+                // The approver can be asked before this event is delivered.
+                let status: ToolCard.Status = pendingApproval?.callID == callID ? .awaitingApproval : .running
+                items.append(TranscriptItem(id: callID, kind: .tool(ToolCard(callID: callID, name: name, arguments: arguments,
+                                                                              effect: effect, status: status))))
+                index[callID] = items.count - 1
+            }
+        case .toolExecutionUpdate(let callID, let output):
+            updateTool(callID) {
+                $0.liveOutput += output
+                if $0.liveOutput.utf8.count > 64_000 { $0.liveOutput = String($0.liveOutput.suffix(48_000)) }
+            }
+        case .toolExecutionEnd(let callID, let name, let output, _):
+            if index[callID] == nil {
+                items.append(TranscriptItem(id: callID, kind: .tool(ToolCard(callID: callID, name: name, arguments: [:],
+                                                                              effect: nil, status: .running))))
+                index[callID] = items.count - 1
+            }
+            updateTool(callID) {
+                $0.result = output
+                $0.status = output.isError ? .failed : .done
+            }
+        case .turnEnd(_, let timings, _, let contextTokens):
+            stats.turns += 1
+            if let timings { stats.lastTimings = timings }
+            stats.contextTokens = contextTokens
+        case .compactionStart:
+            append(.notice("Compacting the conversation to fit the context window…", isError: false))
+        case .compactionEnd(let summary):
+            append(.compaction(summary: summary))
+        case .changesReady(let changes):
+            append(.changes(changes))
+            if mode == .review { review = changes }
+        case .notice(let text):
+            append(.notice(text, isError: false))
+        case .agentEnd(let reason):
+            switch reason {
+            case .completed: break
+            case .aborted: append(.notice("Stopped.", isError: false))
+            case .maxTurns(let n): append(.notice("Stopped after \(n) turns.", isError: true))
+            case .error(let message): append(.notice(message, isError: true))
+            }
+            updateAllRunningTools()
+        }
+    }
+
+    private func append(_ kind: TranscriptItem.Kind) {
+        let id = UUID().uuidString
+        items.append(TranscriptItem(id: id, kind: kind))
+        index[id] = items.count - 1
+    }
+
+    private func reindex() {
+        index = Dictionary(items.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    private func updateAssistant(_ body: (inout AssistantBlock) -> Void) {
+        guard let id = currentAssistant, let i = index[id], case .assistant(var b) = items[i].kind else { return }
+        body(&b)
+        items[i].kind = .assistant(b)
+    }
+
+    private func updateTool(_ callID: String, _ body: (inout ToolCard) -> Void) {
+        guard let i = index[callID], case .tool(var card) = items[i].kind else { return }
+        body(&card)
+        items[i].kind = .tool(card)
+    }
+
+    private func updateAllRunningTools() {
+        for i in items.indices {
+            if case .tool(var card) = items[i].kind, card.status == .running || card.status == .awaitingApproval {
+                card.status = .failed
+                items[i].kind = .tool(card)
+            }
+        }
+    }
+
+    /// Rebuilds a transcript from a stored session.
+    static func transcript(from doc: SessionDocument) -> [TranscriptItem] {
+        var out: [TranscriptItem] = []
+        var cards: [String: Int] = [:]
+        for (entryID, message) in doc.contextEntries() {
+            switch message {
+            case .user(let u):
+                out.append(TranscriptItem(id: entryID, kind: .user(text: u.text, entryID: entryID)))
+            case .assistant(let a):
+                if !a.text.isEmpty || !a.thinking.isEmpty || a.errorMessage != nil {
+                    var b = AssistantBlock(text: a.text, reasoning: a.thinking, isStreaming: false)
+                    b.stopReason = a.stopReason
+                    b.errorMessage = a.errorMessage
+                    out.append(TranscriptItem(id: entryID, kind: .assistant(b)))
+                }
+                for call in a.toolCalls {
+                    cards[call.id] = out.count
+                    out.append(TranscriptItem(id: call.id, kind: .tool(ToolCard(
+                        callID: call.id, name: call.name, arguments: call.parsedArguments ?? [:], effect: nil, status: .failed))))
+                }
+            case .toolResult(let r):
+                if let i = cards[r.toolCallId], case .tool(var card) = out[i].kind {
+                    card.result = ToolOutput(text: r.text, isError: r.isError, details: r.details)
+                    card.status = r.isError ? .failed : .done
+                    out[i].kind = .tool(card)
+                }
+            case .compactionSummary(let s, _, _):
+                out.append(TranscriptItem(id: entryID, kind: .compaction(summary: s)))
+            default:
+                continue
+            }
+        }
+        return out
+    }
+}
+
+/// Forwards permission requests to the main actor.
+final class ApprovalBridge: PermissionApprover {
+    private let handler: @MainActor @Sendable (PermissionRequest) async -> PermissionResponse
+
+    init(_ handler: @escaping @MainActor @Sendable (PermissionRequest) async -> PermissionResponse) {
+        self.handler = handler
+    }
+
+    func requestPermission(_ request: PermissionRequest) async -> PermissionResponse {
+        await handler(request)
+    }
+}

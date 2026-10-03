@@ -73,7 +73,10 @@ final class AppModel {
         DevServer.shared.startIfEnabled()
         #endif
         keepAwake.start(app: self)
-        enginePower.start(engine: engine, gpu: gpu)
+        let services = self.services
+        enginePower.start(engine: engine, gpu: gpu, telemetry: { active in
+            (services.telemetry as? StudioTelemetryProvider)?.service.setForeground(active)
+        })
     }
 
     /// The density views lay out with (never `.automatic`).

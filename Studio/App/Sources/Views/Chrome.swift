@@ -286,7 +286,7 @@ struct StatusBar: View {
     /// tracks it.
     @ViewBuilder private var powerItem: some View {
         let power = app.enginePower
-        if power.recovering || power.state != .unknown {
+        if power.recovering || power.disconnected || power.state != .unknown {
             item(nil, symbol: nil, id: "status.power") { controller.show(.gpu) } label: {
                 HStack(spacing: Space.xs) {
                     Image(systemName: powerSymbol(power))
@@ -300,6 +300,7 @@ struct StatusBar: View {
     }
 
     private func powerText(_ power: EnginePower) -> String {
+        if power.disconnected { return "Disconnected" }
         if power.recovering { return "GPU reset, reloading" }
         switch power.state {
         case .active: return "Active"
@@ -312,6 +313,7 @@ struct StatusBar: View {
     }
 
     private func powerSymbol(_ power: EnginePower) -> String {
+        if power.disconnected { return "cable.connector.slash" }
         if power.recovering { return "arrow.clockwise" }
         switch power.state {
         case .active: return "bolt.fill"
@@ -323,7 +325,7 @@ struct StatusBar: View {
     }
 
     private func powerColor(_ power: EnginePower) -> Color {
-        if power.recovering { return theme.palette.warning.color }
+        if power.recovering || power.disconnected { return theme.palette.warning.color }
         switch power.state {
         case .active: return theme.palette.success.color
         case .suspending, .suspended, .resuming: return theme.palette.info.color
@@ -364,6 +366,7 @@ struct StatusBar: View {
             return "GPU: ready"
         case .quarantined: return "GPU: quarantined"
         case .faulted: return "GPU: fault"
+        case .disconnected: return "GPU: disconnected"
         }
     }
 
@@ -372,6 +375,7 @@ struct StatusBar: View {
         case .ready: theme.palette.success.color
         case .deviceMatched, .initializing: theme.palette.warning.color
         case .quarantined, .faulted: theme.palette.error.color
+        case .disconnected: theme.palette.warning.color
         default: theme.palette.textTertiary.color
         }
     }

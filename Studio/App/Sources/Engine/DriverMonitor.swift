@@ -260,6 +260,8 @@ struct EngineStatusView: View {
             return ("exclamationmark.shield.fill", p.error.color, "GPU quarantined", cause)
         case .faulted(let cause):
             return ("xmark.octagon.fill", p.error.color, "GPU fault", cause)
+        case .disconnected(let detail):
+            return ("cable.connector.slash", p.warning.color, "GPU disconnected", detail)
         }
     }
 

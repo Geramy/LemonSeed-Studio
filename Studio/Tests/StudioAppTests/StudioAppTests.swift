@@ -220,8 +220,13 @@ final class DriverMonitorTests: XCTestCase {
         let monitor = DriverMonitor()
         XCTAssertTrue(monitor.isSimulator)
         XCTAssertNil(monitor.embeddedDext, "simulator builds do not embed the dext")
-        XCTAssertNil(monitor.service)
-        XCTAssertEqual(monitor.engineState, .unknown)
+        if let service = monitor.service {
+            // The simulator shares the Mac's I/O Registry: a Mac with a GPU on
+            // its own MacLinuxGPU driver shows that service, never this app's.
+            XCTAssertNotEqual(service.userServerName, DriverMonitor.dextBundleID)
+        } else {
+            XCTAssertEqual(monitor.engineState, .unknown)
+        }
         XCTAssertNotNil(monitor.lastChecked)
     }
 }

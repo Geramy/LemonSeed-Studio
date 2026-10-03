@@ -177,6 +177,8 @@ public enum EngineState: Hashable, Sendable {
     case ready(String)
     case quarantined(String)
     case faulted(String)
+    /// The GPU was unplugged (or its driver service went away) while in use.
+    case disconnected(String)
 
     public var isReady: Bool {
         if case .ready = self { return true }

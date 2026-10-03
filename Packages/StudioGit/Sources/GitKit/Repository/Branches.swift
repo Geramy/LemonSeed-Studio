@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 import Clibgit2
 
 public struct Branch: Sendable, Hashable, Identifiable, Codable {

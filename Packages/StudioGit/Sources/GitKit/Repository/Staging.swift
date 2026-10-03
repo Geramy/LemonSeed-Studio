@@ -32,15 +32,15 @@ extension GitRepository {
     }
 
     /// Stages every change in the working tree (`git add -A`).
+    ///
+    /// Driven by status rather than `git_index_add_all`, which cannot stage
+    /// submodule gitlinks.
     public func stageAll() throws {
-        let index = try openIndex()
-        defer { git_index_free(index) }
-        let spec = CStringArray(["*"])
-        defer { spec.free() }
-        var array = spec.array
-        try check(git_index_add_all(index, &array, GIT_INDEX_ADD_DEFAULT.rawValue, nil, nil), "git_index_add_all")
-        try check(git_index_update_all(index, &array, nil, nil), "git_index_update_all")
-        try check(git_index_write(index), "git_index_write")
+        var options = StatusOptions()
+        options.detectRenames = false
+        let paths = try status(options).filter { $0.unstaged != nil && $0.unstaged != .ignored }.map(\.path)
+        guard !paths.isEmpty else { return }
+        try stage(paths)
     }
 
     /// Unstages files: their index entries go back to HEAD (`git reset -- paths`).

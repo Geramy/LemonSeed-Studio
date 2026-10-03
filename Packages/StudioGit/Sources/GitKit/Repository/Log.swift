@@ -50,7 +50,10 @@ extension GitRepository {
         var result: [CommitInfo] = []
         var skipped = 0
         var oid = git_oid()
-        while git_revwalk_next(&oid, walk) == 0 {
+        while true {
+            let rc = git_revwalk_next(&oid, walk)
+            if rc == GIT_ITEROVER.rawValue { break }
+            try check(rc, "git_revwalk_next")
             if let limit = options.limit, result.count >= limit { break }
             var commit: OpaquePointer?
             guard git_commit_lookup(&commit, handle, &oid) == 0, let commit else { continue }

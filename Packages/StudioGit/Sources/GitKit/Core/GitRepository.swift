@@ -12,7 +12,7 @@ public actor GitRepository {
     nonisolated let queue: DispatchSerialQueue
     public nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
 
-    nonisolated(unsafe) let handle: OpaquePointer
+    nonisolated(unsafe) private(set) var handle: OpaquePointer
 
     /// The working directory, or nil for a bare repository.
     public nonisolated let workingDirectory: URL?
@@ -35,6 +35,16 @@ public actor GitRepository {
 
     deinit {
         git_repository_free(handle)
+    }
+
+    /// Reopens the libgit2 handle so state written by another handle (a
+    /// fetch's new shallow boundary, packs, config) is seen at once rather
+    /// than after libgit2's file-timestamp checks catch up.
+    func reopen() {
+        var fresh: OpaquePointer?
+        guard git_repository_open(&fresh, gitDirectory.path) == 0, let fresh else { return }
+        git_repository_free(handle)
+        handle = fresh
     }
 
     // MARK: Open and create

@@ -92,7 +92,7 @@ import Testing
         #expect(info.parents.count == 2)
         #expect(info.summary == "Merge branch 'side'")
         #expect(FileManager.default.fileExists(atPath: dir.url.appending(path: "side.txt").path))
-        #expect(try await repo.state() == .none)
+        #expect(await repo.state() == .none)
     }
 
     /// main and topic both change README.md.
@@ -110,7 +110,7 @@ import Testing
     @Test func mergeConflictResolveAndCommit() async throws {
         let (dir, repo) = try await conflictingBranches()
         #expect(try await repo.merge("topic") == .conflicts(["README.md"]))
-        #expect(try await repo.state() == .merge)
+        #expect(await repo.state() == .merge)
         let conflicts = try await repo.conflicts()
         #expect(conflicts.count == 1)
         #expect(conflicts[0].kind == .bothModified)
@@ -129,7 +129,7 @@ import Testing
         let message = try #require(await repo.preparedMessage())
         let id = try await repo.commit(message: message)
         #expect(try await repo.commitInfo(id).parents.count == 2)
-        #expect(try await repo.state() == .none)
+        #expect(await repo.state() == .none)
         #expect(try dir.read("README.md") == "main and topic\n")
     }
 
@@ -137,7 +137,7 @@ import Testing
         let (dir, repo) = try await conflictingBranches()
         _ = try await repo.merge("topic")
         try await repo.abortMerge()
-        #expect(try await repo.state() == .none)
+        #expect(await repo.state() == .none)
         #expect(try dir.read("README.md") == "main\n")
         #expect(try await repo.status().isEmpty)
     }
@@ -171,13 +171,13 @@ import Testing
         #expect(progress.conflicts == ["README.md"])
         #expect(progress.current == 1)
         #expect(progress.total == 1)
-        #expect(try await repo.state() == .rebaseMerge)
+        #expect(await repo.state() == .rebaseMerge)
         #expect(try await repo.rebaseProgress()?.conflicts == ["README.md"])
 
         try await repo.resolveConflict("README.md", with: .theirs)
         let finished = try await repo.continueRebase()
         guard case .completed = finished else { Issue.record("\(finished)"); return }
-        #expect(try await repo.state() == .none)
+        #expect(await repo.state() == .none)
         #expect(try await repo.log().map(\.summary) == ["Topic edit", "Main edit", "Initial commit"])
         #expect(try await repo.head().branch == "topic")
     }
@@ -188,7 +188,7 @@ import Testing
         let before = try await repo.head().commit
         _ = try await repo.rebase(onto: "main")
         try await repo.abortRebase()
-        #expect(try await repo.state() == .none)
+        #expect(await repo.state() == .none)
         #expect(try await repo.head().commit == before)
         #expect(try await repo.head().branch == "topic")
         #expect(try dir.read("README.md") == "topic\n")
@@ -257,9 +257,9 @@ import Testing
         let (_, repo) = try await conflictingBranches()
         let topic = try await repo.resolveCommit("topic")
         #expect(try await repo.cherryPick(topic) == .conflicts(["README.md"]))
-        #expect(try await repo.state() == .cherryPick)
+        #expect(await repo.state() == .cherryPick)
         try await repo.abortMerge()
-        #expect(try await repo.state() == .none)
+        #expect(await repo.state() == .none)
     }
 
     @Test func blameAttributesLines() async throws {

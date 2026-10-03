@@ -49,6 +49,9 @@ struct WorkspaceWindow: View {
             if let stress = controller.keyboardStress {
                 KeyboardStressStatus(stress: stress)
             }
+            if LaunchOptions.exposeEditorText, let document = controller.activeDocument {
+                EditorContentsProbe(document: document)
+            }
         }
         .background(theme.palette.canvas.color)
         .overlay {

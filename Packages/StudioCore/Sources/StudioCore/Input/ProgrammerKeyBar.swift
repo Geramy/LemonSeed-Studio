@@ -127,15 +127,17 @@ public struct ProgrammerKeyBar: View {
                     ForEach(ProgrammerKey.symbols, id: \.self) { character in
                         key(character, .text(character), id: "sym.\(character)", monospaced: true)
                     }
-                    separator
-                    symbol("arrow.uturn.backward", .undo, id: "undo")
-                    symbol("arrow.uturn.forward", .redo, id: "redo")
                 }
                 .padding(.horizontal, 8)
             }
+            // Always reachable, however narrow the window.
             Divider().frame(height: 26)
-            symbol("keyboard.chevron.compact.down", .dismiss, id: "dismiss")
-                .padding(.horizontal, 8)
+            HStack(spacing: 6) {
+                symbol("arrow.uturn.backward", .undo, id: "undo")
+                symbol("arrow.uturn.forward", .redo, id: "redo")
+                symbol("keyboard.chevron.compact.down", .dismiss, id: "dismiss")
+            }
+            .padding(.horizontal, 8)
         }
         .frame(height: 48)
         .background(theme.palette.elevated.color)

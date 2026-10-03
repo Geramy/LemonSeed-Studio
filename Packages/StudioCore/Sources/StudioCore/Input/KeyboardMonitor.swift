@@ -33,16 +33,25 @@ public final class KeyboardMonitor {
     }
 
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
+    /// The full on-screen keyboard appeared, so nothing is attached even if
+    /// GameController still lists a keyboard (the simulator lists the
+    /// Mac's keyboard while "Connect Hardware Keyboard" is off). Cleared
+    /// when GameController reports a new connection.
+    @ObservationIgnored private var sawOnScreenKeyboard = false
 
     public init(override: Bool? = nil) {
         self.override = override
         self.hasHardwareKeyboard = override ?? (GCKeyboard.coalesced != nil)
         let center = NotificationCenter.default
-        for name in [Notification.Name.GCKeyboardDidConnect, .GCKeyboardDidDisconnect] {
-            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.update() }
-            })
-        }
+        observers.append(center.addObserver(forName: .GCKeyboardDidConnect, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.sawOnScreenKeyboard = false
+                self?.update()
+            }
+        })
+        observers.append(center.addObserver(forName: .GCKeyboardDidDisconnect, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.update() }
+        })
         #if canImport(UIKit)
         observers.append(center.addObserver(forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main) { [weak self] note in
             let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue ?? .zero
@@ -59,10 +68,24 @@ public final class KeyboardMonitor {
     }
 
     private func update() {
-        hasHardwareKeyboard = override ?? (GCKeyboard.coalesced != nil)
+        let detected = override ?? (GCKeyboard.coalesced != nil && !sawOnScreenKeyboard)
+        if hasHardwareKeyboard != detected { hasHardwareKeyboard = detected }
     }
 
     #if canImport(UIKit)
+    /// The first responder, or the view that owns it (Runestone-based
+    /// editors make an inner input view first responder while the text view
+    /// carries the accessory), supplies an inputAccessoryView.
+    static func focusedViewHasAccessory() -> Bool {
+        var responder = UIResponder.currentFirstResponder
+        for _ in 0..<4 {
+            guard let current = responder else { return false }
+            if current.inputAccessoryView != nil { return true }
+            responder = current.next
+        }
+        return false
+    }
+
     private func keyboardFrameChanged(_ frame: CGRect) {
         // With a hardware keyboard the "keyboard" is only the shortcuts bar;
         // count it as visible only when it is a real keyboard's height.
@@ -71,7 +94,11 @@ public final class KeyboardMonitor {
         let onScreen = frame.intersection(screen)
         let visible = !onScreen.isNull && onScreen.height > 120
         isSoftwareKeyboardVisible = visible
-        responderHasAccessory = visible && UIResponder.currentFirstResponder?.inputAccessoryView != nil
+        if visible, !sawOnScreenKeyboard {
+            sawOnScreenKeyboard = true
+            update()
+        }
+        responderHasAccessory = visible && Self.focusedViewHasAccessory()
         softwareKeyboardHeight = visible && onScreen.maxY >= screen.maxY - 1 ? onScreen.height : 0
     }
     #endif

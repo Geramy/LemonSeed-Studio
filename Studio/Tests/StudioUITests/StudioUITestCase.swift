@@ -10,6 +10,7 @@ class StudioUITestCase: XCTestCase {
 
     override func setUp() async throws {
         continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
     }
 
     /// Launches with the Demo project and `files` open (";" separates tabs).
@@ -69,6 +70,11 @@ class StudioUITestCase: XCTestCase {
         let shows = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", text), object: toast)
         XCTAssertEqual(XCTWaiter.wait(for: [shows], timeout: 5), .completed,
                        "toast should say \(text), says \(toast.exists ? toast.label : "nothing")", file: file, line: line)
+    }
+
+    /// Whatever has keyboard focus (the editor's text view, a field).
+    var focusedElement: XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "hasKeyboardFocus == true")).firstMatch
     }
 
     func isSelected(_ identifier: String) -> Bool {

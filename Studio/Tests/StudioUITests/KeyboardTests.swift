@@ -15,14 +15,12 @@ final class KeyboardTests: StudioUITestCase {
     }
 
     func testButtonsShownWithoutHardwareKeyboard() {
-        launch(extra: ["-StudioHardwareKeyboard", "NO"])
+        launch(extra: ["-StudioHardwareKeyboard", "NO", "-StudioExposeEditorText", "YES"])
         expect("toolbar.keyboard")
         expectValue("toolbar.keyboard", "hidden")
         expect("editor.keyboardButton")
         tap("editor.keyboardButton")
-        let editor = element("editor.text")
-        let focused = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hasKeyboardFocus == true"), object: editor)
-        XCTAssertEqual(XCTWaiter.wait(for: [focused], timeout: 5), .completed, "the editor took keyboard focus")
+        XCTAssertTrue(focusedElement.waitForExistence(timeout: 5), "the editor took keyboard focus")
         if app.keyboards.firstMatch.waitForExistence(timeout: 3) {
             // The simulator has no hardware keyboard: the full flow is visible.
             verifySoftwareKeyboardFlow()
@@ -33,7 +31,7 @@ final class KeyboardTests: StudioUITestCase {
         guard let expected = ProcessInfo.processInfo.environment["STUDIO_EXPECT_HARDWARE_KEYBOARD"] else {
             throw XCTSkip("Run through scripts/simulator-keyboard.sh to set the simulator's keyboard state")
         }
-        launch()
+        launch(extra: ["-StudioExposeEditorText", "YES"])
         if expected == "1" {
             expect("toolbar.keyboard", exists: false, timeout: 3, "a hardware keyboard is connected")
             expect("editor.keyboardButton", exists: false, timeout: 2)
@@ -56,8 +54,8 @@ final class KeyboardTests: StudioUITestCase {
         tap("keybar.sym.}")
         tap("keybar.left")
         tap("keybar.sym.;")
-        let editor = element("editor.text")
-        let typed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value CONTAINS %@", "{;}"), object: editor)
+        let typed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", "{;}"),
+                                              object: element("editor.contents"))
         XCTAssertEqual(XCTWaiter.wait(for: [typed], timeout: 5), .completed, "key bar keys typed into the editor")
         tap("keybar.undo")
         tap("toolbar.keyboard")

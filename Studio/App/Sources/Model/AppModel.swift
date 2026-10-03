@@ -153,6 +153,8 @@ enum LaunchOptions {
     static var resetState: Bool { defaults.bool(forKey: "StudioResetState") }
     /// Runs the in-shell keyboard replay (see KeyboardStress).
     static var keyboardStress: Bool { defaults.bool(forKey: "StudioKeyboardStress") }
+    /// Publishes the active document's text as an accessibility element (UI tests).
+    static var exposeEditorText: Bool { defaults.bool(forKey: "StudioExposeEditorText") }
     /// "plain" runs with only the built-in editor (tests of the fallback).
     static var editor: String? { defaults.string(forKey: "StudioEditor") }
     static var density: Density? { defaults.string(forKey: "StudioDensity").flatMap(Density.init(rawValue:)) }

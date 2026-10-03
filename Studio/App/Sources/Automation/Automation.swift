@@ -74,13 +74,17 @@ enum Automation {
         if app.driver.service == nil {
             report.append("wait: driver service not running; waiting for the GPU (reconnect it after installing a new build)")
             write()
+            // Counted in polls, not wall-clock time: a suspended app (screen
+            // locked) must not use up the wait.
             let waitStart = Date()
-            while app.driver.service == nil, Date().timeIntervalSince(waitStart) < 4 * 3600 {
+            var polls = 0
+            while app.driver.service == nil, polls < 4 * 3600 / 2 {
                 try? await Task.sleep(for: .seconds(2))
-                if Int(Date().timeIntervalSince(waitStart)) % 30 < 2 { app.driver.refresh() }
+                polls += 1
+                if polls % 15 == 0 { app.driver.refresh() }
             }
             guard let service = app.driver.service else {
-                fail("the driver service did not appear in 4 hours")
+                fail("the driver service did not appear within 4 hours of polling")
                 return
             }
             report.append(String(format: "OK   driver service %@ 0x%llx after %.0f s", service.className, service.registryID,
@@ -339,6 +343,22 @@ enum Automation {
         app.isModelsManagerPresented = false
         try? await Task.sleep(for: .seconds(1))
         controller.show(SidebarItem.gpu)
+        app.gpuPage = GPUHubView.Page.monitor.rawValue
+        let savedWidth = controller.sidebarWidth
+        for orientation in [UIInterfaceOrientationMask.landscape, .portrait] {
+            let name = orientation == .portrait ? "portrait" : "landscape"
+            await rotate(to: orientation)
+            controller.sidebarWidth = 220
+            await shot("gpu-monitor-narrow-\(name)", delay: 2.5)
+            controller.sidebarWidth = 560
+            await shot("gpu-monitor-wide-\(name)", delay: 2.5)
+            app.isGPUMonitorPresented = true
+            await shot("gpu-monitor-full-\(name)", delay: 3)
+            app.isGPUMonitorPresented = false
+            try? await Task.sleep(for: .seconds(1))
+        }
+        controller.sidebarWidth = savedWidth
+        await rotate(to: .landscape)
         for page in GPUHubView.Page.allCases {
             app.gpuPage = page.rawValue
             await shot("gpu-" + page.rawValue.lowercased(), delay: 2.5)
@@ -363,6 +383,16 @@ enum Automation {
         try? await Task.sleep(for: .seconds(1))
         controller.show(SidebarItem.agent)
         await shot("final")
+    }
+
+    /// Asks the scene for an orientation (ignored when the iPad's rotation
+    /// lock or Stage Manager decides otherwise).
+    static func rotate(to mask: UIInterfaceOrientationMask) async {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: mask)) { error in
+            automationLog.log("orientation request: \(error.localizedDescription, privacy: .public)")
+        }
+        try? await Task.sleep(for: .seconds(1.5))
     }
 
     /// The key window, as drawn now.

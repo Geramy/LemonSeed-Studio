@@ -30,6 +30,8 @@ final class AppModel {
     var loadSettingsModelID: String?
     /// The full Models screen (catalog, downloads, Hugging Face search).
     var isModelsManagerPresented = false
+    /// The full GPU monitor (StudioTelemetry's screen) as a page sheet.
+    var isGPUMonitorPresented = false
     let keyboard = KeyboardMonitor.shared
     let textInput = TextInputCoordinator.shared
     /// The most recently active window's router: the menu bar's fallback

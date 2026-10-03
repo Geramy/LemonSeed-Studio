@@ -3,6 +3,7 @@ import Observation
 import SystemExtensions
 import StudioCore
 import StudioDesign
+import StudioTelemetry
 import os
 
 private let driverLog = Logger(subsystem: "com.geramyloveless.LemonSeedStudio", category: "driver")
@@ -171,7 +172,7 @@ final class DriverTelemetryProvider: TelemetryProviding {
     }
 
     var engineState: EngineState { driver.engineState }
-    var summary: GPUSummary? { nil }
+    var summary: StudioCore.GPUSummary? { nil }
 
     func refresh() { driver.refresh() }
 
@@ -297,7 +298,13 @@ struct GPUMonitorWindow: View {
 
     var body: some View {
         NavigationStack {
-            app.services.telemetry.makeGPUView(context: nil)
+            Group {
+                if let provider = app.services.telemetry as? StudioTelemetryProvider {
+                    GPUMonitorView(service: provider.service)
+                } else {
+                    app.services.telemetry.makeGPUView(context: nil)
+                }
+            }
                 .navigationTitle("GPU")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

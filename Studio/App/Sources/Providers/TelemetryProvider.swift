@@ -113,7 +113,7 @@ struct GPUHubView: View {
             Group {
                 switch page.wrappedValue {
                 case .monitor:
-                    GPUMonitorView(service: provider.service)
+                    AdaptiveGPUMonitor(provider: provider)
                 case .engine:
                     ScrollView {
                         EnginePanel(provider: provider)
@@ -129,3 +129,117 @@ struct GPUHubView: View {
     }
 }
 
+
+/// GPU › Monitor. StudioTelemetry's full screen needs at least 640 points
+/// for its one-column layout without clipping; narrower (the sidebar) shows
+/// its sidebar card and the key readouts instead, with the full monitor one
+/// tap away in a page sheet.
+struct AdaptiveGPUMonitor: View {
+    static let fullWidth: CGFloat = 640
+    @Environment(AppModel.self) private var app
+    @Environment(\.theme) private var theme
+    @Environment(\.typeScale) private var type
+    let provider: StudioTelemetryProvider
+
+    var body: some View {
+        GeometryReader { geo in
+            if geo.size.width >= Self.fullWidth {
+                GPUMonitorView(service: provider.service)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Space.m) {
+                        GPUStatusWidget(service: provider.service, style: .card) { app.isGPUMonitorPresented = true }
+                        readouts
+                        Button {
+                            app.isGPUMonitorPresented = true
+                        } label: {
+                            Label("Open GPU Monitor", systemImage: "rectangle.expand.vertical")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.studioSecondary)
+                        .accessibilityIdentifier("gpu.openMonitor")
+                    }
+                    .padding(.horizontal, Space.m)
+                    .padding(.bottom, Space.l)
+                    .frame(width: geo.size.width, alignment: .leading)
+                }
+            }
+        }
+        .accessibilityIdentifier("gpu.monitor")
+    }
+
+    /// The numbers the card leaves out, as wrapping label/value rows.
+    @ViewBuilder private var readouts: some View {
+        let state = provider.service.state
+        let s = state.summary
+        VStack(alignment: .leading, spacing: Space.s) {
+            row("Availability", availability(state.availability))
+            if let vram = s.vram {
+                row("VRAM", String(format: "%.1f of %.1f GiB (%.0f%%)", vram.used, vram.total, vram.fraction * 100))
+            }
+            if let p = s.power {
+                row("Power", String(format: "%.0f W", p) + (s.powerCap.map { String(format: " of %.0f W cap", $0) } ?? ""))
+            }
+            if let t = s.temperature {
+                row(s.temperatureLabel.map { "Temperature (\($0))" } ?? "Temperature",
+                    String(format: "%.0f °C", t) + (s.temperatureLimit.map { String(format: ", limit %.0f °C", $0) } ?? ""))
+            }
+            if let held = provider.engine.deviceBytes, provider.engine.phase == .ready {
+                row("Engine holds", ByteCountFormatter.string(fromByteCount: Int64(held.live), countStyle: .memory))
+            }
+            row("Source", state.sourceName)
+        }
+        .padding(Space.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .elevatedSurface()
+    }
+
+    private func row(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label)
+                .font(.studio(type.micro + 1, weight: .semibold))
+                .foregroundStyle(theme.palette.textTertiary.color)
+            Text(value)
+                .font(.system(size: type.caption, design: .monospaced))
+                .foregroundStyle(theme.palette.textPrimary.color)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func availability(_ a: TelemetryAvailability) -> String {
+        switch a {
+        case .live: "live"
+        case .starting: "starting"
+        case .driverNotEnabled: "driver not enabled"
+        case .noDevice: "no GPU bound to the driver"
+        case .notRunning(let why): "not running: \(why)"
+        case .unsupported(let why): "unsupported: \(why)"
+        case .error(let why): "error: \(why)"
+        }
+    }
+}
+
+/// The full GPU monitor in a page sheet (and in its own window).
+struct GPUMonitorSheet: View {
+    @Environment(AppModel.self) private var app
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let provider = app.services.telemetry as? StudioTelemetryProvider {
+                    GPUMonitorView(service: provider.service)
+                } else {
+                    app.services.telemetry.makeGPUView(context: nil)
+                }
+            }
+            .navigationTitle("GPU Monitor")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { app.isGPUMonitorPresented = false }
+                }
+            }
+        }
+        .accessibilityIdentifier("gpu.monitorSheet")
+    }
+}

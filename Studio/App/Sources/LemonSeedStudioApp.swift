@@ -107,6 +107,12 @@ struct StudioSceneView: View {
                 .environment(app)
                 .presentationSizing(.page)
         }
+        .sheet(isPresented: Binding(get: { app.isGPUMonitorPresented && app.activeRouter === router },
+                                    set: { app.isGPUMonitorPresented = $0 })) {
+            GPUMonitorSheet()
+                .environment(app)
+                .presentationSizing(.page)
+        }
         .alert("New Project", isPresented: $router.isNewProjectPresented) {
             TextField("Name", text: $newProjectName)
                 .accessibilityIdentifier("newProject.name")

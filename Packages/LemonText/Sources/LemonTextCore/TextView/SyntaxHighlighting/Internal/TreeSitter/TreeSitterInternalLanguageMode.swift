@@ -3,6 +3,8 @@ import TreeSitter
 
 protocol TreeSitterLanguageModeDelegate: AnyObject {
     func treeSitterLanguageMode(_ languageMode: TreeSitterInternalLanguageMode, bytesAt byteIndex: ByteCount) -> TreeSitterTextProviderResult?
+    /// A background parse finished and installed a new tree; the given lines need highlighting again.
+    func treeSitterLanguageMode(_ languageMode: TreeSitterInternalLanguageMode, didReparseWith lineChangeSet: LineChangeSet)
 }
 
 final class TreeSitterInternalLanguageMode: InternalLanguageMode {
@@ -17,6 +19,17 @@ final class TreeSitterInternalLanguageMode: InternalLanguageMode {
     private let rootLanguageLayer: TreeSitterLanguageLayer
     private let operationQueue = OperationQueue()
     private let parseLock = NSLock()
+
+    // Deferred parsing. Incremental parsing is not O(edit): tree-sitter re-walks the root's children, which
+    // costs tens of milliseconds per keystroke in a file like the SQLite amalgamation. Above this size, edits
+    // only shift the tree on the main thread and the reparse runs on a background queue.
+    static var deferredParsingThreshold = ByteCount(1_000_000)
+    private let backgroundParser = TreeSitterParser(encoding: TSInputEncodingUTF16)
+    private let backgroundQueue = DispatchQueue(label: "LemonText.TreeSitterReparse", qos: .userInitiated)
+    private var isBackgroundParseRunning = false
+    private var isBackgroundParseScheduled = false
+    private var editsDuringBackgroundParse: [TreeSitterInputEdit] = []
+    private var needsBackgroundParse = false
 
     init(language: TreeSitterInternalLanguage, languageProvider: TreeSitterLanguageProvider?, stringView: StringView, lineManager: LineManager) {
         self.stringView = stringView
@@ -71,7 +84,89 @@ final class TreeSitterInternalLanguageMode: InternalLanguageMode {
             startPoint: TreeSitterTextPoint(change.startLinePosition),
             oldEndPoint: TreeSitterTextPoint(change.oldEndLinePosition),
             newEndPoint: TreeSitterTextPoint(change.newEndLinePosition))
+        if rootLanguageLayer.supportsDeferredParsing && stringView.string.byteCount >= Self.deferredParsingThreshold {
+            rootLanguageLayer.applyWithoutParsing(edit)
+            if isBackgroundParseRunning {
+                editsDuringBackgroundParse.append(edit)
+            }
+            needsBackgroundParse = true
+            scheduleBackgroundParse()
+            return LineChangeSet()
+        }
         return rootLanguageLayer.apply(edit)
+    }
+
+    /// Whether a background reparse is queued or running.
+    var hasPendingParse: Bool {
+        needsBackgroundParse || isBackgroundParseRunning
+    }
+
+    private func scheduleBackgroundParse() {
+        guard !isBackgroundParseScheduled && !isBackgroundParseRunning else {
+            return
+        }
+        isBackgroundParseScheduled = true
+        // Start after the current keystroke has been handled, so a burst of key repeats coalesces into one parse.
+        DispatchQueue.main.async { [weak self] in
+            self?.startBackgroundParse()
+        }
+    }
+
+    private func startBackgroundParse() {
+        isBackgroundParseScheduled = false
+        guard needsBackgroundParse, !isBackgroundParseRunning, let tree = rootLanguageLayer.tree, let oldTree = tree.copy() else {
+            return
+        }
+        needsBackgroundParse = false
+        isBackgroundParseRunning = true
+        editsDuringBackgroundParse = []
+        guard let snapshot = stringView.string.copy() as? NSString else {
+            isBackgroundParseRunning = false
+            return
+        }
+        let language = rootLanguageLayer.language.languagePointer
+        let parser = backgroundParser
+        backgroundQueue.async { [weak self] in
+            parser.language = language
+            parser.removeAllIncludedRanges()
+            let newTree = parser.parse(snapshot, oldTree: oldTree)
+            let changedRanges = newTree.map { oldTree.rangesChanged(comparingTo: $0) } ?? []
+            DispatchQueue.main.async {
+                self?.finishBackgroundParse(newTree: newTree, changedRanges: changedRanges)
+            }
+        }
+    }
+
+    private func finishBackgroundParse(newTree: TreeSitterTree?, changedRanges: [TreeSitterTextRange]) {
+        isBackgroundParseRunning = false
+        guard let newTree else {
+            return
+        }
+        // Edits made while parsing are replayed onto the new tree; another parse follows to settle them.
+        for edit in editsDuringBackgroundParse {
+            newTree.apply(edit)
+        }
+        if !editsDuringBackgroundParse.isEmpty {
+            needsBackgroundParse = true
+        }
+        editsDuringBackgroundParse = []
+        rootLanguageLayer.replaceTree(with: newTree)
+        let lineChangeSet = LineChangeSet()
+        let lineCount = lineManager.lineCount
+        for changedRange in changedRanges {
+            let startRow = min(Int(changedRange.startPoint.row), lineCount - 1)
+            let endRow = min(Int(changedRange.endPoint.row), lineCount - 1)
+            guard startRow >= 0, startRow <= endRow else {
+                continue
+            }
+            for row in startRow ... endRow {
+                lineChangeSet.markLineEdited(lineManager.line(atRow: row))
+            }
+        }
+        delegate?.treeSitterLanguageMode(self, didReparseWith: lineChangeSet)
+        if needsBackgroundParse {
+            scheduleBackgroundParse()
+        }
     }
 
     func captures(in range: ByteRange) -> [TreeSitterCapture] {

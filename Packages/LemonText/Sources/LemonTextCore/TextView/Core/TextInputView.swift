@@ -3,6 +3,7 @@ import Combine
 import UIKit
 
 protocol TextInputViewDelegate: AnyObject {
+    func textInputViewDidReparse(_ view: TextInputView)
     func textInputViewWillBeginEditing(_ view: TextInputView)
     func textInputViewDidBeginEditing(_ view: TextInputView)
     func textInputViewDidEndEditing(_ view: TextInputView)
@@ -1134,8 +1135,17 @@ extension TextInputView {
 
     func deleteBackward() {
         didCallDeleteBackward = true
-        guard let selectedRange = markedRange ?? selectedRange, selectedRange.length > 0 else {
+        guard var selectedRange = markedRange ?? selectedRange else {
             return
+        }
+        if selectedRange.length == 0 {
+            // UIKit usually selects the character before the caret before calling deleteBackward(), but not on
+            // every path (programmatic calls, some hardware keyboard and accessibility paths). Delete the
+            // preceding character ourselves rather than dropping the key press.
+            guard selectedRange.location > 0 else {
+                return
+            }
+            selectedRange = NSRange(location: selectedRange.location - 1, length: 1)
         }
         let deleteRange = rangeForDeletingText(in: selectedRange)
         // If we're deleting everything in the marked range then we clear the marked range. UITextInput doesn't do that for us.
@@ -1215,6 +1225,11 @@ extension TextInputView {
             return
         }
         let selectedRangeBefore = selectedRange
+        // Programmatic edits must be bracketed so the text input system (hardware keyboard, IME) stays in sync.
+        inputDelegate?.textWillChange(self)
+        defer {
+            inputDelegate?.textDidChange(self)
+        }
         timedUndoManager.endUndoGrouping()
         timedUndoManager.beginUndoGrouping()
         timedUndoManager.setActionName(actionName)
@@ -1626,6 +1641,17 @@ extension TextInputView {
 
 // MARK: - TreeSitterLanguageModeDeleage
 extension TextInputView: TreeSitterLanguageModeDelegate {
+    func treeSitterLanguageMode(_ languageMode: TreeSitterInternalLanguageMode, didReparseWith lineChangeSet: LineChangeSet) {
+        // Re-highlight the lines whose syntax changed. Lines that are not visible are only invalidated.
+        let editedLineIDs = Set(lineChangeSet.editedLines.map(\.id))
+        if !editedLineIDs.isEmpty {
+            layoutManager.redisplayLines(withIDs: editedLineIDs)
+            layoutManager.setNeedsLayout()
+            layoutManager.layoutIfNeeded()
+        }
+        delegate?.textInputViewDidReparse(self)
+    }
+
     func treeSitterLanguageMode(_ languageMode: TreeSitterInternalLanguageMode, bytesAt byteIndex: ByteCount) -> TreeSitterTextProviderResult? {
         guard byteIndex.value >= 0 && byteIndex < stringView.string.byteCount else {
             return nil

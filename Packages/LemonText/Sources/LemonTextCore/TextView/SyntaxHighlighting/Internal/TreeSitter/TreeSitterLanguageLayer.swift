@@ -48,6 +48,23 @@ extension TreeSitterLanguageLayer {
         return apply(edit, parsing: ranges)
     }
 
+    /// Whether edits can be parsed in the background. Layers with injected languages parse synchronously so
+    /// their child layers stay consistent.
+    var supportsDeferredParsing: Bool {
+        language.injectionsQuery == nil && parentLanguageLayer == nil
+    }
+
+    /// Shifts the existing tree for an edit without parsing. Highlighting keeps working on the shifted tree
+    /// until a background parse replaces it.
+    func applyWithoutParsing(_ edit: TreeSitterInputEdit) {
+        tree?.apply(edit)
+    }
+
+    /// Installs a tree produced by a background parse.
+    func replaceTree(with newTree: TreeSitterTree) {
+        tree = newTree
+    }
+
     func layerAndNode(at linePosition: LinePosition) -> LayerAndNodeTuple? {
         let point = TreeSitterTextPoint(linePosition)
         guard let node = tree?.rootNode.descendantForRange(from: point, to: point) else {

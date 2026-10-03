@@ -805,10 +805,13 @@ open class TextView: UIScrollView {
     ///   - range: A range of text in the document.
     ///   - text: A string to replace the text in range.
     public func replace(_ range: NSRange, withText text: String) {
+        // A programmatic edit: tell the text input system so hardware keyboard and IME state stay in sync.
+        textInputView.inputDelegate?.textWillChange(textInputView)
         textInputView.inputDelegate?.selectionWillChange(textInputView)
         let indexedRange = IndexedRange(range)
         textInputView.replace(indexedRange, withText: text)
         textInputView.inputDelegate?.selectionDidChange(textInputView)
+        textInputView.inputDelegate?.textDidChange(textInputView)
     }
 
     /// Replaces the text in the specified matches.
@@ -1394,6 +1397,10 @@ extension TextView: TextInputViewDelegate {
         } else {
             return editorDelegate?.textView(self, shouldChangeTextIn: range, replacementText: text) ?? true
         }
+    }
+
+    func textInputViewDidReparse(_ view: TextInputView) {
+        editorDelegate?.textViewDidUpdateSyntaxTree(self)
     }
 
     func textInputViewDidChangeGutterWidth(_ view: TextInputView) {

@@ -126,12 +126,43 @@ final class IndentController {
                 let newSelectedRange = NSRange(location: range.location + firstLineText.utf16.count, length: 0)
                 delegate?.indentController(self, shouldSelect: newSelectedRange)
             } else {
-                let indentedText = symbol + indentStrategy.string(indentLevel: strategy.indentLevel)
+                // The syntax tree can be incomplete while typing (an unclosed brace) or stale (large documents
+                // reparse in the background). Never indent less than the text before the caret suggests.
+                let indentLevel = max(strategy.indentLevel, fallbackIndentLevel(before: range.lowerBound))
+                let indentedText = symbol + indentStrategy.string(indentLevel: indentLevel)
                 delegate?.indentController(self, shouldInsert: indentedText, in: range)
             }
         } else {
             delegate?.indentController(self, shouldInsert: symbol, in: range)
         }
+    }
+
+    /// The indentation of the text before `location` on its line, one level deeper when that text ends
+    /// with an opening bracket or a colon.
+    private func fallbackIndentLevel(before location: Int) -> Int {
+        guard let line = lineManager.line(containingCharacterAt: location) else {
+            return 0
+        }
+        let prefixLength = location - line.location
+        guard prefixLength > 0, let prefix = stringView.substring(in: NSRange(location: line.location, length: prefixLength)) else {
+            return 0
+        }
+        var columns = 0
+        for character in prefix {
+            if character == " " {
+                columns += 1
+            } else if character == "\t" {
+                columns += indentStrategy.tabLength
+            } else {
+                break
+            }
+        }
+        var level = columns / max(indentStrategy.tabLength, 1)
+        let trimmed = prefix.trimmingCharacters(in: .whitespaces)
+        if let last = trimmed.last, "{([:".contains(last) {
+            level += 1
+        }
+        return level
     }
 
     // Returns the range of an indentation text if the cursor is placed after an indentation.

@@ -4,8 +4,10 @@ import UIKit
 // MARK: - Text view delegate
 extension LemonTextViewController: @preconcurrency TextViewDelegate {
     public func textView(_ textView: TextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+        keystrokeStart = CACurrentMediaTime()
         if !secondarySelections.isEmpty {
             applyEditAtAllCarets(primaryRange: range, text: text)
+            recordKeystrokeEnd()
             return false
         }
         recordPendingEdit(range: range, replacement: text)
@@ -26,6 +28,12 @@ extension LemonTextViewController: @preconcurrency TextViewDelegate {
         selectionDidChange()
         previousPrimarySelection = selection
         delegate?.editorDidChangeSelection(self)
+        recordKeystrokeEnd()
+    }
+
+    public func textViewDidUpdateSyntaxTree(_ textView: TextView) {
+        minimapChunks.removeAll(keepingCapacity: true)
+        scheduleMinimapRefresh()
     }
 
     public func textViewDidChangeGutterWidth(_ textView: TextView) {
@@ -41,8 +49,32 @@ extension LemonTextViewController: UIScrollViewDelegate {
     }
 }
 
+// MARK: - Keystroke latency
+public extension LemonTextViewController {
+    /// Main-thread time per keystroke (insertion or deletion, including layout) over the recent edits, in
+    /// milliseconds. Key repeat stays smooth while this stays well under a frame.
+    func keystrokeLatency() -> EditorBenchmark.Distribution {
+        EditorBenchmark.Distribution(keystrokeDurations)
+    }
+
+    func resetKeystrokeLatency() {
+        keystrokeDurations.removeAll()
+    }
+}
+
 // MARK: - Reacting to edits
 extension LemonTextViewController {
+    func recordKeystrokeEnd() {
+        guard let start = keystrokeStart else {
+            return
+        }
+        keystrokeStart = nil
+        keystrokeDurations.append((CACurrentMediaTime() - start) * 1000)
+        if keystrokeDurations.count > 5_000 {
+            keystrokeDurations.removeFirst(keystrokeDurations.count - 5_000)
+        }
+    }
+
     /// Remembers which lines an edit touches so folds and diagnostics can follow it.
     func recordPendingEdit(range: NSRange, replacement: String) {
         guard let startLine = codeTextView.lineIndex(containing: range.location) ?? (range.location >= codeTextView.textLength ? max(codeTextView.lineCount - 1, 0) : nil) else {

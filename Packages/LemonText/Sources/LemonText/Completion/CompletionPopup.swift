@@ -5,6 +5,9 @@ final class CompletionPopup: GlassPanel, UITableViewDataSource, UITableViewDeleg
     var onAccept: ((CompletionItem) -> Void)?
     private(set) var items: [CompletionItem] = []
     private(set) var selectedIndex = 0
+    /// Whether the user moved through the list with the arrow keys. Return accepts only then, so typing
+    /// fast and pressing Return still inserts a line break.
+    private(set) var hasNavigated = false
     private var prefix = ""
     private let tableView = UITableView(frame: .zero, style: .plain)
     private var theme: EditorTheme = .lemonDark
@@ -46,6 +49,7 @@ final class CompletionPopup: GlassPanel, UITableViewDataSource, UITableViewDeleg
         self.items = items
         self.prefix = prefix
         selectedIndex = 0
+        hasNavigated = false
         tableView.reloadData()
         if !items.isEmpty {
             tableView.scrollToRow(at: IndexPath(row: 0, section: 0), at: .top, animated: false)
@@ -65,6 +69,7 @@ final class CompletionPopup: GlassPanel, UITableViewDataSource, UITableViewDeleg
             return
         }
         let previous = selectedIndex
+        hasNavigated = true
         selectedIndex = (selectedIndex + delta + items.count) % items.count
         tableView.reloadRows(at: [IndexPath(row: previous, section: 0), IndexPath(row: selectedIndex, section: 0)], with: .none)
         tableView.scrollToRow(at: IndexPath(row: selectedIndex, section: 0), at: .none, animated: false)

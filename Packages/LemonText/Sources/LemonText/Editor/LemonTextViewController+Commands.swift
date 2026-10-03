@@ -261,7 +261,6 @@ extension LemonTextViewController {
             return
         }
         foldingTask?.cancel()
-        let snapshot = UncheckedSendableBox(textSnapshot())
         let language = language
         let tabWidth = configuration.tabWidth
         let generation = loadGeneration
@@ -269,13 +268,15 @@ extension LemonTextViewController {
             if delay > .zero {
                 try? await Task.sleep(for: delay)
             }
-            guard !Task.isCancelled else {
+            guard let self, !Task.isCancelled else {
                 return
             }
+            // Snapshot only once the edits have settled; copying a large document per keystroke is wasteful.
+            let snapshot = UncheckedSendableBox(self.textSnapshot())
             let ranges = await Task.detached(priority: .utility) {
                 FoldingRangeCalculator.ranges(in: snapshot.value, language: language, tabWidth: tabWidth)
             }.value
-            guard let self, !Task.isCancelled, generation == self.loadGeneration, !self.usesExternalFoldingRanges else {
+            guard !Task.isCancelled, generation == self.loadGeneration, !self.usesExternalFoldingRanges else {
                 return
             }
             self.decorations.foldingRanges = ranges
@@ -307,6 +308,10 @@ extension LemonTextViewController {
             command("Unfold All", "]", [.command, .alternate, .shift], #selector(handleUnfoldAll), priority: true),
             command("Trigger Suggestion", " ", .control, #selector(handleTriggerCompletion), priority: true),
             command("Toggle Word Wrap", "z", .alternate, #selector(handleToggleSoftWrap), priority: true),
+            // Emacs-style bindings. Without priority, the text input system handles them first where it can.
+            command("Move to Line Start", "a", .control, #selector(handleMoveToLineStart)),
+            command("Move to Line End", "e", .control, #selector(handleMoveToLineEnd)),
+            command("Delete to Line End", "k", .control, #selector(handleKillToLineEnd)),
             command("Increase Font Size", "=", .command, #selector(handleIncreaseFontSize)),
             command("Decrease Font Size", "-", .command, #selector(handleDecreaseFontSize))
         ]
@@ -314,9 +319,11 @@ extension LemonTextViewController {
             commands += [
                 command("Next Suggestion", UIKeyCommand.inputDownArrow, [], #selector(handleCompletionDown), priority: true),
                 command("Previous Suggestion", UIKeyCommand.inputUpArrow, [], #selector(handleCompletionUp), priority: true),
-                command("Accept Suggestion", "\r", [], #selector(handleAcceptCompletion), priority: true),
                 command("Accept Suggestion", "\t", [], #selector(handleAcceptCompletion), priority: true)
             ]
+            if completionPopup.hasNavigated {
+                commands.append(command("Accept Suggestion", "\r", [], #selector(handleAcceptCompletion), priority: true))
+            }
         } else if inlineSuggestion != nil {
             commands.append(command("Accept Inline Suggestion", "\t", [], #selector(handleAcceptInlineSuggestion), priority: true))
         }
@@ -361,6 +368,31 @@ extension LemonTextViewController {
     @objc func handleIncreaseFontSize() { increaseFontSize() }
     @objc func handleDecreaseFontSize() { decreaseFontSize() }
     @objc func handleFoldAll() { foldAll() }
+
+    @objc func handleMoveToLineStart() {
+        let caret = codeTextView.selectedRange.location
+        guard let line = codeTextView.lineIndex(containing: caret), let range = codeTextView.range(ofLine: line) else { return }
+        // First press goes to the first non-blank character, the next to column 0.
+        let indentation = (codeTextView.text(in: range) ?? "").prefix { $0 == " " || $0 == "\t" }.utf16.count
+        let target = caret == range.location + indentation ? range.location : range.location + indentation
+        selectedRange = NSRange(location: target, length: 0)
+    }
+
+    @objc func handleMoveToLineEnd() {
+        let caret = codeTextView.selectedRange.location
+        guard let line = codeTextView.lineIndex(containing: caret), let range = codeTextView.range(ofLine: line) else { return }
+        selectedRange = NSRange(location: range.location + range.length, length: 0)
+    }
+
+    @objc func handleKillToLineEnd() {
+        let caret = codeTextView.selectedRange.location
+        guard let line = codeTextView.lineIndex(containing: caret), let range = codeTextView.range(ofLine: line, includingLineBreak: true),
+              let content = codeTextView.range(ofLine: line) else { return }
+        // At the end of a line, ⌃K joins the next line, like Emacs.
+        let end = caret == content.location + content.length ? range.location + range.length : content.location + content.length
+        guard end > caret else { return }
+        codeTextView.replace(NSRange(location: caret, length: end - caret), withText: "")
+    }
     @objc func handleUnfoldAll() { unfoldAll() }
 
     @objc func handleFold() {

@@ -156,6 +156,10 @@ public final class LemonTextViewController: UIViewController {
     var completionPrefixRange: NSRange?
     var inlineSuggestion: (text: String, location: Int)?
 
+    // Keystroke timing: from the text input system asking to change text until the edit is laid out.
+    var keystrokeStart: CFTimeInterval?
+    var keystrokeDurations: [Double] = []
+
     // Pencil, gutter and find bookkeeping
     var pencilSelectionAnchor: Int?
     var gutterSelectionAnchorLine: Int?

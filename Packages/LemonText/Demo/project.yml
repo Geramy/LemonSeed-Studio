@@ -38,4 +38,23 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: YES
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
     scheme:
-      testTargets: []
+      testTargets:
+        - LemonTextDemoUITests
+  LemonTextDemoUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    dependencies:
+      - target: LemonTextDemo
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.LemonSeedStudio.LemonTextDemoUITests
+        TARGETED_DEVICE_FAMILY: "2"
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: LemonTextDemo
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""

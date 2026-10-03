@@ -19,7 +19,7 @@ public final class EditorBenchmark {
         public var p99: Double
         public var max: Double
 
-        init(_ samples: [Double]) {
+        public init(_ samples: [Double]) {
             let sorted = samples.sorted()
             count = sorted.count
             mean = sorted.isEmpty ? 0 : sorted.reduce(0, +) / Double(sorted.count)
@@ -68,6 +68,8 @@ public final class EditorBenchmark {
         /// Keystroke to laid-out glyph: insertText through the full input path, layout and a Core Animation commit.
         public var typingMilliseconds: Distribution
         public var deleteMilliseconds: Distribution
+        /// Typing `/*` mid-file turns the rest of the document into a comment until `*/` arrives.
+        public var openCommentMilliseconds: Distribution
         public var jumpMilliseconds: Distribution
         public var memoryBeforeMB: Double
         public var memoryAfterOpenMB: Double
@@ -129,6 +131,8 @@ public final class EditorBenchmark {
 
         progress?("Typing")
         let typing = await measureTyping(iterations: 300)
+        progress?("Typing an unterminated comment opener")
+        let delimiter = await measureDelimiterTyping()
 
         _ = sampleMemory()
         return Result(fileName: fileURL.lastPathComponent,
@@ -147,6 +151,7 @@ public final class EditorBenchmark {
                       scroll: scrolls,
                       typingMilliseconds: typing.insert,
                       deleteMilliseconds: typing.delete,
+                      openCommentMilliseconds: delimiter,
                       jumpMilliseconds: jumps,
                       memoryBeforeMB: memoryBefore,
                       memoryAfterOpenMB: memoryAfterOpen,
@@ -203,6 +208,10 @@ public final class EditorBenchmark {
 
     // MARK: - Typing
 
+    /// What the typing phase types. Code without comment or string delimiters by default; delimiters that
+    /// re-classify the rest of the file (an unterminated `/*` or `"`) are measured separately.
+    public var typingText = "int lemonCount = sqlite3_value_int(argv[0]) + 42; "
+
     private func measureTyping(iterations: Int) async -> (insert: Distribution, delete: Distribution) {
         let textView = controller.codeTextView
         // Type in the middle of the document, at the end of a line inside a function body.
@@ -220,7 +229,7 @@ public final class EditorBenchmark {
         await nextFrames(5)
         var inserts: [Double] = []
         var deletes: [Double] = []
-        let characters = Array("int lemon = 42; /* keystroke */")
+        let characters = Array(typingText)
         for index in 0 ..< iterations {
             let character = String(characters[index % characters.count])
             let interval = signposter.beginInterval("Keystroke")
@@ -235,6 +244,9 @@ public final class EditorBenchmark {
         for _ in 0 ..< iterations {
             let interval = signposter.beginInterval("Delete")
             let start = ContinuousClock.now
+            // UIKit selects the character before the caret, then calls deleteBackward.
+            let caret = textView.selectedRange
+            textView.selectedRange = NSRange(location: max(caret.location - 1, 0), length: caret.location > 0 ? 1 : 0)
             textView.deleteBackward()
             textView.layoutIfNeeded()
             CATransaction.flush()
@@ -243,6 +255,28 @@ public final class EditorBenchmark {
             await nextFrames(1)
         }
         return (Distribution(inserts), Distribution(deletes))
+    }
+
+    private func measureDelimiterTyping() async -> Distribution {
+        let textView = controller.codeTextView
+        var samples: [Double] = []
+        for _ in 0 ..< 10 {
+            for character in ["/", "*", " ", "x"] {
+                let start = ContinuousClock.now
+                textView.insertText(character)
+                textView.layoutIfNeeded()
+                CATransaction.flush()
+                samples.append((ContinuousClock.now - start).milliseconds)
+                await nextFrames(1)
+            }
+            for _ in 0 ..< 4 {
+                let caret = textView.selectedRange
+                textView.selectedRange = NSRange(location: max(caret.location - 1, 0), length: caret.location > 0 ? 1 : 0)
+                textView.deleteBackward()
+                await nextFrames(1)
+            }
+        }
+        return Distribution(samples)
     }
 
     // MARK: - Helpers

@@ -1,0 +1,154 @@
+# LemonSeed Studio: the iPad app.
+#
+# Generate the project with ./build.sh (or `xcodegen` in this folder).
+#
+# Simulator builds (the default) contain the app only. Device builds embed
+# the mac_linuxgpu DriverKit extension exactly as Engine/ProofOfLife does:
+# ./build.sh device sets LEMONSEED_EMBED_DEXT=YES, which includes
+# Device/dext.yml (the MacLinuxGPU driver-extension target, its
+# entitlements, and the "Embed System Extensions" dependency). The
+# simulator cannot build or load a dext, so it is left out there.
+#
+# Identifiers: the app is com.geramyloveless.LemonSeedStudio; the dext is
+# com.geramyloveless.LemonSeedStudio.AMDGpuDriver.
+
+name: LemonSeedStudio
+
+include:
+  - path: Device/dext.yml
+    enable: ${LEMONSEED_EMBED_DEXT}
+
+options:
+  deploymentTarget:
+    iOS: "26.2"
+  createIntermediateGroups: true
+  developmentLanguage: en
+  groupSortPosition: top
+
+settings:
+  base:
+    DEVELOPMENT_TEAM: YBQ9BU6Q6F
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+    CLANG_CXX_LANGUAGE_STANDARD: gnu++20
+    GCC_C_LANGUAGE_STANDARD: gnu11
+
+packages:
+  StudioDesign:
+    path: ../Packages/StudioDesign
+  StudioCore:
+    path: ../Packages/StudioCore
+  StudioTerminal:
+    path: ../Packages/StudioTerminal
+  LemonText:
+    path: ../Packages/LemonText
+
+targets:
+  LemonSeedStudio:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.2"
+    sources:
+      - path: App
+        excludes:
+          - "Info.plist"
+          - "*.entitlements"
+    dependencies:
+      - package: StudioDesign
+      - package: StudioCore
+      - package: StudioTerminal
+      - package: LemonText
+      - sdk: IOKit.framework
+      - sdk: SystemExtensions.framework
+      - sdk: GameController.framework
+    postCompileScripts:
+      - name: Collect third-party notices
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          # Every THIRD_PARTY.md in the repository (outside third_party/ and
+          # build output) is bundled under Licenses/ for Settings › About.
+          dest="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Licenses"
+          rm -rf "$dest"
+          mkdir -p "$dest"
+          root="$(cd "${SRCROOT}/.." && pwd)"
+          find "$root" \( -name third_party -o -name build -o -name .build -o -name DerivedData \
+                          -o -name SourcePackages -o -name .git -o -name node_modules \) -prune \
+               -o -name THIRD_PARTY.md -print | while read -r file; do
+            dir="$(dirname "$file")"
+            if [ "$dir" = "$root" ]; then name="LemonSeed Studio"; else name="$(basename "$dir")"; fi
+            cp "$file" "$dest/${name}-THIRD_PARTY.md"
+          done
+          for sub in mac_linuxgpu LSE amdgpu_mtopg; do
+            for license in LICENSE LICENSE.md; do
+              if [ -f "$root/third_party/$sub/$license" ]; then
+                cp "$root/third_party/$sub/$license" "$dest/${sub}-LICENSE.txt"
+                break
+              fi
+            done
+          done
+    settings:
+      base:
+        PRODUCT_NAME: LemonSeedStudio
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.LemonSeedStudio
+        INFOPLIST_FILE: App/Info.plist
+        # Entitlements are for device builds; the simulator runs without them.
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]": App/LemonSeedStudio.entitlements
+        SWIFT_OBJC_BRIDGING_HEADER: App/Studio-Bridging-Header.h
+        TARGETED_DEVICE_FAMILY: "2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        SWIFT_STRICT_CONCURRENCY: complete
+
+  StudioAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "26.2"
+    sources:
+      - path: Tests/StudioAppTests
+    dependencies:
+      - target: LemonSeedStudio
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.LemonSeedStudio.Tests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "2"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/LemonSeedStudio.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/LemonSeedStudio"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+  StudioUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "26.2"
+    sources:
+      - path: Tests/StudioUITests
+    dependencies:
+      - target: LemonSeedStudio
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.LemonSeedStudio.UITests
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "2"
+        TEST_TARGET_NAME: LemonSeedStudio
+
+schemes:
+  LemonSeedStudio:
+    build:
+      targets:
+        LemonSeedStudio: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - StudioAppTests
+        - StudioUITests
+        - package: StudioCore/StudioCoreTests
+        - package: StudioDesign/StudioDesignTests
+    archive:
+      config: Release

@@ -148,14 +148,17 @@ final class MenuBarTests: StudioUITestCase {
         dismissSettings()
         menu("LemonSeed Studio", "Keyboard Shortcuts")
         expect("settings")
-        XCTAssertTrue(app.staticTexts["Go: Show All Commands"].waitForExistence(timeout: 3), "opens on the keymap")
+        expect("settings.keyboard", "opens on the keymap")
         dismissSettings()
     }
 
     /// ⌘W is also the system's Window › Close: in the Studio it must close
     /// the editor tab, never the window.
-    func testCommandWClosesTheTabNotTheWindow() {
+    func testCommandWClosesTheTabNotTheWindow() throws {
         launch()
+        if element("toolbar.keyboard").exists {
+            throw XCTSkip("XCUITest delivers ⌘-shortcuts only with a hardware keyboard connected (scripts/simulator-keyboard.sh on)")
+        }
         expect("tab.main.c")
         app.typeKey("w", modifierFlags: .command)
         expect("tab.main.c", exists: false)

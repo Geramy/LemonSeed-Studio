@@ -97,8 +97,12 @@ class StudioUITestCase: XCTestCase {
         ensureForeground()
         let file = springboard.buttons["File"].firstMatch
         guard file.exists, file.isHittable else { return }
-        let frame = element("toolbar.workspaceMenu").exists ? element("editor.pane.0").frame : app.frame
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.maxY - 30)).tap()
+        // An inert spot: the top bar's empty middle, or the window's bottom edge.
+        let menuButton = element("toolbar.workspaceMenu")
+        let point = menuButton.exists
+            ? CGVector(dx: menuButton.frame.maxX + 60, dy: menuButton.frame.midY)
+            : CGVector(dx: app.frame.midX, dy: app.frame.maxY - 8)
+        app.coordinate(withNormalizedOffset: .zero).withOffset(point).tap()
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == false"), object: file)
         _ = XCTWaiter.wait(for: [gone], timeout: 3)
     }
@@ -138,8 +142,11 @@ class StudioUITestCase: XCTestCase {
     func dismissPalette() {
         expect("palette")
         dismissMenuBar()
-        let frame = element("palette").frame
-        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.maxY + 40)).tap()
+        let palette = element("palette")
+        if palette.exists {
+            let frame = palette.frame
+            app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: frame.midX, dy: frame.maxY + 40)).tap()
+        }
         expect("palette", exists: false)
     }
 

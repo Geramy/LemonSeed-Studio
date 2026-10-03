@@ -227,7 +227,7 @@ final class ToolbarTests: StudioUITestCase {
         XCTAssertTrue(isSelected("settings.theme.lemon-light"))
         tap("settings.theme.lemon-dark")
         tap("settings.page.keyboard")
-        XCTAssertTrue(app.staticTexts["Go: Show All Commands"].waitForExistence(timeout: 3))
+        expect("settings.keyboard")
         tap("settings.page.model")
         expect("settings.endpoint")
         tap("settings.testEndpoint")

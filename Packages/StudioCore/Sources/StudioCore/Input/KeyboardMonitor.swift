@@ -86,9 +86,16 @@ public final class KeyboardMonitor {
         observers.append(center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.keyboardFrameChanged(.zero) }
         })
-        observers.append(center.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { [weak self] note in
-            let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue ?? .zero
-            MainActor.assumeIsolated { self?.keyboardFrameChanged(frame) }
+        // The did-notifications are authoritative: reloading an accessory
+        // view sends will-hide and will-show in quick succession.
+        for name in [UIResponder.keyboardDidShowNotification, UIResponder.keyboardDidChangeFrameNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue ?? .zero
+                MainActor.assumeIsolated { self?.keyboardFrameChanged(frame) }
+            })
+        }
+        observers.append(center.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.keyboardFrameChanged(.zero) }
         })
         #endif
     }

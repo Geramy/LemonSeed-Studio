@@ -88,6 +88,8 @@ struct CommandPalette: View {
             refresh()
         }
         .onChange(of: controller.paletteQuery) { _, _ in refresh() }
+        // Opened before indexing finished: refresh when the files arrive.
+        .onChange(of: controller.workspace.fileIndex.count) { _, _ in refresh() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("palette")
     }
@@ -104,7 +106,7 @@ struct CommandPalette: View {
         }
         .padding(.horizontal, Space.l)
         .frame(height: 30)
-        .background(theme.palette.hover.opacity(0.5).color)
+        .overlay(alignment: .top) { Hairline() }
     }
 
     private func hint(_ keys: String, _ label: String) -> some View {

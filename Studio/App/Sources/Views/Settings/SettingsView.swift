@@ -44,22 +44,30 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            List(SettingsPage.allCases, selection: $page) { page in
-                Label(page.title, systemImage: page.symbol)
-                    .tag(page)
-                    .accessibilityIdentifier("settings.page.\(page.rawValue)")
-            }
-            .navigationTitle("Settings")
-            .scrollContentBackground(.hidden)
-            .background(theme.palette.chrome.color)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") { dismiss() }
-                        .accessibilityIdentifier("settings.done")
+        // A fixed page list beside the page, at any sheet width: a split
+        // view would collapse to a stack in a narrow sheet and hide the list.
+        HStack(spacing: 0) {
+            NavigationStack {
+                List(SettingsPage.allCases, selection: $page) { page in
+                    Label(page.title, systemImage: page.symbol)
+                        .tag(page)
+                        // One element per row, so the identifier is not shared with the icon.
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("settings.page.\(page.rawValue)")
+                }
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .scrollContentBackground(.hidden)
+                .background(theme.palette.chrome.color)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { dismiss() }
+                            .accessibilityIdentifier("settings.done")
+                    }
                 }
             }
-        } detail: {
+            .frame(width: 240)
+            Hairline(.vertical)
             NavigationStack {
                 Group {
                     switch page ?? .appearance {
@@ -75,8 +83,8 @@ struct SettingsView: View {
                 .navigationTitle((page ?? .appearance).title)
                 .navigationBarTitleDisplayMode(.inline)
             }
+            .id(page)
         }
-        .navigationSplitViewStyle(.balanced)
         .presentationSizing(.page)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("settings")

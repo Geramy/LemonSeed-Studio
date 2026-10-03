@@ -21,7 +21,7 @@ final class KeyboardTests: StudioUITestCase {
         expect("editor.keyboardButton")
         tap("editor.keyboardButton")
         XCTAssertTrue(focusedElement.waitForExistence(timeout: 5), "the editor took keyboard focus")
-        if app.keyboards.firstMatch.waitForExistence(timeout: 3) {
+        if fullKeyboardAppeared() {
             // The simulator has no hardware keyboard: the full flow is visible.
             verifySoftwareKeyboardFlow()
         }
@@ -39,9 +39,17 @@ final class KeyboardTests: StudioUITestCase {
             expect("toolbar.keyboard", timeout: 5, "no hardware keyboard is connected")
             expect("editor.keyboardButton")
             tap("editor.keyboardButton")
-            XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5), "the on-screen keyboard appeared")
+            XCTAssertTrue(fullKeyboardAppeared(), "the on-screen keyboard appeared")
             verifySoftwareKeyboardFlow()
         }
+    }
+
+    /// A full on-screen keyboard, not just the accessory row the system
+    /// leaves when it believes a hardware keyboard is attached.
+    private func fullKeyboardAppeared() -> Bool {
+        let keyboard = app.keyboards.firstMatch
+        return keyboard.waitForExistence(timeout: 3) && app.keys["delete"].waitForExistence(timeout: 2)
+            && keyboard.frame.height > 200
     }
 
     /// With the on-screen keyboard up: the key bar shows, its keys type into

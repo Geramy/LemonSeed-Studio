@@ -68,6 +68,7 @@ struct ExplorerRow: View {
     @State private var targeted = false
     @State private var draftName = ""
     @State private var nameSelection: TextSelection?
+    @State private var pendingNameSelection: Range<String.Index>?
     @FocusState private var renameFocused: Bool
 
     private var tree: FileTree { controller.workspace.tree }
@@ -110,17 +111,15 @@ struct ExplorerRow: View {
                         // Select the name without its extension, as Finder does.
                         let base = node.isDirectory || !node.name.dropFirst().contains(".")
                             ? draftName[...] : draftName[..<(draftName.lastIndex(of: ".") ?? draftName.endIndex)]
-                        let range = draftName.startIndex..<base.endIndex
+                        pendingNameSelection = draftName.startIndex..<base.endIndex
                         renameFocused = true
-                        // After focus lands (focusing puts the caret at the end).
-                        Task { @MainActor in
-                            for delay in [30, 120] {
-                                try? await Task.sleep(for: .milliseconds(delay))
-                                nameSelection = TextSelection(range: range)
-                            }
-                        }
                     }
                     .onChange(of: renameFocused) { _, focused in
+                        if focused, let range = pendingNameSelection {
+                            // Focusing puts the caret at the end; select the base name after.
+                            pendingNameSelection = nil
+                            Task { @MainActor in nameSelection = TextSelection(range: range) }
+                        }
                         if !focused, isRenaming { controller.rename(node.url, to: draftName) }
                     }
                     .accessibilityIdentifier("explorer.rename")

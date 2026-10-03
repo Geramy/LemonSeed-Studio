@@ -38,8 +38,12 @@ final class ScreenshotTests: StudioUITestCase {
     /// the foreground on iPadOS 26 and cover it).
     private var studioIsInFront: Bool {
         guard app.state == .runningForeground else { return false }
-        let marker = element("toolbar.workspaceMenu").exists ? element("toolbar.workspaceMenu") : element("welcome.openFolder")
-        return marker.exists && marker.isHittable
+        // Whatever is frontmost in the Studio: a sheet, the palette, the window.
+        for id in ["settings.done", "palette.field", "toolbar.workspaceMenu", "welcome.openFolder"] {
+            let marker = element(id)
+            if marker.exists { return marker.isHittable }
+        }
+        return false
     }
 
     /// Captures the screen while the Studio is in front. Other apps share

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Observation
 import GameController
 import StudioCore
@@ -36,6 +37,21 @@ final class AppModel {
     var activeRouter: SceneRouter?
     /// The launch-argument project opens in the first window only.
     @ObservationIgnored var claimedLaunchProject = false
+    @ObservationIgnored private var discardedRestoredWindows = false
+
+    /// With -StudioResetState, starts from a single window: windows restored
+    /// from earlier runs (Stage Manager keeps them) are discarded, so
+    /// automation always drives the window it launched.
+    func discardRestoredWindowsIfResetting() {
+        guard LaunchOptions.resetState, !discardedRestoredWindows else { return }
+        discardedRestoredWindows = true
+        let application = UIApplication.shared
+        let keep = application.connectedScenes.first { $0.activationState == .foregroundActive }
+            ?? application.connectedScenes.first
+        for session in application.openSessions where session != keep?.session {
+            application.requestSceneSessionDestruction(session, options: nil)
+        }
+    }
 
     private init() {
         gpu = GPUCoordinator(driver: driver, engine: engine, library: models)

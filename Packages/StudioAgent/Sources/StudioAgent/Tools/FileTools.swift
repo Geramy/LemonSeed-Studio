@@ -140,7 +140,7 @@ public struct EditTool: AgentTool {
 
     /// Accepts pi's shapes: an `edits` array, `edits` as a JSON string or a
     /// single object, and the legacy top-level `oldText`/`newText`.
-    static func replacements(from arguments: JSONValue) throws -> [EditEngine.Replacement] {
+    public static func replacements(from arguments: JSONValue) throws -> [EditEngine.Replacement] {
         var items: [JSONValue] = []
         var edits = arguments["edits"]
         if let s = edits?.stringValue, let parsed = try? JSONValue.parse(s) { edits = parsed }

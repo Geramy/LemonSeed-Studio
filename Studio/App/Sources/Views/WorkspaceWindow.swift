@@ -46,6 +46,9 @@ struct WorkspaceWindow: View {
             }
             Hairline()
             StatusBar(controller: controller)
+            if let stress = controller.keyboardStress {
+                KeyboardStressStatus(stress: stress)
+            }
         }
         .background(theme.palette.canvas.color)
         .overlay {

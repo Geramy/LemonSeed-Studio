@@ -124,6 +124,9 @@ final class WorkspaceController: WorkspaceContext {
     /// Most recently opened files (relative paths), for quick open.
     private(set) var recentFiles: [String] = []
 
+    /// Set when launched with -StudioKeyboardStress.
+    private(set) var keyboardStress: KeyboardStress?
+
     var explorerSelection: URL?
     var renamingURL: URL?
     var pendingDeletion: URL?
@@ -528,6 +531,11 @@ final class WorkspaceController: WorkspaceContext {
                         query: LaunchOptions.paletteQuery)
         }
         if LaunchOptions.showSettings { router?.isSettingsPresented = true }
+        if LaunchOptions.keyboardStress {
+            let stress = KeyboardStress(controller: self)
+            keyboardStress = stress
+            Task { await stress.run() }
+        }
     }
 }
 

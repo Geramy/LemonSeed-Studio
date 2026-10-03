@@ -1,6 +1,7 @@
 import Foundation
 import StudioCore
 import StudioTerminal
+import LemonText
 
 /// Where packages plug into the Studio.
 ///
@@ -25,13 +26,18 @@ import StudioTerminal
 @MainActor
 enum StudioPlugins {
     static func register(into services: StudioServices, settings: AppSettings, driver: DriverMonitor) {
+        // The editor: LemonText for every loaded text document. The plain
+        // text view stays registered as the last resort.
+        if LaunchOptions.editor != "plain" {
+            services.register(editor: LemonTextEditorProvider())
+        }
+
         // Built into the shell.
         services.terminal = SwiftTermTerminalProvider()
         services.telemetry = DriverTelemetryProvider(driver: driver)
         services.agent = EndpointAgentProvider(endpoint: settings.lseEndpointURL)
 
         // Packages register here, e.g.:
-        // services.register(editor: LemonTextEditorProvider())
         // services.git = StudioGitProvider()
         // services.agent = StudioAgentProvider(endpoint: settings.lseEndpointURL)
         // services.telemetry = StudioTelemetryProvider(fallback: driver)

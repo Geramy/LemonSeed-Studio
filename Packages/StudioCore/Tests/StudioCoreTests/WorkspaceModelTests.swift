@@ -445,3 +445,46 @@ final class CentersTests: XCTestCase {
         XCTAssertEqual(try ModelEndpointProbe.parseModels(data), ["qwen3.8-27b-q4"])
     }
 }
+
+@MainActor
+final class LiveTextSourceTests: XCTestCase {
+    func testAttachedEditorIsPulledLazily() async throws {
+        let tree = try TemporaryTree(["a.txt": "one"])
+        let document = EditorDocument(url: tree.child("a.txt"))
+        await document.load()
+        final class Buffer { var text = "one"; var pulls = 0 }
+        let buffer = Buffer()
+        document.attachTextSource { buffer.pulls += 1; return buffer.text }
+        for character in "two" {
+            buffer.text.append(character)
+            document.noteEdit()
+        }
+        var pulls: Int { buffer.pulls }
+        XCTAssertEqual(pulls, 0, "edits do not copy the text")
+        XCTAssertTrue(document.isDirty)
+        XCTAssertEqual(document.currentText, "onetwo")
+        XCTAssertEqual(pulls, 1)
+        XCTAssertEqual(document.currentText, "onetwo")
+        XCTAssertEqual(pulls, 1, "no copy when nothing changed")
+        try await document.save()
+        XCTAssertEqual(try tree.read("a.txt"), "onetwo")
+        XCTAssertFalse(document.isDirty)
+    }
+
+    func testReloadDetachesAndBumpsGeneration() async throws {
+        let tree = try TemporaryTree(["a.txt": "disk"])
+        let document = EditorDocument(url: tree.child("a.txt"))
+        await document.load()
+        let generation = document.contentGeneration
+        document.attachTextSource { "stale editor text" }
+        document.noteEdit()
+        await document.revert()
+        XCTAssertFalse(document.hasTextSource)
+        XCTAssertEqual(document.currentText, "disk")
+        XCTAssertGreaterThan(document.contentGeneration, generation)
+        document.attachTextSource { "x" }
+        document.setText("replaced")
+        XCTAssertFalse(document.hasTextSource, "an outside replacement detaches the editor")
+        XCTAssertEqual(document.text, "replaced")
+    }
+}

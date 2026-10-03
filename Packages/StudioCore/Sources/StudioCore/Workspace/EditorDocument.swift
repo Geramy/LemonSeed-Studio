@@ -30,8 +30,17 @@ public final class EditorDocument: Identifiable {
     public private(set) var language: Language
     public private(set) var loadState: LoadState = .loading
 
-    /// The text with line endings normalized to "\n".
+    /// The text with line endings normalized to "\n". While an editor
+    /// that owns the live buffer is attached (see `attachTextSource`), this
+    /// is a snapshot refreshed by `syncText()`, which saving and other
+    /// readers of the whole text call first.
     public private(set) var text: String = ""
+    /// Increments whenever the text is replaced from outside the editor
+    /// (load, revert, reload after an external change). Editors that own a
+    /// buffer reload from `text` and re-attach when it changes.
+    public private(set) var contentGeneration = 0
+    @ObservationIgnored private var textSource: (@MainActor () -> String)?
+    @ObservationIgnored private var sourceRevision = 0
     /// Increments on every edit; editors use it to skip redundant updates.
     public private(set) var revision = 0
     private var savedRevision = 0
@@ -62,13 +71,58 @@ public final class EditorDocument: Identifiable {
     public var name: String { url.lastPathComponent }
 
     public var lineCount: Int {
-        text.utf8.reduce(into: 1) { count, byte in if byte == 0x0A { count += 1 } }
+        currentText.utf8.reduce(into: 1) { count, byte in if byte == 0x0A { count += 1 } }
     }
 
     // MARK: Editing
 
-    /// Replaces the text; editors call this as the user types.
+    // MARK: Live editors
+
+    /// Attaches an editor that owns the live text (LemonText, the built-in
+    /// text view). The editor calls `noteEdit()` per change, which costs
+    /// nothing in the size of the file; the text is copied out only when
+    /// someone needs it (`syncText()`: save, the agent, the terminal).
+    public func attachTextSource(_ source: @escaping @MainActor () -> String) {
+        textSource = source
+        sourceRevision = revision
+    }
+
+    /// Detaches the editor, keeping its final text.
+    public func detachTextSource() {
+        syncText()
+        textSource = nil
+    }
+
+    public var hasTextSource: Bool { textSource != nil }
+
+    /// Records an edit made in the attached editor: O(1).
+    public func noteEdit() {
+        revision += 1
+    }
+
+    /// Copies the attached editor's text into `text` if it changed since the last copy.
+    public func syncText() {
+        guard let textSource, sourceRevision != revision else { return }
+        text = textSource()
+        sourceRevision = revision
+    }
+
+    /// The current text, pulling it from the attached editor first.
+    public var currentText: String {
+        syncText()
+        return text
+    }
+
+    /// Replaces the text (editors without their own buffer, tools, tests).
+    /// An attached editor is told through `contentGeneration`.
     public func setText(_ newText: String) {
+        if textSource != nil {
+            textSource = nil
+            text = newText
+            revision += 1
+            contentGeneration += 1
+            return
+        }
         guard newText != text else { return }
         text = newText
         revision += 1
@@ -100,6 +154,8 @@ public final class EditorDocument: Identifiable {
             switch file.content {
             case .text(let string, let ending, let encoding, let bom):
                 text = string
+                textSource = nil
+                contentGeneration += 1
                 lineEnding = ending
                 self.encoding = encoding
                 hasByteOrderMark = bom
@@ -119,6 +175,7 @@ public final class EditorDocument: Identifiable {
 
     public func save() async throws {
         guard loadState == .loaded else { return }
+        syncText()
         let output = lineEnding == .crlf ? text.replacingOccurrences(of: "\n", with: "\r\n") : text
         guard var data = output.data(using: encoding) else {
             throw CocoaError(.fileWriteInapplicableStringEncoding)

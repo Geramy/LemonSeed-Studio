@@ -151,6 +151,10 @@ enum LaunchOptions {
     static var sampleProject: String? { defaults.string(forKey: "StudioSampleProject") }
     /// Starts with an empty library and no restored windows (UI tests).
     static var resetState: Bool { defaults.bool(forKey: "StudioResetState") }
+    /// Runs the in-shell keyboard replay (see KeyboardStress).
+    static var keyboardStress: Bool { defaults.bool(forKey: "StudioKeyboardStress") }
+    /// "plain" runs with only the built-in editor (tests of the fallback).
+    static var editor: String? { defaults.string(forKey: "StudioEditor") }
     static var density: Density? { defaults.string(forKey: "StudioDensity").flatMap(Density.init(rawValue:)) }
     /// Forces hardware-keyboard detection: YES or NO.
     static var hardwareKeyboard: Bool? { defaults.object(forKey: "StudioHardwareKeyboard") == nil ? nil : defaults.bool(forKey: "StudioHardwareKeyboard") }

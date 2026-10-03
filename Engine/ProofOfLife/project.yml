@@ -23,6 +23,12 @@ options:
   createIntermediateGroups: true
   developmentLanguage: en
 
+# The engine (LSE.xcframework) through LSEKit; Engine/LSEKit/update-xcframework.sh
+# puts the framework in place before the first build.
+packages:
+  LSEKit:
+    path: ../LSEKit
+
 settings:
   base:
     DEVELOPMENT_TEAM: YBQ9BU6Q6F
@@ -46,6 +52,7 @@ targets:
       - target: MacLinuxGPU
         embed: true
       - sdk: IOKit.framework
+      - package: LSEKit
     settings:
       base:
         PRODUCT_NAME: LemonSeedStudio

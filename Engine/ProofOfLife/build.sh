@@ -46,6 +46,11 @@ if [[ -n "$pinned" && "$pinned" != "$actual" ]]; then
   echo "note: $MAC_LINUXGPU_DIR is at $actual; the submodule pin is $pinned" >&2
 fi
 
+[[ -d "$ROOT/Engine/LSEKit/LSE.xcframework" ]] || {
+  echo "Engine/LSEKit/LSE.xcframework is missing; run Engine/LSEKit/update-xcframework.sh" >&2
+  exit 1
+}
+
 /opt/homebrew/bin/xcodegen --spec "$HERE/project.yml" --project "$HERE"
 
 xcodebuild \

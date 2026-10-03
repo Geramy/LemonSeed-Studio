@@ -1,0 +1,132 @@
+{
+  "bytes" : 9515341,
+  "date" : "2026-10-03T06:20:45Z",
+  "deleteMilliseconds" : {
+    "count" : 300,
+    "max" : 9.845334,
+    "mean" : 3.827447816666666,
+    "p50" : 4.098375,
+    "p95" : 4.455375,
+    "p99" : 4.965333
+  },
+  "device" : "iPad iPad17,4",
+  "fileName" : "sqlite3.c",
+  "installAndFirstLayoutMilliseconds" : 25.523375,
+  "isSimulator" : true,
+  "jumpMilliseconds" : {
+    "count" : 40,
+    "max" : 63.945875,
+    "mean" : 45.927527125000005,
+    "p50" : 47.5285,
+    "p95" : 53.830625,
+    "p99" : 63.945875
+  },
+  "keystrokeEditorMilliseconds" : {
+    "count" : 588,
+    "max" : 2.1544166665989906,
+    "mean" : 1.3754817885202182,
+    "p50" : 1.2627916657947935,
+    "p95" : 1.9113333328277804,
+    "p99" : 2.056000001175562
+  },
+  "language" : "C",
+  "lineCount" : 269650,
+  "memoryAfterHighlightMB" : 250.03356170654297,
+  "memoryAfterOpenMB" : 135.7365951538086,
+  "memoryBeforeMB" : 24.40837860107422,
+  "memoryByPhaseMB" : {
+    "commentOpener" : 307.1899719238281,
+    "highlighted" : 250.03356170654297,
+    "jumps" : 314.18985748291016,
+    "open" : 135.7365951538086,
+    "scrollFast" : 268.68981170654297,
+    "scrollSteady" : 254.79918670654297,
+    "typing" : 305.5337219238281,
+    "typingWithoutSuggestions" : 308.03369903564453
+  },
+  "memoryPeakMB" : 314.18985748291016,
+  "openCommentMilliseconds" : {
+    "count" : 40,
+    "max" : 8.382125,
+    "mean" : 7.174725024999999,
+    "p50" : 7.137417,
+    "p95" : 7.513542,
+    "p99" : 8.382125
+  },
+  "openToFirstScreenMilliseconds" : 172.091125,
+  "openToHighlightedMilliseconds" : 521.559791,
+  "prepareMilliseconds" : 133.223625,
+  "readFileMilliseconds" : 6.927917,
+  "scroll" : [
+    {
+      "averageFPS" : 60,
+      "displayMaximumFPS" : 60,
+      "droppedFrames" : 0,
+      "durationSeconds" : 4,
+      "frameWorkMilliseconds" : {
+        "count" : 241,
+        "max" : 5.2770000002055895,
+        "mean" : 2.227927731599802,
+        "p50" : 2.1868750009161886,
+        "p95" : 2.728791667323094,
+        "p99" : 4.903166667645564
+      },
+      "frames" : 240,
+      "name" : "steady 2,400 pt\/s from the top",
+      "pointsPerSecond" : 2400,
+      "targetFPS" : 120
+    },
+    {
+      "averageFPS" : 59,
+      "displayMaximumFPS" : 60,
+      "droppedFrames" : 2,
+      "durationSeconds" : 4,
+      "frameWorkMilliseconds" : {
+        "count" : 237,
+        "max" : 5.393125000409782,
+        "mean" : 2.8645812236249077,
+        "p50" : 2.609458333608927,
+        "p95" : 4.985083331121132,
+        "p99" : 5.142541664099554
+      },
+      "frames" : 236,
+      "name" : "fast 9,000 pt\/s through the middle",
+      "pointsPerSecond" : 9000,
+      "targetFPS" : 120
+    }
+  ],
+  "system" : "iPadOS 26.5",
+  "typingCommitPhaseMilliseconds" : {
+    "count" : 300,
+    "max" : 8.247833,
+    "mean" : 5.761486943333333,
+    "p50" : 6.88325,
+    "p95" : 7.928083,
+    "p99" : 8.087458
+  },
+  "typingInsertPhaseMilliseconds" : {
+    "count" : 300,
+    "max" : 6.965,
+    "mean" : 5.9011658299999965,
+    "p50" : 5.9775,
+    "p95" : 6.498542,
+    "p99" : 6.774
+  },
+  "typingMilliseconds" : {
+    "count" : 300,
+    "max" : 14.738125,
+    "mean" : 11.662652773333336,
+    "p50" : 12.882041,
+    "p95" : 14.173125,
+    "p99" : 14.38975
+  },
+  "typingWithoutSuggestionsMilliseconds" : {
+    "count" : 300,
+    "max" : 14.692458,
+    "mean" : 11.168972369999999,
+    "p50" : 13.08425,
+    "p95" : 14.296167,
+    "p99" : 14.563375
+  },
+  "utf16Length" : 9515341
+}

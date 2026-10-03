@@ -1,0 +1,51 @@
+# StudioTelemetry demo: the GPU screen, sidebar card and status-bar pill
+# running on recorded R9700 fixtures in the iPad simulator.
+#
+#   xcodegen generate
+#   xcodebuild -project TelemetryDemo.xcodeproj -scheme TelemetryDemo \
+#     -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M5)' build
+#
+# Launch arguments (for screenshots): -fixture r9700-idle|r9700-load,
+# -scenario live|notRunning|noDevice|driverNotEnabled|predatesObserverReads,
+# -theme system|dark|light, -layout studio|screen|widgets, -source fixture|iokit.
+# Landscape: rotate the simulator (Device › Rotate Left); `simctl io
+# screenshot` then returns the framebuffer sideways (`sips -r 270` it).
+
+name: TelemetryDemo
+
+options:
+  deploymentTarget:
+    iOS: "26.2"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+packages:
+  StudioTelemetry:
+    path: ..
+
+targets:
+  TelemetryDemo:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.2"
+    sources:
+      - path: TelemetryDemo
+    dependencies:
+      - package: StudioTelemetry
+    settings:
+      base:
+        PRODUCT_NAME: TelemetryDemo
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.LemonSeedStudio.TelemetryDemo
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_CFBundleDisplayName: GPU Telemetry
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGN_IDENTITY: ""

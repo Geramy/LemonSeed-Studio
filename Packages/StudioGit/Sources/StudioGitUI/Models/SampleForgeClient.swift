@@ -12,6 +12,10 @@ public final class SampleForgeClient: ForgeClient, @unchecked Sendable {
 
     public init(host: ForgeHost = .github) { self.host = host }
 
+    /// An account to pair with the sample client.
+    public static let sampleAccount = ForgeAccount(host: .github, user: alice, method: .oauthDevice,
+                                                   owners: ["alice", "lemonade-sdk"])
+
     static let date = Date(timeIntervalSince1970: 1_790_000_000)
     static let alice = ForgeUser(id: "1", login: "alice", name: "Alice Moreau")
     static let bob = ForgeUser(id: "2", login: "bob", name: "Bob Tanaka")

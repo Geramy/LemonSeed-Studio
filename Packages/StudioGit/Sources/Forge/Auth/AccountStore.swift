@@ -19,6 +19,17 @@ public struct ForgeAccount: Codable, Sendable, Hashable, Identifiable {
     public var addedAt: Date
 
     public var displayName: String { "\(user.login) @ \(host.hostname)" }
+
+    public init(id: UUID = UUID(), host: ForgeHost, user: ForgeUser, method: AuthMethod, scopes: [String] = [],
+                owners: [String] = [], addedAt: Date = Date()) {
+        self.id = id
+        self.host = host
+        self.user = user
+        self.method = method
+        self.scopes = scopes
+        self.owners = owners.isEmpty ? [user.login] : owners
+        self.addedAt = addedAt
+    }
 }
 
 /// Multiple accounts across GitHub, GitHub Enterprise, GitLab.com and

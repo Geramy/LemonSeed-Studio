@@ -1,4 +1,4 @@
-public import Foundation
+import Foundation
 public import Observation
 public import GitKit
 

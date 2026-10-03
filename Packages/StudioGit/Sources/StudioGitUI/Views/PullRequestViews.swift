@@ -248,35 +248,41 @@ public struct PullRequestDetailView: View {
     }
 
     private var files: some View {
-        HStack(spacing: 0) {
-            List(selection: $model.selectedFile) {
-                ForEach(model.files) { file in
-                    HStack {
-                        ChangeBadge(file.status == .added ? .added : file.status == .removed ? .deleted : file.status == .renamed ? .renamed : .modified)
-                        Text((file.path as NSString).lastPathComponent).lineLimit(1)
-                        Spacer()
-                        Text("+\(file.additions) −\(file.deletions)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(model.files) { file in
+                        let selected = model.selectedFile == file.path
+                        Button {
+                            model.selectedFile = file.path
+                        } label: {
+                            HStack(spacing: 6) {
+                                ChangeBadge(file.status == .added ? .added : file.status == .removed ? .deleted : file.status == .renamed ? .renamed : .modified)
+                                Text((file.path as NSString).lastPathComponent).lineLimit(1)
+                                Text("+\(file.additions) −\(file.deletions)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(selected ? theme.selectionBackground : Color.clear, in: Capsule())
+                            .overlay(Capsule().strokeBorder(.quaternary))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .tag(file.path)
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
-            .listStyle(.plain)
-            .frame(width: 300)
             Divider()
             if let path = model.selectedFile {
-                VStack(spacing: 0) {
-                    Text(path).font(.callout.monospaced()).frame(maxWidth: .infinity, alignment: .leading).padding(8)
-                    Divider()
-                    DiffView(hunks: model.selectedHunks,
-                             isBinary: model.files.first { $0.path == path }?.patch == nil,
-                             onTapLine: { line, _ in
-                                 if line.kind != .context || line.newLineNumber != nil { commentingOn = (line, path) }
-                             },
-                             lineMarker: { line in
-                                 guard let n = line.newLineNumber else { return 0 }
-                                 return model.comments(onLine: n, path: path).count
-                             })
-                }
+                Text(path).font(.caption.monospaced()).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 12).padding(.vertical, 6)
+                DiffView(hunks: model.selectedHunks,
+                         isBinary: model.files.first { $0.path == path }?.patch == nil,
+                         onTapLine: { line, _ in commentingOn = (line, path) },
+                         lineMarker: { line in
+                             guard let n = line.newLineNumber else { return 0 }
+                             return model.comments(onLine: n, path: path).count
+                         })
             } else {
                 ContentUnavailableView("Select a file", systemImage: "doc")
             }

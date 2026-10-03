@@ -319,28 +319,37 @@ public struct SourceControlDetailView: View {
             }
         }
         .navigationTitle(model.selection.map { ($0.path as NSString).lastPathComponent } ?? "Changes")
+        .inlineTitle()
     }
 
     private func header(_ diff: FileDiff, staged: Bool) -> some View {
-        HStack(spacing: 10) {
-            ChangeBadge(diff.change)
-            Text(diff.path).font(.callout.monospaced()).lineLimit(1).truncationMode(.head)
-            Text("+\(diff.additions) −\(diff.deletions)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-            Text(staged ? "Staged" : "Working Tree").font(.caption).padding(.horizontal, 6).padding(.vertical, 2)
-                .background(.quaternary, in: Capsule())
-            Spacer()
-            if !model.selectedLines.isEmpty {
-                Button {
-                    Task { await model.applySelectedLines() }
-                } label: {
-                    Label("\(staged ? "Unstage" : "Stage") \(model.selectedLines.count) Line\(model.selectedLines.count == 1 ? "" : "s")",
-                          systemImage: staged ? "minus" : "plus")
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                ChangeBadge(diff.change)
+                Text(diff.path).font(.callout.monospaced()).lineLimit(1).truncationMode(.head)
+                Spacer(minLength: 4)
+                Text("+\(diff.additions) −\(diff.deletions)").font(.caption.monospacedDigit()).foregroundStyle(.secondary).fixedSize()
+            }
+            HStack(spacing: 8) {
+                Text(staged ? "Staged" : "Working Tree").font(.caption).fixedSize()
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.quaternary, in: Capsule())
+                Spacer(minLength: 4)
+                if !model.selectedLines.isEmpty {
+                    Button("Clear") { model.selectedLines = [] }
+                        .controlSize(.small)
+                    Button {
+                        Task { await model.applySelectedLines() }
+                    } label: {
+                        Label("\(staged ? "Unstage" : "Stage") \(model.selectedLines.count) Line\(model.selectedLines.count == 1 ? "" : "s")",
+                              systemImage: staged ? "minus" : "plus")
+                            .fixedSize()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                } else if !diff.hunks.isEmpty {
+                    Text("Tap lines to stage them one by one").font(.caption).foregroundStyle(.tertiary)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                Button("Clear") { model.selectedLines = [] }.controlSize(.small)
-            } else if !diff.hunks.isEmpty {
-                Text("Tap lines to select them").font(.caption).foregroundStyle(.tertiary)
             }
         }
         .padding(.horizontal, 12)
@@ -367,7 +376,7 @@ public struct SourceControlWorkspaceView: View {
     public var body: some View {
         HStack(spacing: 0) {
             SourceControlView(model: model)
-                .frame(width: 380)
+                .frame(width: 360)
             Divider()
             SourceControlDetailView(model: model)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -100,6 +100,7 @@ public struct ConflictResolutionView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
             }
+            .defaultScrollAnchor(.topLeading)
         }
         .frame(maxWidth: .infinity)
     }

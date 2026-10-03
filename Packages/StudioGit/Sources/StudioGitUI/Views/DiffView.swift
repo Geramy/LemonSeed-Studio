@@ -47,16 +47,25 @@ public struct DiffView: View {
         } else if hunks.isEmpty {
             ContentUnavailableView("No changes", systemImage: "equal.circle")
         } else {
-            ScrollView([.vertical, .horizontal]) {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(hunks) { hunk in
-                        header(hunk)
-                        ForEach(hunk.lines) { line in
-                            row(line, hunk: hunk)
+            // Hunk headers stay full width so their actions remain visible;
+            // each hunk's lines scroll sideways on their own.
+            GeometryReader { proxy in
+                ScrollView(.vertical) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(hunks) { hunk in
+                            header(hunk)
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    ForEach(hunk.lines) { line in
+                                        row(line, hunk: hunk)
+                                            .frame(minWidth: proxy.size.width, alignment: .leading)
+                                    }
+                                }
+                            }
                         }
                     }
+                    .padding(.bottom, 24)
                 }
-                .padding(.bottom, 24)
             }
         }
     }
@@ -67,10 +76,12 @@ public struct DiffView: View {
                 .font(theme.codeFont)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-            Spacer(minLength: 12)
+                .truncationMode(.tail)
+                .layoutPriority(-1)
+            Spacer(minLength: 8)
             ForEach(hunkActions) { action in
                 Button(role: action.role) { action.perform(hunk) } label: {
-                    Label(action.title, systemImage: action.systemImage).font(.caption.weight(.medium))
+                    Label(action.title, systemImage: action.systemImage).font(.caption.weight(.medium)).fixedSize()
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)

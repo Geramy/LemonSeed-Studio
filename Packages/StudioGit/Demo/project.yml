@@ -1,0 +1,71 @@
+# StudioGit demo: the Git views running alone on an iPad or the simulator.
+#
+# Generate and build with ./build.sh (needs XcodeGen). Clibgit2.xcframework
+# must exist first (../scripts/build-libgit2.sh; build.sh runs it).
+
+name: StudioGitDemo
+
+options:
+  deploymentTarget:
+    iOS: "26.2"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+packages:
+  StudioGit:
+    path: ..
+
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+
+targets:
+  StudioGitDemo:
+    type: application
+    platform: iOS
+    deploymentTarget: "26.2"
+    sources:
+      - path: App
+    dependencies:
+      - package: StudioGit
+        product: StudioGitUI
+      - package: StudioGit
+        product: GitKit
+      - package: StudioGit
+        product: Forge
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: StudioGit Demo
+        UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # OAuth app client IDs (no secrets). Empty: set them in the app.
+        StudioGitGitHubClientID: ""
+        StudioGitGitLabClientID: ""
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.LemonSeedStudio.GitDemo
+        TARGETED_DEVICE_FAMILY: "2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+
+schemes:
+  StudioGitDemo:
+    build:
+      targets:
+        StudioGitDemo: all
+    run:
+      config: Debug

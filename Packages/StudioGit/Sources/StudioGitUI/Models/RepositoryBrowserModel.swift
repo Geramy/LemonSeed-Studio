@@ -10,6 +10,7 @@ public final class RepositoryBrowserModel {
     public let services: GitServices
     public let folders: SavedFolderStore
     @ObservationIgnored let makeClient: (ForgeAccount) -> any ForgeClient
+    @ObservationIgnored let fixedAccounts: [ForgeAccount]?
 
     public private(set) var accounts: [ForgeAccount] = []
     public var account: ForgeAccount?
@@ -29,10 +30,14 @@ public final class RepositoryBrowserModel {
     }
     public private(set) var cloneJob: CloneJob?
 
+    /// - Parameters:
+    ///   - makeClient: overrides the client per account (sample data, tests).
+    ///   - fixedAccounts: accounts to list instead of the signed-in ones.
     public init(services: GitServices, folders: SavedFolderStore = SavedFolderStore(),
-                makeClient: ((ForgeAccount) -> any ForgeClient)? = nil) {
+                makeClient: ((ForgeAccount) -> any ForgeClient)? = nil, fixedAccounts: [ForgeAccount]? = nil) {
         self.services = services
         self.folders = folders
+        self.fixedAccounts = fixedAccounts
         let accounts = services.accounts
         self.makeClient = makeClient ?? { accounts.client(for: $0) }
     }
@@ -44,7 +49,11 @@ public final class RepositoryBrowserModel {
     }
 
     public func load() async {
-        accounts = await services.accounts.accounts()
+        if let fixedAccounts {
+            accounts = fixedAccounts
+        } else {
+            accounts = await services.accounts.accounts()
+        }
         if account == nil || !accounts.contains(where: { $0.id == account?.id }) { account = accounts.first }
         await reload()
     }

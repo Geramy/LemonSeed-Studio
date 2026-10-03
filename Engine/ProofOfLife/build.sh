@@ -56,6 +56,7 @@ xcodebuild \
   -derivedDataPath "$DERIVED" \
   ${signing[@]+"${signing[@]}"} \
   MAC_LINUXGPU_DIR="$MAC_LINUXGPU_DIR" \
+  ${DEXT_ENTITLEMENTS:+DEXT_ENTITLEMENTS="$DEXT_ENTITLEMENTS"} \
   build
 
 echo "built: $APP"

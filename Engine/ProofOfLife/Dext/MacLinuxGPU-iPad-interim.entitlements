@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	    Interim iPadOS signing while Apple reviews the transport.pci request
+	    for com.geramyloveless.LemonSeedStudio.AMDGpuDriver. Without that
+	    entitlement the driver installs and can be enabled in Settings, but
+	    cannot match the GPU's PCI function. Switch back to
+	    MacLinuxGPU-iPad.entitlements once the grant is in the profile.
+	-->
+	<key>com.apple.developer.driverkit</key>
+	<true/>
+</dict>
+</plist>

@@ -84,6 +84,15 @@ actor TelemetrySampler {
     }
 }
 
+/// Stands in for a fixture that is not bundled: no device, and a source
+/// line that says why.
+struct MissingFixtureDirectory: ObserverDirectory {
+    let name: String
+    var sourceName: String { "no recorded fixture \(name) bundled (Tools/capture_fixtures.sh)" }
+    func devices() -> [ObserverDevice] { [] }
+    func openObserver(registryID: UInt64) throws -> any ObserverConnection { throw ObserverError.noSuchDevice(registryID) }
+}
+
 @MainActor
 @Observable
 public final class TelemetryService {
@@ -109,13 +118,13 @@ public final class TelemetryService {
     }
 
     /// A service replaying a bundled fixture recorded on real hardware.
-    public static func fixture(_ name: String = "r9700-idle", scenario: FixtureScenario = .live) -> TelemetryService {
-        do {
-            return TelemetryService(directory: FixtureObserverDirectory(fixture: try .bundled(name), scenario: scenario))
-        } catch {
-            let empty = ObserverFixture(name: name, device: .init(service: LinuxABI.serviceName, registryID: 0))
-            return TelemetryService(directory: FixtureObserverDirectory(fixture: empty, scenario: .noDevice))
+    /// Without that fixture it says so instead of showing anything.
+    public static func fixture(_ name: String? = nil, scenario: FixtureScenario = .live) -> TelemetryService {
+        let name = name ?? ObserverFixture.bundledNames.first ?? "r9700-idle"
+        guard let fixture = try? ObserverFixture.bundled(name) else {
+            return TelemetryService(directory: MissingFixtureDirectory(name: name))
         }
+        return TelemetryService(directory: FixtureObserverDirectory(fixture: fixture, scenario: scenario))
     }
 
     public var sampleRate: TelemetrySampleRate {

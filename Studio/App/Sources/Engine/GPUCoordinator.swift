@@ -62,8 +62,12 @@ final class GPUCoordinator {
     }
 
     /// Starts the engine if a driver service and a model are present.
+    /// Handles a start while the GPU is disconnected (EnginePower).
+    @ObservationIgnored var retryAfterDisconnect: (() -> Bool)?
+
     func startIfPossible() {
-        guard EngineService.isAvailable else {
+        if engine.blockedReason != nil, retryAfterDisconnect?() == true { return }
+        guard engine.canStart else {
             engine.markUnavailable()
             return
         }
@@ -84,7 +88,12 @@ final class GPUCoordinator {
         engine.start()
     }
 
+    /// Told first whenever the driver's service appears or goes away
+    /// (EnginePower: GPU unplugged and plugged back in).
+    @ObservationIgnored var serviceObserver: ((Bool) -> Void)?
+
     private func driverChanged() {
+        serviceObserver?(driver.service != nil)
         guard bootstrapped else { return }
         if driver.service != nil {
             if case .waiting = engine.phase, engine.autoStart { startIfPossible() }

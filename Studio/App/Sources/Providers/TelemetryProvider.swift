@@ -33,6 +33,7 @@ final class StudioTelemetryProvider: TelemetryProviding {
 
     var engineState: EngineState {
         let power = AppModel.shared.enginePower
+        if power.disconnected { return .disconnected(EnginePower.disconnectedMessage) }
         if power.recovering { return .initializing("GPU was reset by sleep; reloading model") }
         switch engine.phase {
         case .ready:
@@ -146,6 +147,36 @@ struct AdaptiveGPUMonitor: View {
     let provider: StudioTelemetryProvider
 
     var body: some View {
+        VStack(spacing: 0) {
+            if app.enginePower.disconnected { disconnectedBanner }
+            monitor
+        }
+    }
+
+    private var disconnectedBanner: some View {
+        HStack(alignment: .top, spacing: Space.s) {
+            Image(systemName: "cable.connector.slash")
+                .foregroundStyle(theme.palette.warning.color)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("GPU: disconnected")
+                    .font(.studio(type.body, weight: .semibold))
+                    .foregroundStyle(theme.palette.textPrimary.color)
+                Text("Plug the GPU back in to continue. The model loads again on its own; your chats and files are untouched.")
+                    .font(.studio(type.caption))
+                    .foregroundStyle(theme.palette.textSecondary.color)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Space.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.palette.warning.color.opacity(0.10), in: RoundedRectangle(cornerRadius: Radius.l, style: .continuous))
+        .padding(.horizontal, Space.m)
+        .padding(.bottom, Space.s)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("gpu.disconnected")
+    }
+
+    private var monitor: some View {
         GeometryReader { geo in
             if geo.size.width >= Self.fullWidth {
                 GPUMonitorView(service: provider.service)

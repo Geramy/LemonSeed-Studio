@@ -119,7 +119,7 @@ struct EnginePanel: View {
                         Label("Start", systemImage: "bolt.fill")
                     }
                     .buttonStyle(.studioPrimary)
-                    .disabled(!EngineService.isAvailable || gpu.selectedModel == nil
+                    .disabled(!engine.canStart || gpu.selectedModel == nil
                               || (engine.openedInThisProcess && !EngineService.canReopenInProcess))
                     .accessibilityIdentifier("engine.start")
                 }

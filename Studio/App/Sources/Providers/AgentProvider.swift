@@ -180,7 +180,7 @@ struct EngineGate: View {
                     Label("Start Engine", systemImage: "bolt.fill")
                 }
                 .buttonStyle(.studioPrimary)
-                .disabled(!EngineService.isAvailable)
+                .disabled(!engine.canStart)
                 .accessibilityIdentifier("engine.start")
             default:
                 EmptyView()

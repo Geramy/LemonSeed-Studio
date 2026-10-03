@@ -129,13 +129,15 @@ final class EngineService {
         #endif
     }
 
-    static var engineVersion: String {
-        #if canImport(LSEKit)
-        "LSE \(LSEEngine.version) (ABI \(LSEEngine.abiVersion))"
-        #else
-        "not in this build"
-        #endif
-    }
+    static var engineVersion: String { EngineOpener.standard.version }
+
+    /// How engines are opened (LSE; a fake in tests).
+    let opener: EngineOpener
+    /// Whether this service can open an engine at all.
+    var canStart: Bool { opener.isAvailable }
+    /// Set while something outside the app rules out starting (the GPU is
+    /// disconnected): start() waits with this reason instead.
+    var blockedReason: String?
 
     /// Thread-safe holder the chat transport reads from engine threads.
     let box = EngineBox()
@@ -144,7 +146,8 @@ final class EngineService {
     @ObservationIgnored private var stopAfterLoad = false
     @ObservationIgnored var launchResolver: (() -> EngineLaunch?)?
 
-    init() {
+    init(opener: EngineOpener = .standard) {
+        self.opener = opener
         autoStart = UserDefaults.standard.object(forKey: "engine.autoStart") as? Bool ?? true
         #if canImport(LSEKit)
         LSEEngine.setLogHandler { line in
@@ -235,7 +238,16 @@ final class EngineService {
             requireRestart(for: launch)
             return
         }
-        #if canImport(LSEKit)
+        if let blockedReason {
+            self.launch = launch
+            phase = .waiting(blockedReason)
+            return
+        }
+        guard opener.isAvailable else {
+            self.launch = launch
+            phase = .failed("This build has no GPU engine (simulator).")
+            return
+        }
         openedInThisProcess = true
         restartRequired = nil
         self.launch = launch
@@ -248,12 +260,12 @@ final class EngineService {
         statusTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
             Task { @MainActor [weak self] in self?.pollLoadStatus() }
         }
-        let config = Self.configuration(for: launch)
+        let opener = self.opener
         let started = Date()
         engineLog.log("engine open: \(launch.modelID, privacy: .public) draft \(launch.draftID ?? "none", privacy: .public) kv \(launch.kvCacheDType, privacy: .public)/\(launch.kvLength)")
         Task {
             do {
-                let opened = try await LSEEngine.open(config)
+                let opened = try await opener.open(launch)
                 box.set(opened)
                 recoveryNotice = nil
                 loadSeconds = Date().timeIntervalSince(started)
@@ -261,7 +273,8 @@ final class EngineService {
                 phase = .ready
                 engineLog.log("engine ready in \(self.loadSeconds ?? 0) s")
             } catch {
-                phase = .failed(String(describing: error))
+                // An open that failed because the GPU went away waits for it.
+                phase = blockedReason.map { .waiting($0) } ?? .failed(String(describing: error))
                 engineLog.error("engine open failed: \(String(describing: error), privacy: .public)")
             }
             statusTimer?.invalidate()
@@ -275,10 +288,6 @@ final class EngineService {
                 if next != self.launch || phase != .ready { reload(next) }
             }
         }
-        #else
-        self.launch = launch
-        phase = .failed("This build has no GPU engine (simulator).")
-        #endif
     }
 
     /// Stops the engine and releases the model and the GPU session. A load
@@ -289,7 +298,6 @@ final class EngineService {
             stopAfterLoad = true
             return
         }
-        #if canImport(LSEKit)
         guard let engine = box.take() else {
             if phase != .stopping { phase = .idle }
             return
@@ -298,7 +306,7 @@ final class EngineService {
         Task.detached {
             engine.close()
             await MainActor.run {
-                self.phase = .idle
+                self.phase = self.blockedReason.map { .waiting($0) } ?? .idle
                 self.startedAt = nil
                 if let next = self.pendingLaunch {
                     self.pendingLaunch = nil
@@ -306,9 +314,36 @@ final class EngineService {
                 }
             }
         }
-        #else
-        phase = .idle
-        #endif
+    }
+
+    /// The GPU went away (unplugged, or its driver service terminated): no
+    /// further call reaches the engine; it is closed (the runtime's errors
+    /// from the removed device are expected), and the service waits with
+    /// `reason` until the GPU is back. Chats and files are untouched.
+    func closeAfterDisconnect(reason: String) {
+        blockedReason = reason
+        recoveryNotice = nil
+        pendingLaunch = nil
+        box.markLost()
+        if case .loading = phase {
+            // lse_open cannot be interrupted; it fails or finishes on its
+            // own, and then closes.
+            stopAfterLoad = true
+            return
+        }
+        guard let engine = box.take() else {
+            phase = .waiting(reason)
+            return
+        }
+        phase = .stopping
+        engineLog.log("GPU disconnected: closing the engine")
+        Task.detached {
+            engine.close()
+            await MainActor.run {
+                self.startedAt = nil
+                self.phase = .waiting(self.blockedReason ?? reason)
+            }
+        }
     }
 
     /// Not started because something outside the app is missing.
@@ -349,14 +384,12 @@ final class EngineService {
     }
 
     private func pollLoadStatus() {
-        #if canImport(LSEKit)
-        let status = LSEEngine.loadStatus()
+        let status = opener.loadStatus()
         let phaseName = status["phase"] as? String ?? ""
         let detail = status["detail"] as? String ?? ""
         loadProgress = status["progress"] as? Double
         let text = [phaseName, detail].filter { !$0.isEmpty }.joined(separator: ": ")
         if case .loading = phase { phase = .loading(text.isEmpty ? "Starting the GPU" : text) }
-        #endif
     }
 
     func append(_ line: String) {
@@ -369,13 +402,17 @@ final class EngineService {
 
     /// Engine status JSON (counters, last timings).
     func status() -> [String: Any] {
-        #if canImport(LSEKit)
-        if let engine = box.engine { return engine.status() }
-        return LSEEngine.loadStatus()
-        #else
-        return [:]
-        #endif
+        // Nothing reaches an engine whose device is gone.
+        if box.isLost { return lastStatus }
+        if let engine = box.engine {
+            let s = engine.status()
+            lastStatus = s
+            return s
+        }
+        return opener.loadStatus()
     }
+
+    @ObservationIgnored private var lastStatus: [String: Any] = [:]
 
     func refreshTimings() {
         let status = status()
@@ -427,9 +464,8 @@ final class EngineService {
     /// engine is asked through its `DELETE /v1/lse/sessions/{id}` route once,
     /// and not again if it does not know it.
     func closeSession(_ id: String) {
-        guard phase == .ready else { return }
-        #if canImport(LSEKit)
-        if LSEEngine.supportsSessions, let engine = box.engine {
+        guard phase == .ready, !box.isLost else { return }
+        if opener.supportsSessions, let engine = box.engine {
             sessionCloseSupported = true
             Task.detached {
                 let closed = engine.closeSession(id)
@@ -437,7 +473,6 @@ final class EngineService {
             }
             return
         }
-        #endif
         guard sessionCloseSupported != false else { return }
         let box = self.box
         Task.detached {
@@ -452,10 +487,7 @@ final class EngineService {
     }
 
     var supportsSessionClose: Bool {
-        #if canImport(LSEKit)
-        if LSEEngine.supportsSessions { return true }
-        #endif
-        return sessionCloseSupported == true
+        opener.supportsSessions || sessionCloseSupported == true
     }
 
     /// Device memory live/peak from lse_status, as text.
@@ -482,16 +514,43 @@ final class EngineService {
 /// The open engine, shared with request threads.
 final class EngineBox: @unchecked Sendable {
     private let lock = NSLock()
-    #if canImport(LSEKit)
-    private var current: LSEEngine?
+    private var current: (any EngineHandle)?
+    private var lost = false
+    private var opened = 0
+    private var lostHandler: (@Sendable (String, Int) -> Void)?
 
-    var engine: LSEEngine? { lock.withLock { current } }
-    func set(_ engine: LSEEngine?) { lock.withLock { current = engine } }
-    func take() -> LSEEngine? { lock.withLock { defer { current = nil }; return current } }
-    #else
-    var engine: AnyObject? { nil }
-    func take() -> AnyObject? { nil }
-    #endif
+    /// Counts engines set; a loss reported for an older one is stale.
+    var generation: Int { lock.withLock { opened } }
+
+    /// The open engine; nil when none is open or its device is gone.
+    var engine: (any EngineHandle)? { lock.withLock { lost ? nil : current } }
+    var isLost: Bool { lock.withLock { lost } }
+    /// A new engine: requests reach it again.
+    func set(_ engine: (any EngineHandle)?) {
+        lock.withLock {
+            current = engine
+            lost = false
+            if engine != nil { opened += 1 }
+        }
+    }
+    func take() -> (any EngineHandle)? { lock.withLock { defer { current = nil }; return current } }
+    /// The device is gone: from now on no request reaches the engine
+    /// (they answer device_lost at once) until a new one is set.
+    func markLost() { lock.withLock { lost = true } }
+    /// Told when a request fails because the device was lost.
+    /// The handler gets the reason and the generation of the engine that
+    /// failed.
+    func onDeviceLost(_ handler: (@Sendable (String, Int) -> Void)?) { lock.withLock { lostHandler = handler } }
+
+    static let deviceLostBody = Data(#"{"error":{"message":"The GPU is disconnected. Plug it back in to continue.","type":"device_lost","code":"device_lost"}}"#.utf8)
+
+    /// Whether a failed response says the device went away.
+    static func isDeviceLoss(_ response: ClosureChatTransport.Response) -> Bool {
+        if refusalCode(response) == "device_lost" { return true }
+        guard !(200..<300).contains(response.status) else { return false }
+        let text = String(decoding: response.body, as: UTF8.self).lowercased()
+        return text.contains("device_lost") || text.contains("device lost") || text.contains("hsa_status_error_fatal")
+    }
 
     static let unavailable = Data(#"{"error":{"message":"The GPU engine is not running. Start it from the GPU panel.","type":"engine_unavailable"}}"#.utf8)
 
@@ -516,18 +575,17 @@ final class EngineBox: @unchecked Sendable {
     func perform(method: String, path: String, body: Data?,
                  emit: @Sendable (Data) -> Bool) throws -> ClosureChatTransport.Response {
         let started = Date()
+        let engineGeneration = generation
         while true {
             let response = try performOnce(method: method, path: path, body: body, emit: emit)
             switch Self.refusalCode(response) {
             case "suspended" where Date().timeIntervalSince(started) < Self.suspendedRetryLimit:
                 Thread.sleep(forTimeInterval: 1)
                 continue
-            case "device_lost":
-                Task { @MainActor in
-                    AppModel.shared.enginePower.recoverFromLoss(reason: "a request was refused: device lost")
-                }
-                return response
             default:
+                if Self.isDeviceLoss(response), let handler = lock.withLock({ lostHandler }) {
+                    handler("a request failed: the device was lost", engineGeneration)
+                }
                 return response
             }
         }
@@ -535,7 +593,7 @@ final class EngineBox: @unchecked Sendable {
 
     private func performOnce(method: String, path: String, body: Data?,
                              emit: @Sendable (Data) -> Bool) throws -> ClosureChatTransport.Response {
-        #if canImport(LSEKit)
+        if isLost { return .init(status: 503, body: Self.deviceLostBody) }
         guard let engine else { return .init(status: 503, body: Self.unavailable) }
         let route = path.hasPrefix("/") ? path : "/v1/" + path
         final class State: @unchecked Sendable {
@@ -575,18 +633,26 @@ final class EngineBox: @unchecked Sendable {
         }
         if cancelNow { engine.cancel(id) }
         state.done.wait()
+        // The engine may keep its handler (and with it emitBox) a moment
+        // after the final event; drop `emit` before leaving, so nothing
+        // escapes the withoutActuallyEscaping block.
+        emitBox.clear()
         return state.response
         }
-        #else
-        return .init(status: 503, body: Self.unavailable)
-        #endif
     }
 }
 
-/// `emit` lives exactly as long as `perform` blocks, which outlives every
-/// event callback of the request.
+/// Holds `emit` while `perform` blocks. The engine may hold its handler a
+/// little past the final event, so the closure is cleared before `perform`
+/// returns; later calls see nil and answer false (stop).
 private final class UnsafeEmit: @unchecked Sendable {
-    private let body: (Data) -> Bool
+    private let lock = NSLock()
+    private var body: ((Data) -> Bool)?
     init(_ body: @escaping @Sendable (Data) -> Bool) { self.body = body }
-    func call(_ data: Data) -> Bool { body(data) }
+    /// Under the lock, so `clear` waits for a call in progress and no
+    /// copy of the closure outlives it.
+    func call(_ data: Data) -> Bool {
+        lock.withLock { body?(data) ?? false }
+    }
+    func clear() { lock.withLock { body = nil } }
 }

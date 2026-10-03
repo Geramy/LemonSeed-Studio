@@ -94,7 +94,7 @@ case "${1:-build}" in
       # Replacing the app kills its process; with an engine open that can
       # leave the GPU driver quarantined. Close the running app's engine
       # first through the debug remote control, when it answers.
-      if STUDIO_DEVICE="$DEVICE" /usr/bin/timeout 20 "$HERE/scripts/studioctl" engine stop >/dev/null 2>&1; then
+      if STUDIO_DEVICE="$DEVICE" perl -e "alarm 20; exec @ARGV" "$HERE/scripts/studioctl" engine stop >/dev/null 2>&1; then
         echo "stopped the running app's engine"
         sleep 3
       fi

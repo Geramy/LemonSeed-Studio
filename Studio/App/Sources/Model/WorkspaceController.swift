@@ -527,8 +527,13 @@ final class WorkspaceController: WorkspaceContext {
             }
         }
         if let mode = LaunchOptions.palette {
-            showPalette(mode == "commands" ? .commands : mode == "line" ? .goToLine : .files,
-                        query: LaunchOptions.paletteQuery)
+            // After the first layout: opening it while the editors are
+            // still loading lands in a render that reads the old state.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                showPalette(mode == "commands" ? .commands : mode == "line" ? .goToLine : .files,
+                            query: LaunchOptions.paletteQuery)
+            }
         }
         if LaunchOptions.showSettings { router?.isSettingsPresented = true }
         if LaunchOptions.keyboardStress {

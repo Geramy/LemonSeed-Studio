@@ -108,3 +108,45 @@ private extension TreeSitterInternalLanguage {
         }
     }
 }
+
+// MARK: - Validation
+public extension TreeSitterLanguage {
+    /// The ABI version the grammar was generated with.
+    var abiVersion: Int {
+        Int(ts_language_version(languagePointer))
+    }
+
+    /// Compiles the highlights query against the grammar.
+    /// - Returns: A description of the first error, or nil when the query compiles (or there is none).
+    func highlightsQueryError() -> String? {
+        queryError(highlightsQuery)
+    }
+
+    /// Compiles the injections query against the grammar.
+    /// - Returns: A description of the first error, or nil when the query compiles (or there is none).
+    func injectionsQueryError() -> String? {
+        queryError(injectionsQuery)
+    }
+
+    private func queryError(_ query: Query?) -> String? {
+        guard let string = query?.string else {
+            return nil
+        }
+        do {
+            _ = try TreeSitterQuery(source: string, language: languagePointer)
+            return nil
+        } catch let error as TreeSitterQueryError {
+            let offset: UInt32
+            switch error {
+            case .syntax(let value), .nodeType(let value), .field(let value), .capture(let value), .structure(let value):
+                offset = value
+            case .unknown:
+                return "\(error)"
+            }
+            let context = string.utf8.dropFirst(Int(offset)).prefix(60)
+            return "\(error): \(String(decoding: context, as: UTF8.self))"
+        } catch {
+            return "\(error)"
+        }
+    }
+}

@@ -12,7 +12,7 @@ public final class WordCompletionProvider: CompletionProvider {
 
     public func completions(for context: CompletionContext) async -> [CompletionItem] {
         let keywords = Self.keywords(for: context.language).map { CompletionItem(label: $0, kind: .keyword, sortText: "1\($0)") }
-        guard let text = textProvider?(context.caret, 100_000) else {
+        guard let text = textProvider?(context.caret, 20_000) else {
             return keywords
         }
         let prefix = context.prefix

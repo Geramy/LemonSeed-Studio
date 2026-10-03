@@ -86,7 +86,7 @@ extension LemonTextViewController {
         let prefixRange = wordPrefixRange(endingAt: caret)
         if provider.triggerCharacters.contains(previous) {
             requestCompletions(trigger: .character(previous))
-        } else if prefixRange.length >= 2 {
+        } else if prefixRange.length >= 2 && configuration.suggestsWhileTyping {
             requestCompletions(trigger: .character(previous))
         } else if !completionPopup.isHidden && prefixRange.length == 0 {
             dismissCompletion()
@@ -111,11 +111,17 @@ extension LemonTextViewController {
                 return
             }
             let items = await provider.completions(for: context)
+            guard !Task.isCancelled else {
+                return
+            }
+            // Ranking thousands of items is too slow for the keystroke path; do it off the main thread.
+            let ranked = await Task.detached(priority: .userInitiated) {
+                Array(CompletionFilter.filter(items, prefix: prefix).filter { $0.label != prefix }.prefix(200))
+            }.value
             guard let self, !Task.isCancelled, self.codeTextView.selectedRange.location == caret else {
                 return
             }
-            let ranked = CompletionFilter.filter(items, prefix: prefix).filter { $0.label != prefix }
-            self.presentCompletions(Array(ranked.prefix(200)), prefix: prefix, prefixRange: prefixRange)
+            self.presentCompletions(ranked, prefix: prefix, prefixRange: prefixRange)
         }
     }
 

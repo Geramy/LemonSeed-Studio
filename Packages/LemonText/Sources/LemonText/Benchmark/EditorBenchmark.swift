@@ -68,6 +68,13 @@ public final class EditorBenchmark {
         /// Keystroke to laid-out glyph: insertText through the full input path, layout and a Core Animation commit.
         public var typingMilliseconds: Distribution
         public var deleteMilliseconds: Distribution
+        /// The same typing with suggestions as you type turned off.
+        public var typingWithoutSuggestionsMilliseconds: Distribution
+        /// The editor's own time per keystroke (input request to laid-out edit), as recorded by the controller.
+        public var keystrokeEditorMilliseconds: Distribution
+        /// `insertText` alone, and the layout plus Core Animation commit that follows it.
+        public var typingInsertPhaseMilliseconds: Distribution
+        public var typingCommitPhaseMilliseconds: Distribution
         /// Typing `/*` mid-file turns the rest of the document into a comment until `*/` arrives.
         public var openCommentMilliseconds: Distribution
         public var jumpMilliseconds: Distribution
@@ -75,6 +82,8 @@ public final class EditorBenchmark {
         public var memoryAfterOpenMB: Double
         public var memoryAfterHighlightMB: Double
         public var memoryPeakMB: Double
+        /// Footprint after each phase, to attribute the peak.
+        public var memoryByPhaseMB: [String: Double]
         public var date: Date
     }
 
@@ -120,19 +129,39 @@ public final class EditorBenchmark {
         await nextFrames(10)
         let memoryAfterHighlight = sampleMemory()
 
+        var phases: [String: Double] = ["open": memoryAfterOpen, "highlighted": memoryAfterHighlight]
         var scrolls: [ScrollResult] = []
         progress?("Scrolling (steady)")
         scrolls.append(await scroll(name: "steady 2,400 pt/s from the top", startFraction: 0, pointsPerSecond: 2_400, seconds: 4))
+        phases["scrollSteady"] = sampleMemory()
         progress?("Scrolling (fast flick)")
         scrolls.append(await scroll(name: "fast 9,000 pt/s through the middle", startFraction: 0.45, pointsPerSecond: 9_000, seconds: 4))
+        phases["scrollFast"] = sampleMemory()
 
         progress?("Random jumps")
         let jumps = await measureJumps(count: 40)
+        phases["jumps"] = sampleMemory()
 
+        progress?("Typing without suggestions")
+        var configuration = controller.configuration
+        configuration.suggestsWhileTyping = false
+        controller.configuration = configuration
+        let quietTyping = await measureTyping(iterations: 300)
+        phases["typingWithoutSuggestions"] = sampleMemory()
+        configuration.suggestsWhileTyping = true
+        controller.configuration = configuration
         progress?("Typing")
+        insertPhase = []
+        commitPhase = []
+        controller.resetKeystrokeLatency()
         let typing = await measureTyping(iterations: 300)
+        let editorKeystroke = controller.keystrokeLatency()
+        let insertOnly = Distribution(insertPhase)
+        let commitOnly = Distribution(commitPhase)
+        phases["typing"] = sampleMemory()
         progress?("Typing an unterminated comment opener")
         let delimiter = await measureDelimiterTyping()
+        phases["commentOpener"] = sampleMemory()
 
         _ = sampleMemory()
         return Result(fileName: fileURL.lastPathComponent,
@@ -151,12 +180,17 @@ public final class EditorBenchmark {
                       scroll: scrolls,
                       typingMilliseconds: typing.insert,
                       deleteMilliseconds: typing.delete,
+                      typingWithoutSuggestionsMilliseconds: quietTyping.insert,
+                      keystrokeEditorMilliseconds: editorKeystroke,
+                      typingInsertPhaseMilliseconds: insertOnly,
+                      typingCommitPhaseMilliseconds: commitOnly,
                       openCommentMilliseconds: delimiter,
                       jumpMilliseconds: jumps,
                       memoryBeforeMB: memoryBefore,
                       memoryAfterOpenMB: memoryAfterOpen,
                       memoryAfterHighlightMB: memoryAfterHighlight,
                       memoryPeakMB: peakMemory,
+                      memoryByPhaseMB: phases,
                       date: Date())
     }
 
@@ -212,6 +246,9 @@ public final class EditorBenchmark {
     /// re-classify the rest of the file (an unterminated `/*` or `"`) are measured separately.
     public var typingText = "int lemonCount = sqlite3_value_int(argv[0]) + 42; "
 
+    private var insertPhase: [Double] = []
+    private var commitPhase: [Double] = []
+
     private func measureTyping(iterations: Int) async -> (insert: Distribution, delete: Distribution) {
         let textView = controller.codeTextView
         // Type in the middle of the document, at the end of a line inside a function body.
@@ -235,9 +272,13 @@ public final class EditorBenchmark {
             let interval = signposter.beginInterval("Keystroke")
             let start = ContinuousClock.now
             textView.insertText(character)
+            let inserted = ContinuousClock.now
             textView.layoutIfNeeded()
             CATransaction.flush()
-            inserts.append((ContinuousClock.now - start).milliseconds)
+            let flushed = ContinuousClock.now
+            inserts.append((flushed - start).milliseconds)
+            insertPhase.append((inserted - start).milliseconds)
+            commitPhase.append((flushed - inserted).milliseconds)
             signposter.endInterval("Keystroke", interval)
             await nextFrames(1)
         }

@@ -127,12 +127,17 @@ final class TreeSitterInternalLanguageMode: InternalLanguageMode {
         let language = rootLanguageLayer.language.languagePointer
         let parser = backgroundParser
         backgroundQueue.async { [weak self] in
-            parser.language = language
-            parser.removeAllIncludedRanges()
-            let newTree = parser.parse(snapshot, oldTree: oldTree)
-            let changedRanges = newTree.map { oldTree.rangesChanged(comparingTo: $0) } ?? []
+            // Drain temporaries (the UTF-16 copy of the text) after every parse; a run of keystrokes parses
+            // back to back and the queue would otherwise hold on to each copy.
+            let result: (TreeSitterTree?, [TreeSitterTextRange]) = autoreleasepool {
+                parser.language = language
+                parser.removeAllIncludedRanges()
+                let newTree = parser.parse(snapshot, oldTree: oldTree)
+                let changedRanges = newTree.map { oldTree.rangesChanged(comparingTo: $0) } ?? []
+                return (newTree, changedRanges)
+            }
             DispatchQueue.main.async {
-                self?.finishBackgroundParse(newTree: newTree, changedRanges: changedRanges)
+                self?.finishBackgroundParse(newTree: result.0, changedRanges: result.1)
             }
         }
     }

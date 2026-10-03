@@ -1,0 +1,9 @@
+[submodule "third_party/LSE"]
+	path = third_party/LSE
+	url = https://github.com/Geramy/LSE.git
+[submodule "third_party/mac_linuxgpu"]
+	path = third_party/mac_linuxgpu
+	url = https://github.com/lemonade-sdk/mac_linuxgpu.git
+[submodule "third_party/amdgpu_mtopg"]
+	path = third_party/amdgpu_mtopg
+	url = https://github.com/lemonade-sdk/amdgpu_mtopg.git

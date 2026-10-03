@@ -1,0 +1,91 @@
+# Device builds only (included by project.yml when LEMONSEED_EMBED_DEXT=YES).
+#
+# The mac_linuxgpu DriverKit extension, configured as in
+# Engine/ProofOfLife/project.yml: the same sources and library as the macOS
+# build, the iPad dext identifier and entitlements, and an embed dependency
+# that places it in LemonSeedStudio.app/SystemExtensions ("Embed System
+# Extensions"). MAC_LINUXGPU_DIR is the mac_linuxgpu checkout (build.sh
+# defaults it to third_party/mac_linuxgpu); its first build runs
+# `make lib-dext` there.
+
+settings:
+  base:
+    MAC_LINUXGPU_DIR: "${MAC_LINUXGPU_DIR}"
+    DEXT_ENTITLEMENTS: ../Engine/ProofOfLife/Dext/MacLinuxGPU-iPad.entitlements
+
+targets:
+  LemonSeedStudio:
+    dependencies:
+      - target: MacLinuxGPU
+        embed: true
+    settings:
+      base:
+        SUPPORTED_PLATFORMS: iphoneos
+
+  MacLinuxGPU:
+    type: driver-extension
+    platform: macOS
+    settingPresets: none
+    sources:
+      - path: ${MAC_LINUXGPU_DIR}/dext
+        name: dext
+        group: mac_linuxgpu
+        includes:
+          - MacLinuxGPU.iig
+          - MacLinuxGPUUserClient.iig
+          - sources/MacLinuxGPUXcode.mm
+          - sources/dext_main.mm
+          - sources/iokit_bridge.mm
+          - sources/fake_mmio.mm
+          - sources/dext_compute.c
+          - sources/dext_threads.mm
+          - sources/dext_aql.mm
+          - sources/dext_kfd.mm
+      # Paths in this file are relative to it (Studio/Device).
+      - path: ../../Engine/ProofOfLife/Dext
+        group: mac_linuxgpu
+    preBuildScripts:
+      - name: Build Linux KMD
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          /usr/bin/make -C "$MAC_LINUXGPU_DIR" verify-source
+          /usr/bin/make -C "$MAC_LINUXGPU_DIR" -j8 lib-dext
+    settings:
+      base:
+        SDKROOT: driverkit
+        SUPPORTED_PLATFORMS: driverkit
+        DRIVERKIT_DEPLOYMENT_TARGET: "25.2"
+        ARCHS: arm64
+        "EXCLUDED_ARCHS[sdk=driverkit*]": x86_64
+        ONLY_ACTIVE_ARCH: NO
+        PRODUCT_NAME: com.geramyloveless.LemonSeedStudio.AMDGpuDriver
+        PRODUCT_BUNDLE_IDENTIFIER: com.geramyloveless.LemonSeedStudio.AMDGpuDriver
+        INFOPLIST_FILE: "$(MAC_LINUXGPU_DIR)/dext/Info.plist"
+        CODE_SIGN_ENTITLEMENTS: $(DEXT_ENTITLEMENTS)
+        OTHER_CODE_SIGN_FLAGS: "-o library,runtime"
+        CLANG_ENABLE_OBJC_ARC: NO
+        CLANG_ENABLE_MODULES: YES
+        DEAD_CODE_STRIPPING: NO
+        DEFINES_MODULE: NO
+        GCC_ENABLE_CPP_EXCEPTIONS: NO
+        GCC_ENABLE_OBJC_EXCEPTIONS: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        CLANG_WARN_DOCUMENTATION_COMMENTS: NO
+        GCC_PREPROCESSOR_DEFINITIONS:
+          - "$(inherited)"
+          - LINUXU_DEXT=1
+        HEADER_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(MAC_LINUXGPU_DIR)/dext"
+          - "$(MAC_LINUXGPU_DIR)/dext/sources"
+          - "$(MAC_LINUXGPU_DIR)/linuxu/headers"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-L"
+          - "$(MAC_LINUXGPU_DIR)/build-dk"
+          - "-lmacamgdu-dk"
+          - "-framework"
+          - DriverKit
+          - "-framework"
+          - PCIDriverKit

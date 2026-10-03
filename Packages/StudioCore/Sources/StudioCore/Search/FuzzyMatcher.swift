@@ -18,6 +18,11 @@ public struct FuzzyMatch: Hashable, Sendable {
     public var score: Int
     /// Character offsets in the candidate that matched.
     public var positions: [Int]
+
+    public init(score: Int, positions: [Int]) {
+        self.score = score
+        self.positions = positions
+    }
 }
 
 public struct FuzzyMatcher: Sendable {

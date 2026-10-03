@@ -31,7 +31,20 @@ public final class ShellTerminalSession: TerminalSession {
         self.context = context
     }
 
+    /// Registers with the text-input coordinator so the keyboard button can
+    /// focus the terminal. SwiftTerm supplies its own key row (Esc, Ctrl,
+    /// Tab, arrows), so the shell's floating key bar hides for it.
+    public func registerInputTarget() {
+        let view = terminalView
+        TextInputCoordinator.shared.register(TextInputTarget(id: inputTargetID, kind: .terminal) {
+            view.becomeFirstResponder()
+        })
+    }
+
+    public var inputTargetID: String { "terminal:" + id.uuidString }
+
     public func terminate() {
+        TextInputCoordinator.shared.unregister(id: inputTargetID)
         terminalView.terminalDelegate = nil
         terminalView.removeFromSuperview()
     }
@@ -72,6 +85,7 @@ public final class ShellTerminalSession: TerminalSession {
     public func startIfNeeded() {
         guard !started else { return }
         started = true
+        registerInputTarget()
         let name = context?.displayName ?? workingDirectory.lastPathComponent
         write("\u{1B}[1;33mLemonSeed\u{1B}[0m shell \u{1B}[2m· in-process, confined to \(name)\u{1B}[0m\r\n")
         write("\u{1B}[2mType \u{1B}[0m\u{1B}[1mhelp\u{1B}[0m\u{1B}[2m for the built-in commands.\u{1B}[0m\r\n\r\n")
@@ -96,6 +110,7 @@ public final class ShellTerminalSession: TerminalSession {
     // MARK: Input
 
     fileprivate func receive(_ bytes: ArraySlice<UInt8>) {
+        TextInputCoordinator.shared.didFocus(id: inputTargetID)
         guard !isRunning else { return }
         for event in editor.feed(bytes) {
             handle(event)

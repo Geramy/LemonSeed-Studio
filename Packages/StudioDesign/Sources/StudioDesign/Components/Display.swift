@@ -48,7 +48,7 @@ public struct KeyCaps: View {
     }
 
     /// "⌘⇧P" -> ["⌘", "⇧", "P"]; "⌃`" -> ["⌃", "`"]; "F12" -> ["F12"].
-    public static func split(_ shortcut: String) -> [String] {
+    nonisolated public static func split(_ shortcut: String) -> [String] {
         let modifiers: Set<Character> = ["⌘", "⇧", "⌥", "⌃"]
         var parts: [String] = []
         var rest = Substring(shortcut)

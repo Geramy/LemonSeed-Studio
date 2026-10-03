@@ -62,9 +62,15 @@ struct PlainTextEditorView: View {
     @Environment(\.codeFont) private var codeFont
     @Environment(\.editorSettings) private var settings
     @Bindable var document: EditorDocument
+    /// Whether the pane has focus. The editor does not take keyboard focus
+    /// by itself (that would raise the software keyboard on every open);
+    /// a tap or a reveal request does.
     let isFocused: Bool
     @State private var selection: TextSelection?
+    @State private var focusRequest = FocusRequest()
     @FocusState private var focused: Bool
+
+    private var targetID: String { TextInputCoordinator.editorID(for: document) }
 
     /// Above this size the caret position is not recomputed on every
     /// selection change (it is O(n) here).
@@ -88,7 +94,24 @@ struct PlainTextEditorView: View {
                 .focused($focused)
                 .onChange(of: selection) { _, newValue in updateCaret(newValue) }
                 .onChange(of: document.pendingReveal, initial: true) { _, position in reveal(position) }
-                .onChange(of: isFocused, initial: true) { _, value in if value { focused = true } }
+                .onChange(of: focusRequest.count) { _, _ in focused = true }
+                .onChange(of: focused) { _, isFocused in
+                    if isFocused {
+                        TextInputCoordinator.shared.didFocus(id: targetID)
+                        #if canImport(UIKit)
+                        ProgrammerKeyPerformer.tabText = settings.insertSpaces ? String(repeating: " ", count: settings.tabWidth) : "\t"
+                        #endif
+                    }
+                }
+                .onAppear {
+                    let request = focusRequest
+                    TextInputCoordinator.shared.register(TextInputTarget(id: targetID, kind: .editor) {
+                        request.fire()
+                        return true
+                    })
+                }
+                .onDisappear { TextInputCoordinator.shared.unregister(id: targetID) }
+                .accessibilityIdentifier("editor.text")
         }
     }
 

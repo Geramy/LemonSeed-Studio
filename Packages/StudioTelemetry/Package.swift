@@ -30,9 +30,12 @@ let package = Package(
             resources: [.copy("Resources/Fixtures")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
+        // Upstream struct gpu_metrics_v1_3, laid out by the C compiler: a
+        // reference for the decoder that does not share its offset table.
+        .target(name: "CGPUMetricsReference", path: "Tests/CGPUMetricsReference"),
         .testTarget(
             name: "StudioTelemetryTests",
-            dependencies: ["StudioTelemetry"],
+            dependencies: ["StudioTelemetry", "CGPUMetricsReference"],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]

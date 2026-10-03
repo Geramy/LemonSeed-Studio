@@ -12,6 +12,8 @@ public struct CloneOptions: Sendable, Codable, Equatable {
     public var recurseSubmodules = false
     /// Stage the clone so an interrupted clone can be resumed (see below).
     public var resumable = true
+    /// Download Git LFS objects (one batch, before checkout).
+    public var lfs = true
     public var remoteName = "origin"
 
     public init(url: String, destination: URL, branch: String? = nil, depth: Int? = nil, recurseSubmodules: Bool = false, resumable: Bool = true) {
@@ -144,6 +146,7 @@ extension GitRepository {
         if pending.stage == .fetched {
             step("Checking out")
             let branch = options.branch ?? pending.defaultBranch ?? (try? findAnyRemoteBranch(remote)) ?? "main"
+            if options.lfs { try await prefetchLFS(remote: remote, branch: branch, network: network) }
             try checkoutAfterClone(branch: branch, remote: remote, progress: network.progress)
             pending.stage = .checkedOut
             try savePending(pending)
@@ -158,6 +161,17 @@ extension GitRepository {
         }
         network.progress?(TransferProgress(phase: .done))
         return self
+    }
+
+    /// Downloads the LFS objects of the branch being checked out so the
+    /// smudge filter finds them during checkout (no per-file round trips).
+    private func prefetchLFS(remote: String, branch: String, network: NetworkContext) async throws {
+        let revision = "refs/remotes/\(remote)/\(branch)"
+        guard let files = try? lfsFiles(at: revision), !files.isEmpty else { return }
+        guard let endpoint = try lfsEndpoint(remote: remote, revision: revision) else { return }
+        network.progress?({ var p = TransferProgress(phase: .lfs); p.step = "Downloading LFS files"; p.total = files.count; return p }())
+        let client = LFSClient(endpoint: endpoint, session: network.lfsSession, credentials: network.credentials)
+        try await client.download(files.map(\.pointer), into: lfsStore, ref: "refs/heads/\(branch)")
     }
 
     private func branchRefspecs(_ pending: PendingClone) -> [String] {

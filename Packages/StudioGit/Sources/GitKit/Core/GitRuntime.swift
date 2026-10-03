@@ -54,6 +54,7 @@ public enum GitRuntime {
         lock.lock(); defer { lock.unlock() }
         guard !initialized else { return }
         git_libgit2_init()
+        GitLFSFilter.install()
         initialized = true
         apply(pendingConfiguration)
     }

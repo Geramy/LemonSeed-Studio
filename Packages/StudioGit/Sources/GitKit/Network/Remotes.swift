@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 import Clibgit2
 
 public struct Remote: Sendable, Hashable, Identifiable, Codable {
@@ -49,11 +49,14 @@ public struct PushOptions: Sendable {
     public var setUpstream = false
     /// Extra refspecs (for tags: `refs/tags/v1:refs/tags/v1`).
     public var extraRefspecs: [String] = []
-    public init(remote: String = "origin", force: Bool = false, setUpstream: Bool = false, extraRefspecs: [String] = []) {
+    /// Upload Git LFS objects referenced by the pushed branch first.
+    public var lfs = true
+    public init(remote: String = "origin", force: Bool = false, setUpstream: Bool = false, extraRefspecs: [String] = [], lfs: Bool = true) {
         self.remote = remote
         self.force = force
         self.setUpstream = setUpstream
         self.extraRefspecs = extraRefspecs
+        self.lfs = lfs
     }
 }
 
@@ -76,13 +79,17 @@ public struct NetworkContext: Sendable {
     public var credentials: any CredentialProvider
     public var trust: any HostTrustEvaluator
     public var progress: TransferProgressHandler?
+    /// Session for Git LFS transfers (a background session in the app).
+    public var lfsSession: URLSession
 
     public init(credentials: any CredentialProvider = NoCredentials(),
                 trust: any HostTrustEvaluator = KnownHostsStore.shared,
-                progress: TransferProgressHandler? = nil) {
+                progress: TransferProgressHandler? = nil,
+                lfsSession: URLSession = .shared) {
         self.credentials = credentials
         self.trust = trust
         self.progress = progress
+        self.lfsSession = lfsSession
     }
 
     func makeTransferContext() -> TransferContext {
@@ -174,6 +181,9 @@ extension GitRepository {
             refspecs.insert("\(options.force ? "+" : "")refs/heads/\(branchName):refs/heads/\(branchName)", at: 0)
         }
         guard !refspecs.isEmpty else { throw GitError.invalid("nothing to push (detached HEAD)", "push") }
+        if options.lfs, let branchName, try await !lfsFiles(at: "refs/heads/\(branchName)").isEmpty {
+            try await lfsPush(remote: options.remote, revision: "refs/heads/\(branchName)", network: network)
+        }
         let path = gitDirectory.path
         let context = network.makeTransferContext()
         let remoteName = options.remote

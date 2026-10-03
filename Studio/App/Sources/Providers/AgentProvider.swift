@@ -82,7 +82,38 @@ final class StudioAgentProvider: AgentProviding {
     var isGenerating: Bool { models.values.contains(where: \.isRunning) }
 
     func makePanel(context: any WorkspaceContext) -> AnyView {
-        AnyView(StudioAgentPanel(provider: self, root: context.rootURL, name: context.displayName))
+        connect(viewModel(for: context.rootURL, displayName: context.displayName), to: context)
+        return AnyView(StudioAgentPanel(provider: self, root: context.rootURL, name: context.displayName))
+    }
+
+    /// The chat of a workspace folder if one exists (does not create it).
+    func existingModel(for root: URL) -> AgentViewModel? { models[root] }
+
+    /// Files the agent changed in this workspace that wait for Accept/Deny.
+    func pendingPaths(for root: URL) -> Set<String> { models[root]?.pendingPaths ?? [] }
+
+    /// Ties a chat's review to the IDE: accepted files open in the editor,
+    /// and every change on disk refreshes the explorer, open documents and
+    /// source control.
+    func connect(_ model: AgentViewModel, to context: any WorkspaceContext) {
+        weak var weakContext = context as AnyObject as? WorkspaceController
+        let root = context.rootURL
+        model.onOpenFile = { path in
+            guard let controller = weakContext else { return }
+            controller.open(root.appending(path: path), at: nil)
+        }
+        model.onFilesChanged = { paths in
+            guard let controller = weakContext else { return }
+            let urls = paths.map { root.appending(path: $0) }
+            Task {
+                for directory in Set(urls.map { $0.deletingLastPathComponent() }) {
+                    await controller.workspace.tree.reload(directory: directory)
+                }
+                for url in urls { await controller.workspace.openDocument(at: url)?.fileDidChangeOnDisk() }
+                controller.workspace.rebuildIndex()
+                await controller.refreshGitStatus()
+            }
+        }
     }
 
     func refresh() async {

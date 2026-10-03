@@ -69,6 +69,61 @@ struct AgentViewModelTests {
         #expect(try String(contentsOf: ws.rootURL.appending(path: "a.txt"), encoding: .utf8) == "two\n")
     }
 
+    /// Review mode: a write and an edit become pending changes; Accept keeps
+    /// one, Deny reverts the other, and the next turn tells the model.
+    @Test func reviewCardAcceptsAndDeniesPerFile() async throws {
+        let ws = try workspace(["main.c": "int main(void) { return 0; }\n"])
+        let client = ScriptedLLMClient([
+            .toolCalls([("write", ["path": "gcd.c", "content": "int gcd(int a, int b) { return b ? gcd(b, a % b) : a; }\n"]),
+                        ("edit", ["path": "main.c", "edits": [["oldText": "return 0;", "newText": "return gcd(4, 6) != 2;"]]])]),
+            .text("Created gcd.c and used it in main."),
+            .text("Understood."),
+        ])
+        let model = AgentViewModel(workspace: ws, client: client,
+                                   configuration: AgentConfiguration(permissionMode: .review, checkpointStorage: .memory))
+        var opened: [String] = []
+        var changed: [String] = []
+        model.onOpenFile = { opened.append($0) }
+        model.onFilesChanged = { changed.append(contentsOf: $0) }
+        model.send("add gcd")
+        try await waitUntilIdle(model)
+
+        let changes = try #require(model.items.lazy.compactMap { item -> ChangeSet? in
+            if case .changes(let c) = item.kind { return c } else { return nil }
+        }.first)
+        #expect(changes.files.map(\.path) == ["gcd.c", "main.c"])
+        #expect(model.review == nil, "the card, not a sheet, presents the changes")
+        #expect(model.pendingPaths == ["gcd.c", "main.c"])
+        #expect(Set(changed) == ["gcd.c", "main.c"])
+
+        model.acceptFile(changes, path: "gcd.c")
+        #expect(model.reviewState(changes, path: "gcd.c") == .accepted)
+        #expect(opened == ["gcd.c"])
+        model.denyFile(changes, path: "main.c")
+        for _ in 0..<200 where model.reviewState(changes, path: "main.c") != .denied {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(model.reviewState(changes, path: "main.c") == .denied)
+        #expect(try String(contentsOf: ws.rootURL.appending(path: "main.c"), encoding: .utf8) == "int main(void) { return 0; }\n")
+        #expect(FileManager.default.fileExists(atPath: ws.rootURL.appending(path: "gcd.c").path))
+        #expect(model.pendingPaths.isEmpty)
+
+        model.send("ok")
+        try await waitUntilIdle(model)
+        let last = try #require(client.requests.last)
+        let texts = last.messages.compactMap { $0.role == .user ? $0.content : nil }
+        #expect(texts.contains { $0.hasPrefix(Agent.reviewNotePrefix) && $0.contains("main.c") })
+    }
+
+    @Test func newChatsStartInReviewMode() async throws {
+        let ws = try workspace([:])
+        let model = AgentViewModel(workspace: ws, client: ScriptedLLMClient([]),
+                                   configuration: AgentConfiguration(permissionMode: .review, checkpointStorage: .memory))
+        model.mode = .readOnly
+        model.newSession()
+        #expect(model.mode == .review)
+    }
+
     @Test func markdownBlocks() {
         let md = "# Title\n\nSome *text*\nmore.\n\n- a\n- b\n\n1. x\n2. y\n\n> quote\n\n```c\nint x;\n```\n\n---\n```swift\nlet open"
         #expect(MarkdownBlock.parse(md) == [

@@ -242,6 +242,10 @@ final class DevServer {
             return chatSessions()
         case ("POST", "/chat/send"):
             return chatSend(body)
+        case ("GET", "/chat/review"):
+            return await chatReview(nil)
+        case ("POST", "/chat/review"):
+            return await chatReview(body)
         case ("POST", "/chat/new"):
             guard let model = agentModel() else { return .error("no workspace open", status: 409) }
             model.newSession()
@@ -392,7 +396,44 @@ final class DevServer {
     private func agentModel() -> AgentViewModel? {
         guard let controller = app.activeRouter?.controller,
               let provider = app.services.agent as? StudioAgentProvider else { return nil }
-        return provider.viewModel(for: controller.rootURL, displayName: controller.displayName)
+        let model = provider.viewModel(for: controller.rootURL, displayName: controller.displayName)
+        provider.connect(model, to: controller)
+        return model
+    }
+
+    /// The latest agent run's changes, with each file's review state.
+    private func latestChanges(_ model: AgentViewModel) -> ChangeSet? {
+        for item in model.items.reversed() { if case .changes(let c) = item.kind { return c } }
+        return nil
+    }
+
+    private func reviewJSON(_ model: AgentViewModel, _ changes: ChangeSet) -> [String: Any] {
+        ["id": changes.id, "additions": changes.additions, "deletions": changes.deletions,
+         "files": changes.files.map { f -> [String: Any] in
+             ["path": f.path, "kind": f.kind.rawValue, "additions": f.additions, "deletions": f.deletions,
+              "state": model.reviewState(changes, path: f.path).rawValue]
+         },
+         "pending": model.pendingPaths.sorted()]
+    }
+
+    /// POST /chat/review {action: accept|deny|acceptAll|denyAll|diff, path?}
+    /// on the latest run's changes; GET returns them.
+    private func chatReview(_ body: [String: Any]?) async -> DevResponse {
+        guard let model = agentModel() else { return .error("no workspace open", status: 409) }
+        guard let changes = latestChanges(model) else { return .error("no agent changes in this chat", status: 404) }
+        guard let body else { return .json(reviewJSON(model, changes)) }
+        let path = body["path"] as? String ?? ""
+        switch body["action"] as? String ?? "" {
+        case "accept": model.acceptFile(changes, path: path)
+        case "deny": model.denyFile(changes, path: path)
+        case "acceptAll": model.acceptAll(changes)
+        case "denyAll": model.denyAll(changes)
+        case "diff": model.showDiff(changes, path: path)
+        case "closeDiff": model.review = nil
+        default: return .error("action must be accept, deny, acceptAll, denyAll, diff or closeDiff")
+        }
+        try? await Task.sleep(for: .milliseconds(400))
+        return .json(reviewJSON(model, changes))
     }
 
     private func chatSessions() -> DevResponse {
@@ -433,6 +474,7 @@ final class DevServer {
             model.send(text)
             var sentText: [String: Int] = [:], sentReasoning: [String: Int] = [:]
             var toolStates: [String: String] = [:]
+            var noticesSent = Set<String>(), changesSent = Set<String>()
             var firstToken: Double?
             try? await Task.sleep(for: .milliseconds(100))
             while !sink.closed {
@@ -464,7 +506,15 @@ final class DevServer {
                                              "result": card.result.map { String($0.text.prefix(500)) } ?? NSNull()])
                         }
                     case .notice(let message, let isError):
-                        _ = message; _ = isError
+                        if !noticesSent.contains(item.id) {
+                            noticesSent.insert(item.id)
+                            await sink.send(["type": "notice", "text": message, "error": isError])
+                        }
+                    case .changes(let changes):
+                        if !changesSent.contains(changes.id) {
+                            changesSent.insert(changes.id)
+                            await sink.send(["type": "changes"].merging(self.reviewJSON(model, changes)) { a, _ in a })
+                        }
                     default:
                         break
                     }

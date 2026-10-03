@@ -301,3 +301,139 @@ struct MessageStatsFooter: View {
         }
     }
 }
+
+/// The files one agent run changed, each with its decision: Accept (keep it
+/// and open it), Deny (revert it to the checkpoint; the agent hears about
+/// it), or the diff with per-block decisions. Accept all / Deny all act on
+/// the files still open. In autopilot the changes are already applied and
+/// the card offers Undo.
+struct PendingChangesCard: View {
+    let model: AgentViewModel
+    let changes: ChangeSet
+    @Environment(\.agentTheme) private var theme
+
+    private var states: [FileReviewState] { changes.files.map { model.reviewState(changes, path: $0.path) } }
+    private var openCount: Int { states.filter(\.isOpen).count }
+    private var autopilot: Bool { states.contains(.applied) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label(title, systemImage: openCount > 0 ? "doc.badge.ellipsis" : "checkmark.circle")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(theme.primaryText)
+                Spacer()
+                DiffCountView(additions: changes.additions, deletions: changes.deletions)
+            }
+            ForEach(changes.files) { file in
+                row(file)
+            }
+            if openCount > 0 {
+                HStack(spacing: 8) {
+                    Button {
+                        model.denyAll(changes)
+                    } label: {
+                        Label(autopilot ? "Undo all" : "Deny all", systemImage: autopilot ? "arrow.uturn.backward" : "xmark")
+                            .font(.system(size: 13, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(theme.danger)
+                    .accessibilityIdentifier("changes.denyAll")
+                    if !autopilot {
+                        Button {
+                            model.acceptAll(changes)
+                        } label: {
+                            Label("Accept all", systemImage: "checkmark")
+                                .font(.system(size: 13, weight: .semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(theme.accent)
+                        .foregroundStyle(theme.onAccent)
+                        .accessibilityIdentifier("changes.acceptAll")
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
+            .strokeBorder(openCount > 0 ? theme.accent.opacity(0.6) : theme.hairline, lineWidth: openCount > 0 ? 1.5 : 1))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("changes.card")
+    }
+
+    private var title: String {
+        let n = changes.files.count
+        let files = "\(n) file\(n == 1 ? "" : "s")"
+        if openCount == 0 { return "\(files) reviewed" }
+        if autopilot { return "\(files) changed" }
+        return openCount == n ? "\(files) to review" : "\(openCount) of \(files) to review"
+    }
+
+    private func row(_ file: FileChange) -> some View {
+        let state = model.reviewState(changes, path: file.path)
+        return HStack(spacing: 8) {
+            FileKindBadge(kind: file.kind)
+            Button {
+                model.showDiff(changes, path: file.path)
+            } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text((file.path as NSString).lastPathComponent)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(state == .denied ? theme.tertiaryText : theme.primaryText)
+                        .strikethrough(state == .denied)
+                        .lineLimit(1)
+                    if file.path.contains("/") {
+                        Text((file.path as NSString).deletingLastPathComponent)
+                            .font(theme.captionFont)
+                            .foregroundStyle(theme.tertiaryText)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("changes.diff.\(file.path)")
+            Spacer(minLength: 4)
+            DiffCountView(additions: file.additions, deletions: file.deletions)
+            switch state {
+            case .pending, .applied:
+                Button { model.showDiff(changes, path: file.path) } label: { Image(systemName: "doc.text.magnifyingglass") }
+                    .accessibilityLabel("View diff of \(file.path)")
+                Button { model.denyFile(changes, path: file.path) } label: {
+                    Image(systemName: state == .applied ? "arrow.uturn.backward" : "xmark")
+                        .foregroundStyle(theme.danger)
+                }
+                .accessibilityLabel((state == .applied ? "Undo " : "Deny ") + file.path)
+                .accessibilityIdentifier("changes.deny.\(file.path)")
+                if state == .pending {
+                    Button { model.acceptFile(changes, path: file.path) } label: {
+                        Image(systemName: "checkmark").foregroundStyle(theme.success)
+                    }
+                    .accessibilityLabel("Accept \(file.path)")
+                    .accessibilityIdentifier("changes.accept.\(file.path)")
+                }
+            default:
+                Text(label(state))
+                    .font(theme.captionFont)
+                    .foregroundStyle(state == .denied ? theme.danger : theme.secondaryText)
+            }
+        }
+        .buttonStyle(.borderless)
+        .font(.system(size: 15, weight: .semibold))
+    }
+
+    private func label(_ state: FileReviewState) -> String {
+        switch state {
+        case .accepted: "Accepted"
+        case .denied: "Denied"
+        case .partial: "Partly kept"
+        case .superseded: "Changed again below"
+        case .pending, .applied: ""
+        }
+    }
+}

@@ -78,7 +78,7 @@ public struct AgentPanel: View {
         case .compaction(let summary):
             CompactionView(summary: summary)
         case .changes(let changes):
-            ChangesSummaryView(changes: changes) { model.review = changes }
+            PendingChangesCard(model: model, changes: changes)
         }
     }
 }
@@ -99,24 +99,6 @@ struct AgentHeader: View {
                 EnginePill(status: model.engine)
             }
             Spacer()
-            Menu {
-                Picker("Permissions", selection: $model.mode) {
-                    ForEach(PermissionMode.allCases) { m in
-                        Label { Text(m.title); Text(m.summary) } icon: { Image(systemName: m.symbol) }.tag(m)
-                    }
-                }
-            } label: {
-                Label(model.mode.title, systemImage: model.mode.symbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(theme.surface, in: Capsule())
-                    .overlay(Capsule().strokeBorder(theme.hairline))
-            }
-            .foregroundStyle(theme.primaryText)
-            .accessibilityLabel("Permission mode")
-            .accessibilityIdentifier("agent.mode")
-
             Button { model.refreshSessions(); showingSessions = true } label: {
                 Image(systemName: "clock.arrow.circlepath")
             }
@@ -250,7 +232,8 @@ struct Composer: View {
     @State private var pendingThinking: ThinkingLevel?
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        HStack(alignment: .bottom, spacing: 6) {
+            modeMenu
             thinkingMenu
             TextField(model.isRunning ? "Steer the agent…" : "Ask the LemonSeed agent…", text: $model.composer,
                       axis: .vertical)
@@ -309,6 +292,42 @@ struct Composer: View {
         }
     }
 
+    /// The permission mode, always visible: Review (default), Ask, Autopilot,
+    /// Read only (an explicit choice).
+    private var modeMenu: some View {
+        Menu {
+            Picker("Mode", selection: $model.mode) {
+                ForEach([PermissionMode.review, .ask, .autopilot, .readOnly]) { m in
+                    Label { Text(m.title); Text(m.summary) } icon: { Image(systemName: m.symbol) }.tag(m)
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: model.mode.symbol)
+                Text(shortTitle(model.mode))
+            }
+            .font(theme.captionFont)
+            .foregroundStyle(model.mode == .readOnly ? theme.warning : theme.primaryText)
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .background(theme.hairline.opacity(0.6), in: Capsule())
+            .contentShape(Capsule())
+        }
+        .accessibilityLabel("Mode: \(model.mode.title)")
+        .accessibilityIdentifier("agent.modeChip")
+        .padding(.leading, 6)
+        .padding(.bottom, 5)
+    }
+
+    private func shortTitle(_ mode: PermissionMode) -> String {
+        switch mode {
+        case .readOnly: "Read only"
+        case .ask: "Ask"
+        case .review: "Review"
+        case .autopilot: "Autopilot"
+        }
+    }
+
     /// Thinking: Default (the model's own level), Off, Low, Medium, High, Max.
     private var thinkingMenu: some View {
         Menu {
@@ -331,7 +350,6 @@ struct Composer: View {
         }
         .accessibilityLabel("Thinking: \(model.thinking.title)")
         .accessibilityIdentifier("agent.thinking")
-        .padding(.leading, 6)
         .padding(.bottom, 5)
     }
 

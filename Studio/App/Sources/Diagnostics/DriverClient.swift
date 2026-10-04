@@ -54,6 +54,8 @@ enum MLG {
         (1 << 8, "raw-bar-mapped"),
         (1 << 9, "runtime-device"),
         (1 << 10, "isolation-attempted"),
+        (1 << 11, "device-removed"),
+        (1 << 12, "retiring"),
     ]
 
     static let quarantineCauses = [

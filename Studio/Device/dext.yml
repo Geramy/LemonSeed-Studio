@@ -84,7 +84,10 @@ targets:
         script: |
           set -eu
           /usr/bin/make -C "$MAC_LINUXGPU_DIR" verify-source
-          /usr/bin/make -C "$MAC_LINUXGPU_DIR" -j8 lib-dext
+          # As mac_linuxgpu's own Xcode project: Debug compiles kmemcheck into
+          # the dext's linuxu objects (DEBUG=1), Release leaves it out.
+          if [ "$CONFIGURATION" = Debug ]; then mode=1; else mode=; fi
+          /usr/bin/make -C "$MAC_LINUXGPU_DIR" -j8 lib-dext DEBUG=$mode
     settings:
       base:
         SDKROOT: driverkit
@@ -123,3 +126,9 @@ targets:
           - DriverKit
           - "-framework"
           - PCIDriverKit
+      configs:
+        Debug:
+          GCC_PREPROCESSOR_DEFINITIONS:
+            - "$(inherited)"
+            - LINUXU_DEXT=1
+            - DEBUG=1

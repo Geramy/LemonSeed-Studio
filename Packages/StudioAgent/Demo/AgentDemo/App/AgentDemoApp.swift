@@ -41,7 +41,8 @@ final class DemoEnvironment {
         explainer = InlineExplainer(client: defaults.bool(forKey: "scripted")
                                         ? ScriptedLLMClient([DemoScript.explanation], delay: .milliseconds(20))
                                         : client,
-                                    model: endpoint.model)
+                                    model: endpoint.model, contextWindow: endpoint.contextWindow,
+                                    outputLimit: endpoint.maxOutputTokens)
         screen = defaults.string(forKey: "screen") ?? "chat"
         autoPrompt = defaults.string(forKey: "autoPrompt")
     }

@@ -55,7 +55,7 @@ struct CatalogTests {
         let args = LSELaunchPreset.standard.arguments(model: URL(fileURLWithPath: "/m/qwen38-27b-q4"),
                                                      dflash2Draft: URL(fileURLWithPath: "/m/qwen38-27b-dflash2"))
         #expect(args.joined(separator: " ") ==
-                "--model /m/qwen38-27b-q4 --dflash2=on --dflash2-model /m/qwen38-27b-dflash2 --pool hrx:0 --dialect loom --kv-cache-dtype bf16 --kv-len 32768 --temperature 0.6 --batch-size 1024 --ubatch-size 1024")
+                "--model /m/qwen38-27b-q4 --dflash2=on --dflash2-model /m/qwen38-27b-dflash2 --pool hrx:0 --dialect loom --kv-cache-dtype bf16 --kv-len 32768 --temperature 0.6 --batch-size 1024 --ubatch-size 1024 --max-tokens 32768")
         let plain = LSELaunchPreset.standard.arguments(model: URL(fileURLWithPath: "/m/x"), dflash2Draft: nil)
         #expect(!plain.contains("--dflash2=on"))
         #expect(LSELaunchPreset.standard.commandLine(model: URL(fileURLWithPath: "/a b/m"), dflash2Draft: nil)

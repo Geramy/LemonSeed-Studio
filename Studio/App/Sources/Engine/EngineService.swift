@@ -22,7 +22,11 @@ struct EngineLaunch: Equatable, Sendable {
     var batchSize: UInt32 = 1024
     var ubatchSize: UInt32 = 1024
     var temperature: Float? = 0.6
-    var maxTokens: Int32 = 4096
+    /// The user's limit on one reply (load settings), nil for none.
+    var replyLimit: Int?
+    /// lse_config.max_tokens, LSE's per-request cap: the reply limit, or the
+    /// KV length so that a reply can run until the context is full.
+    var maxTokens: Int32 { replyLimit.map(Int32.init) ?? kvLength }
     var mtpEnabled = false
     var mtpDepth: UInt32 = 3
     /// The engine's served model name (what requests put in "model").
@@ -163,6 +167,8 @@ final class EngineService {
     var isRunning: Bool { phase == .ready }
     var servedName: String { launch?.servedName ?? "qwen-q4" }
     var contextWindow: Int { Int(launch?.kvLength ?? 32768) }
+    /// The user's limit on one reply, nil when a reply may fill the context.
+    var replyLimit: Int? { launch?.replyLimit }
 
     /// Shown while the engine reloads after the GPU lost its memory.
     private(set) var recoveryNotice: String?

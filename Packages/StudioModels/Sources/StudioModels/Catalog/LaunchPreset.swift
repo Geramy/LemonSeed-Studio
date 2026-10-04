@@ -50,6 +50,9 @@ public struct LSELaunchPreset: Codable, Sendable, Hashable {
             "--temperature", Self.format(temperature),
             "--batch-size", String(batchSize),
             "--ubatch-size", String(ubatchSize),
+            // No reply limit of its own: LSE's default cap (4096) would end a
+            // reply before the context is full.
+            "--max-tokens", String(kvLength),
         ]
         return args
     }

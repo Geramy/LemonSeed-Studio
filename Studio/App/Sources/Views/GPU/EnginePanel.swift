@@ -171,6 +171,7 @@ struct EnginePanel: View {
             summaryRow("K/V cache", "\(launch.kvCacheDType) · \(launch.kvLength.formatted()) tokens")
             summaryRow("Batch", "\(launch.batchSize) / ubatch \(launch.ubatchSize)")
             summaryRow("Sampling", launch.temperature.map { String(format: "temperature %.2f", $0) } ?? "model default")
+            summaryRow("Reply", launch.replyLimit.map { "at most \($0.formatted()) tokens" } ?? "until the context is full")
             if let total = provider.vramTotalBytes {
                 summaryRow("GPU VRAM", ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .memory)
                            + (provider.summary == nil ? " (last reading)" : ""))

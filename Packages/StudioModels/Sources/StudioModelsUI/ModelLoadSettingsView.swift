@@ -325,16 +325,18 @@ public struct ModelLoadSettingsView: View {
                 }
             }
             Picker("Max tokens per reply", selection: $settings.maxTokens) {
-                let choices = Self.maxTokenChoices.contains(settings.maxTokens)
-                    ? Self.maxTokenChoices : (Self.maxTokenChoices + [settings.maxTokens]).sorted()
-                ForEach(choices, id: \.self) { Text($0.formatted()).tag($0) }
+                Text("Until the context is full").tag(Int?.none)
+                // A limit from elsewhere that is not on the ladder is listed too.
+                let other = settings.maxTokens.flatMap { Self.maxTokenChoices.contains($0) ? nil : $0 }
+                let choices = other.map { (Self.maxTokenChoices + [$0]).sorted() } ?? Self.maxTokenChoices
+                ForEach(choices, id: \.self) { Text($0.formatted()).tag(Int?.some($0)) }
             }
             .pickerStyle(.menu)
             .accessibilityIdentifier("loadSettings.maxTokens")
         } header: {
             Text("Sampling defaults")
         } footer: {
-            Text("Used when a request does not set its own. Top-p off leaves it to the model's generation config.")
+            Text("Used when a request does not set its own. Top-p off leaves it to the model's generation config. A reply, its thinking included, runs until the context is full unless you set a limit.")
         }
     }
 

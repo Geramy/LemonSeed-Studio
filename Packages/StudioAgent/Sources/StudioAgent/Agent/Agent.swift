@@ -54,6 +54,8 @@ public actor Agent {
     private let approver: any PermissionApprover
     private var policy: PermissionPolicy
     private var estimator = TokenEstimator()
+    /// The output budget of the request streaming now (or last streamed).
+    private var lastBudget = OutputBudget(contextWindow: 0, promptTokens: 0, limit: nil)
     private var steering: [String] = []
     private var followUps: [String] = []
     private var runTask: Task<Void, Never>?
@@ -221,6 +223,11 @@ public actor Agent {
             try Task.checkCancellation()
             if turn >= configuration.maxTurns { return .maxTurns(turn) }
             try await compactIfNeeded(out)
+            if currentRequest().budget.contextIsFull {
+                // Nothing is left for a reply: say so rather than send a request.
+                out.yield(.replyStopped(.contextFull(contextWindow: configuration.endpoint.contextWindow)))
+                return .completed
+            }
             turn += 1
             out.yield(.turnStart(index: turn))
 
@@ -228,7 +235,9 @@ public actor Agent {
             let calls = assistant.toolCalls
             if calls.isEmpty {
                 if finish == .length {
-                    out.yield(.notice("The reply reached the output limit (\(configuration.endpoint.maxOutputTokens) tokens)."))
+                    out.yield(.replyStopped(lastBudget.boundByContext
+                        ? .contextFull(contextWindow: configuration.endpoint.contextWindow)
+                        : .replyLimit(lastBudget.maxTokens)))
                 }
                 out.yield(.turnEnd(index: turn, timings: timings, usage: usage, contextTokens: lastContextTokens))
                 if !followUps.isEmpty {
@@ -259,15 +268,20 @@ public actor Agent {
         return e
     }
 
-    /// The current request: replayed system prompt, tools, and context.
-    private func currentRequest() -> (ChatRequest, estimated: Int) {
+    /// The current request: replayed system prompt, tools, and context, and
+    /// a reply budget of what the context window has left after them (or the
+    /// user's limit when smaller). Reasoning counts toward it like the answer.
+    private func currentRequest() -> (ChatRequest, estimated: Int, budget: OutputBudget) {
         let state = document.systemState()
         let messages = WireConverter.messages(systemPrompt: state.prompt, context: document.contextMessages())
+        let budget = OutputBudget(contextWindow: configuration.endpoint.contextWindow,
+                                  promptTokens: estimator.estimate(messages, tools: state.tools),
+                                  limit: configuration.endpoint.maxOutputTokens)
         let request = ChatRequest(model: configuration.endpoint.model, messages: messages, tools: state.tools,
-                                  maxTokens: configuration.endpoint.maxOutputTokens,
+                                  maxTokens: budget.maxTokens,
                                   temperature: configuration.temperature, thinking: configuration.thinking,
                                   sessionID: document.header.id)
-        return (request, TokenEstimator.rawEstimate(messages, tools: state.tools))
+        return (request, TokenEstimator.rawEstimate(messages, tools: state.tools), budget)
     }
 
     private func streamAssistant(_ out: AsyncStream<AgentEvent>.Continuation) async throws
@@ -275,7 +289,8 @@ public actor Agent {
     {
         var attempt = 0
         while true {
-            let (request, rawEstimate) = currentRequest()
+            let (request, rawEstimate, budget) = currentRequest()
+            lastBudget = budget
             lastContextTokens = estimator.estimate(request.messages, tools: request.tools)
             out.yield(.assistantStart)
             var acc = ChatCompletionAccumulator()
@@ -297,6 +312,15 @@ public actor Agent {
                 }
                 // A cancelled consumer sees the stream end quietly; make it an abort.
                 try Task.checkCancellation()
+            } catch let error as LLMError where error.isContextFull {
+                // The engine reached the end of its KV cache before the
+                // budget (an estimate) ran out: the reply so far stands, cut
+                // off because the context is full.
+                lastBudget.boundByContext = true
+                let message = assistantMessage(from: acc, keepCalls: false, stop: .length, error: nil)
+                let e = try record(.message(.assistant(message)))
+                out.yield(.assistantEnd(message, entryID: e.id))
+                return (message, .length, acc.timings, acc.usage)
             } catch let error as LLMError where error.isModelOutputError && attempt < configuration.modelOutputRetries {
                 attempt += 1
                 out.yield(.notice("The model produced a malformed tool call; retrying."))
@@ -518,7 +542,7 @@ public actor Agent {
     // MARK: Compaction
 
     private func compactIfNeeded(_ out: AsyncStream<AgentEvent>.Continuation) async throws {
-        let (request, _) = currentRequest()
+        let (request, _, _) = currentRequest()
         let estimate = estimator.estimate(request.messages, tools: request.tools)
         guard configuration.compaction.shouldCompact(estimatedTokens: estimate) else { return }
         try await compact(out, estimate: estimate)
@@ -526,7 +550,7 @@ public actor Agent {
 
     /// Summarizes older context now (pi's `/compact`).
     public func compactNow() async throws {
-        let (request, _) = currentRequest()
+        let (request, _, _) = currentRequest()
         let (stream, cont) = AsyncStream<AgentEvent>.makeStream()
         _ = stream
         try await compact(cont, estimate: estimator.estimate(request.messages, tools: request.tools))
@@ -543,6 +567,10 @@ public actor Agent {
         let wire = WireConverter.messages(systemPrompt: "", context: older)
         let summaryRequest = configuration.compaction.summaryRequest(model: configuration.endpoint.model,
                                                                      conversation: wire)
+        guard summaryRequest.maxTokens > 0 else {
+            out.yield(.notice("Compaction skipped: the part of the conversation to summarize leaves no room for a summary in the \(configuration.endpoint.contextWindow)-token context window."))
+            return
+        }
         let result = try await client.complete(summaryRequest)
         let summary = result.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !summary.isEmpty else {

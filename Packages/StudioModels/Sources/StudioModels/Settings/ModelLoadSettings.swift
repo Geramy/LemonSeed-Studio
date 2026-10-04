@@ -11,7 +11,8 @@
 //   mtpEnabled      no_mtp (negated) --no-mtp when off; LSE finds mtp/ itself
 //   mtpDepth        mtp_depth        --mtp-depth N (1...7)
 //   temperature     temperature      --temperature T (has_temperature = 1)
-//   maxTokens       max_tokens       --max-tokens N
+//   maxTokens       max_tokens       --max-tokens N (nil: the KV length, so a
+//                                    reply runs until the context is full)
 //   topP            (none)           sent per request as "top_p"
 //
 // LSE runs DFlash2 or MTP, never both: with DFlash2 on it ignores any MTP
@@ -68,11 +69,16 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
     public var temperature: Double
     /// Nil leaves top-p to the model's generation config.
     public var topP: Double?
-    public var maxTokens: Int
+    /// The most tokens one reply may generate, reasoning included. Nil (the
+    /// default) sets no limit of its own: a reply runs until the context is
+    /// full.
+    public var maxTokens: Int?
 
     public static let defaultKVLength = 32768
     public static let minimumKVLength = 2048
-    public static let defaultMaxTokens = 4096
+    /// What registries written before the limit became optional stored when
+    /// nobody chose one (LSE's own --max-tokens default). Read back as nil.
+    static let formerDefaultMaxTokens = 4096
     public static let defaultMTPDepth = 3
     public static let mtpDepthRange = 1...7
     public static let temperatureRange = 0.0...2.0
@@ -82,7 +88,7 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
     public init(kvCacheDType: KVCacheDType = .bf16, kvLength: Int = ModelLoadSettings.defaultKVLength,
                 batchSize: Int = 1024, ubatchSize: Int = 1024, dflash2Enabled: Bool = true,
                 draftID: String? = nil, mtpEnabled: Bool = false, mtpDepth: Int = ModelLoadSettings.defaultMTPDepth,
-                temperature: Double = 0.6, topP: Double? = nil, maxTokens: Int = ModelLoadSettings.defaultMaxTokens) {
+                temperature: Double = 0.6, topP: Double? = nil, maxTokens: Int? = nil) {
         self.kvCacheDType = kvCacheDType
         self.kvLength = kvLength
         self.batchSize = batchSize
@@ -121,8 +127,13 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case kvCacheDType, kvLength, batchSize, ubatchSize, dflash2Enabled, draftID, mtpEnabled, mtpDepth,
-             temperature, topP, maxTokens
+             temperature, topP
+        /// Written only when a limit is set.
+        case maxTokens = "maxReplyTokens"
     }
+
+    /// The key registries used while the limit was not optional.
+    private enum LegacyKeys: String, CodingKey { case maxTokens }
 
     /// Never fails: a missing or unreadable field takes its default, so a
     /// registry written by another version always loads.
@@ -141,7 +152,14 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
         if let v = try? c.decodeIfPresent(Int.self, forKey: .mtpDepth) { mtpDepth = v }
         if let v = try? c.decodeIfPresent(Double.self, forKey: .temperature) { temperature = v }
         topP = (try? c.decodeIfPresent(Double.self, forKey: .topP)) ?? nil
-        if let v = try? c.decodeIfPresent(Int.self, forKey: .maxTokens) { maxTokens = v }
+        if let v = try? c.decodeIfPresent(Int.self, forKey: .maxTokens) {
+            maxTokens = v
+        } else if let legacy = try? decoder.container(keyedBy: LegacyKeys.self),
+                  let v = try? legacy.decodeIfPresent(Int.self, forKey: .maxTokens),
+                  v != Self.formerDefaultMaxTokens {
+            // The former default was written out like a choice; it means no limit.
+            maxTokens = v
+        }
     }
 
     // MARK: Validity
@@ -149,7 +167,8 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
     /// Every value brought inside what LSE accepts: kv_len within
     /// 2048...max context (or the max context when it is smaller), batch
     /// sizes on the power-of-two ladder with ubatch <= batch, MTP depth 1...7,
-    /// temperature 0...2, top-p 0...1, at least one token.
+    /// temperature 0...2, top-p 0...1, a reply limit (when set) of at least
+    /// one token.
     public func clamped(maxContext: Int?) -> ModelLoadSettings {
         var s = self
         let upper = max(1, maxContext ?? Int.max)
@@ -160,7 +179,7 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
         s.temperature = s.temperature.isFinite
             ? min(max(s.temperature, Self.temperatureRange.lowerBound), Self.temperatureRange.upperBound) : 0.6
         if let p = s.topP { s.topP = p.isFinite ? min(max(p, 0), 1) : nil }
-        s.maxTokens = max(1, s.maxTokens)
+        if let limit = s.maxTokens { s.maxTokens = max(1, limit) }
         return s
     }
 
@@ -219,7 +238,8 @@ public struct LSELaunchConfiguration: Sendable, Hashable {
     public var ubatchSize: Int
     /// lse_config.temperature, with has_temperature = 1.
     public var temperature: Double
-    /// lse_config.max_tokens.
+    /// lse_config.max_tokens, LSE's per-request cap: the reply limit when one
+    /// is set, otherwise the KV length (a reply can never outgrow the context).
     public var maxTokens: Int
     /// Not an lse_config field: send it as "top_p" in each request.
     public var topP: Double?
@@ -244,15 +264,16 @@ public struct LSELaunchConfiguration: Sendable, Hashable {
         batchSize = settings.batchSize
         ubatchSize = settings.ubatchSize
         temperature = settings.temperature
-        maxTokens = settings.maxTokens
+        maxTokens = settings.maxTokens ?? settings.kvLength
         topP = settings.topP
         self.pool = pool
         self.dialect = dialect
     }
 
     /// The lse-server arguments, without the executable. The standard
-    /// settings give exactly LSELaunchPreset.standard's arguments; flags
-    /// left at LSE's own defaults (MTP depth 3, 4096 max tokens) are omitted.
+    /// settings give exactly LSELaunchPreset.standard's arguments; the MTP
+    /// depth is omitted at LSE's own default (3). --max-tokens is always
+    /// given: LSE's default (4096) would cap a reply below the context.
     public var arguments: [String] {
         var args = ["--model", model.path]
         if let draft = dflash2Model {
@@ -269,7 +290,7 @@ public struct LSELaunchConfiguration: Sendable, Hashable {
         ]
         if usesMTP && mtpDepth != ModelLoadSettings.defaultMTPDepth { args += ["--mtp-depth", String(mtpDepth)] }
         if noMTP { args.append("--no-mtp") }
-        if maxTokens != ModelLoadSettings.defaultMaxTokens { args += ["--max-tokens", String(maxTokens)] }
+        args += ["--max-tokens", String(maxTokens)]
         return args
     }
 

@@ -3,19 +3,21 @@ import Foundation
 /// Context compaction, after pi's: when the context nears the window,
 /// summarize everything before a recent cut point and keep the tail verbatim.
 ///
-/// LSE's window is its KV length (32768 by default) and one request may
-/// generate up to `maxOutputTokens`, so the trigger is
-/// `estimate + maxOutput > threshold × window`, with the threshold at 75%:
+/// LSE's window is its KV length (32768 by default). A reply may use what the
+/// window has left, so the trigger is `estimate + reserve > threshold ×
+/// window`, the reserve being the user's limit on one reply when there is
+/// one (otherwise nothing), with the threshold at 75%:
 /// compaction rewrites the prompt prefix (a full re-prefill, ~30 s at 20K
 /// tokens), so it should be rare.
 public struct CompactionPolicy: Sendable, Hashable {
     public var contextWindow: Int
-    public var maxOutputTokens: Int
+    /// The user's limit on one reply, nil for none (see `OutputBudget`).
+    public var maxOutputTokens: Int?
     public var threshold: Double
     /// Recent context kept verbatim after compaction.
     public var keepRecentTokens: Int
 
-    public init(contextWindow: Int = 32768, maxOutputTokens: Int = 2048, threshold: Double = 0.75,
+    public init(contextWindow: Int = 32768, maxOutputTokens: Int? = nil, threshold: Double = 0.75,
                 keepRecentTokens: Int = 6000) {
         self.contextWindow = contextWindow
         self.maxOutputTokens = maxOutputTokens
@@ -24,7 +26,7 @@ public struct CompactionPolicy: Sendable, Hashable {
     }
 
     public func shouldCompact(estimatedTokens: Int) -> Bool {
-        Double(estimatedTokens + maxOutputTokens) > threshold * Double(contextWindow)
+        Double(estimatedTokens + (maxOutputTokens ?? 0)) > threshold * Double(contextWindow)
     }
 
     /// The first entry kept after compaction: walking back from the end until
@@ -110,8 +112,12 @@ public struct CompactionPolicy: Sendable, Hashable {
         \(transcript.trimmingCharacters(in: .whitespacesAndNewlines))
         </session>
         """
-        return ChatRequest(model: model, messages: [.system(Self.summarySystemPrompt), .user(instructions)],
-                           maxTokens: min(1536, maxOutputTokens), temperature: 0.2, thinking: .off)
+        let messages: [ChatMessage] = [.system(Self.summarySystemPrompt), .user(instructions)]
+        // The summary, like any reply, may use what the window has left.
+        let budget = OutputBudget(contextWindow: contextWindow, promptTokens: TokenEstimator.rawEstimate(messages),
+                                  limit: maxOutputTokens)
+        return ChatRequest(model: model, messages: messages, maxTokens: budget.maxTokens, temperature: 0.2,
+                           thinking: .off)
     }
 
     /// Paths the tool calls in `context` read and modified (pi's `details`).

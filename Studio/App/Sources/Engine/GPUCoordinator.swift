@@ -149,7 +149,7 @@ extension EngineLaunch {
         batchSize = UInt32(settings.batchSize)
         ubatchSize = UInt32(settings.ubatchSize)
         temperature = Float(settings.temperature)
-        maxTokens = Int32(settings.maxTokens)
+        replyLimit = settings.maxTokens
         mtpEnabled = settings.mtpEnabled
         mtpDepth = UInt32(settings.mtpDepth)
     }

@@ -94,7 +94,8 @@ private struct ModelCard: View {
                 Text("\(settings.kvCacheDType.rawValue) K/V · \(settings.kvLength.formatted()) ctx · batch \(settings.batchSize)/\(settings.ubatchSize)")
                 Text(settings.dflash2Enabled ? "DFlash2: \(app.models.draft(of: model, settings: settings)?.name ?? "no draft installed")"
                      : (settings.mtpEnabled ? "MTP depth \(settings.mtpDepth)" : "No speculative decoding"))
-                Text(String(format: "temperature %.2f · max %d tokens", settings.temperature, settings.maxTokens))
+                Text(String(format: "temperature %.2f · ", settings.temperature)
+                     + (settings.maxTokens.map { "max \($0) tokens" } ?? "until the context is full"))
             }
             .font(.system(size: type.micro + 1.5, design: .monospaced))
             .foregroundStyle(theme.palette.textSecondary.color)

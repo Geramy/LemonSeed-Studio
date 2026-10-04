@@ -34,7 +34,7 @@ struct LoadSettingsTests {
         #expect(s.kvCacheDType.rawValue == preset.kvCacheDType && s.kvLength == preset.kvLength)
         #expect(s.batchSize == preset.batchSize && s.ubatchSize == preset.ubatchSize)
         #expect(s.temperature == preset.temperature && s.dflash2Enabled && !s.mtpEnabled)
-        #expect(s.mtpDepth == 3 && s.topP == nil && s.maxTokens == 4096)
+        #expect(s.mtpDepth == 3 && s.topP == nil && s.maxTokens == nil)
 
         let launch = preset.configuration(model: model, settings: s, dflash2Draft: draft, mtpModule: nil)
         #expect(launch.arguments == preset.arguments(model: model, dflash2Draft: draft))
@@ -67,6 +67,26 @@ struct LoadSettingsTests {
         #expect(plain.mtpEnabled && !plain.dflash2Enabled)
         #expect(LSELaunchConfiguration(model: model, settings: plain, dflash2Draft: nil, mtpModule: mtp).arguments
                 == LSELaunchPreset.standard.arguments(model: model, dflash2Draft: nil))
+    }
+
+    @Test func aReplyRunsUntilTheContextIsFullUnlessLimited() throws {
+        // No limit: LSE's per-request cap is the KV length, never its 4096 default.
+        let open = LSELaunchConfiguration(model: model, settings: ModelLoadSettings(kvLength: 65536),
+                                          dflash2Draft: nil, mtpModule: nil)
+        #expect(open.maxTokens == 65536)
+        #expect(open.arguments.suffix(2) == ["--max-tokens", "65536"])
+        let limited = LSELaunchConfiguration(model: model, settings: ModelLoadSettings(maxTokens: 4096),
+                                             dflash2Draft: nil, mtpModule: nil)
+        #expect(limited.maxTokens == 4096)
+
+        // An explicit limit survives a round trip, 4096 included.
+        let decoder = JSONDecoder()
+        let chosen = ModelLoadSettings(maxTokens: 4096)
+        #expect(try decoder.decode(ModelLoadSettings.self, from: JSONEncoder().encode(chosen)).maxTokens == 4096)
+        #expect(try decoder.decode(ModelLoadSettings.self, from: JSONEncoder().encode(ModelLoadSettings())).maxTokens == nil)
+        // Registries from before: 4096 was the unchosen default, anything else a choice.
+        #expect(try decoder.decode(ModelLoadSettings.self, from: Data(#"{"maxTokens":4096}"#.utf8)).maxTokens == nil)
+        #expect(try decoder.decode(ModelLoadSettings.self, from: Data(#"{"maxTokens":2048}"#.utf8)).maxTokens == 2048)
     }
 
     @Test func valuesAreClampedToWhatLSEAccepts() {

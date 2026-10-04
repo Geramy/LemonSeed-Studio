@@ -25,6 +25,8 @@ public struct AssistantBlock: Sendable {
     public var reasoningStarted: Date?
     public var reasoningEnded: Date?
     public var stopReason: StopReason?
+    /// Why the reply was cut off, when the agent said (this run only).
+    public var replyStop: ReplyStop?
     public var errorMessage: String?
     /// When the first streamed token (reasoning or answer) arrived.
     public var firstTokenAt: Date?
@@ -573,6 +575,12 @@ public final class AgentViewModel {
             onFilesChanged?(changes.files.map(\.path))
         case .notice(let text):
             append(.notice(text, isError: false))
+        case .replyStopped(let stop):
+            if let id = lastAssistant, let i = index[id], case .assistant(var b) = items[i].kind {
+                b.replyStop = stop
+                items[i].kind = .assistant(b)
+            }
+            append(.notice(stop.detail, isError: false))
         case .agentEnd(let reason):
             switch reason {
             case .completed: break

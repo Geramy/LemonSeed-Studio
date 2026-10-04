@@ -73,10 +73,13 @@ struct ToolCallCard: View {
         } else {
             let text = card.result?.text ?? card.liveOutput
             ScrollView(.vertical) {
+                // Selectable once the output is final: selectable text is a
+                // UITextView, too costly to lay out again for every chunk of
+                // live output (see ReasoningView).
                 Text(text.isEmpty ? "(no output)" : String(text.suffix(12_000)))
                     .font(theme.smallCodeFont)
                     .foregroundStyle(card.result?.isError == true ? theme.danger : theme.secondaryText)
-                    .textSelection(.enabled)
+                    .selectableText(card.result != nil)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(12)
             }
@@ -252,5 +255,12 @@ struct UnifiedDiffText: View {
         if l.hasPrefix("+") { return theme.additionBackground }
         if l.hasPrefix("-") { return theme.deletionBackground }
         return .clear
+    }
+}
+
+extension View {
+    /// `.textSelection(.enabled)` only when `enabled`.
+    @ViewBuilder func selectableText(_ enabled: Bool) -> some View {
+        if enabled { textSelection(.enabled) } else { self }
     }
 }

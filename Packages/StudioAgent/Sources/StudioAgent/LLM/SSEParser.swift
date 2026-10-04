@@ -126,6 +126,15 @@ public enum LLMError: Error, Sendable, Hashable, LocalizedError {
         if case .stream(let type, _) = self { return type == "model_output_error" }
         return false
     }
+
+    /// LSE refuses a decode step that would run past its KV cache with this
+    /// error ("... past the engine length N"): the context is full.
+    public var isContextFull: Bool {
+        switch self {
+        case .http(_, let message), .stream(_, let message): message.contains("past the engine length")
+        case .malformedChunk, .unreachable: false
+        }
+    }
 }
 
 /// Decodes `chat.completion.chunk` payloads into stream events.

@@ -52,8 +52,13 @@ struct AssistantMessageView: View {
                 Label("Stopped", systemImage: "stop.circle")
                     .font(theme.captionFont)
                     .foregroundStyle(theme.tertiaryText)
+            } else if let stop = block.replyStop {
+                Label(stop.title, systemImage: "text.badge.xmark")
+                    .font(theme.captionFont)
+                    .foregroundStyle(theme.warning)
+                    .accessibilityIdentifier("agent.replyStopped")
             } else if block.stopReason == .length {
-                Label("Reached the output limit", systemImage: "text.badge.xmark")
+                Label("Stopped: output limit reached", systemImage: "text.badge.xmark")
                     .font(theme.captionFont)
                     .foregroundStyle(theme.warning)
             }
@@ -99,20 +104,54 @@ struct ReasoningView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(expanded ? "Hide reasoning" : "Show reasoning")
 
-            if expanded || isThinking {
-                Text(isThinking && !expanded ? String(text.suffix(280)) : text)
-                    .font(.system(size: 13))
-                    .foregroundStyle(theme.tertiaryText)
-                    .lineSpacing(2)
-                    .lineLimit(expanded ? nil : 3)
-                    .textSelection(.enabled)
-                    .padding(.leading, 12)
-                    .overlay(alignment: .leading) {
-                        Rectangle().fill(theme.hairline).frame(width: 2)
-                    }
+            if expanded {
+                reasoningText
                     .transition(.opacity.combined(with: .move(edge: .top)))
+            } else if isThinking {
+                // Collapsed while it streams: the reasoning wrapped as usual in
+                // a few lines' height, following its newest line at the bottom
+                // like the transcript. The text itself never shifts: it grows
+                // downward and scrolls up, and scrolling up by hand stops the
+                // following until the bottom is reached again.
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            reasoningText
+                            Color.clear.frame(height: 1).id(Self.liveBottom)
+                        }
+                    }
+                    .defaultScrollAnchor(.bottom, for: .initialOffset)
+                    .followsBottom(text.count) { proxy.scrollTo(Self.liveBottom, anchor: .bottom) }
+                }
+                .frame(maxHeight: Self.liveHeight)
+                .accessibilityIdentifier("agent.reasoning.live")
+                .transition(.opacity)
             }
         }
+    }
+
+    private static let liveBottom = "reasoning.bottom"
+    /// About four lines of the reasoning font.
+    private static let liveHeight: CGFloat = 72
+
+    // Plain Text, never `.textSelection(.enabled)`: iPadOS backs selectable
+    // text with a UITextView whose TextKit 2 layout runs on the main thread
+    // each time the reasoning grows, and that stalled the app long enough
+    // for the watchdog to kill it (0x8BADF00D). Copy is in the context menu.
+    private var reasoningText: some View {
+        Text(text)
+            .font(.system(size: 13))
+            .foregroundStyle(theme.tertiaryText)
+            .lineSpacing(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .contextMenu {
+                Button("Copy reasoning", systemImage: "doc.on.doc") { copy(text) }
+            }
+            .padding(.leading, 12)
+            .overlay(alignment: .leading) {
+                Rectangle().fill(theme.hairline).frame(width: 2)
+            }
     }
 }
 

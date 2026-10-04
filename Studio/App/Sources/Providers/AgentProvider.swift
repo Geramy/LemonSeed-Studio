@@ -47,8 +47,10 @@ final class StudioAgentProvider: AgentProviding {
 
     /// The agent configuration for the engine as currently loaded.
     func configuration() -> AgentConfiguration {
+        // A reply, thinking included, is bounded by what the context has
+        // left, or by the user's own limit when the load settings set one.
         var endpoint = EndpointConfiguration(model: engine.servedName, toolProtocol: .native,
-                                             contextWindow: engine.contextWindow, maxOutputTokens: 2048)
+                                             contextWindow: engine.contextWindow, maxOutputTokens: engine.replyLimit)
         endpoint.requestTimeout = 1800
         return AgentConfiguration(endpoint: endpoint, thinking: AppModel.shared.settings.agentThinking, permissionMode: .review,
                                   temperature: engine.launch?.temperature.map(Double.init))
@@ -61,7 +63,7 @@ final class StudioAgentProvider: AgentProviding {
     /// The view model for a workspace folder (one per folder, kept while the
     /// app runs; rebuilt when the engine's model or context changes).
     func viewModel(for root: URL, displayName: String) -> AgentViewModel {
-        let key = "\(engine.servedName)|\(engine.contextWindow)"
+        let key = "\(engine.servedName)|\(engine.contextWindow)|\(engine.replyLimit.map(String.init) ?? "context")"
         if key != configurationKey {
             // The served model or window changed: sessions keep their files,
             // but the next message starts with the new configuration.

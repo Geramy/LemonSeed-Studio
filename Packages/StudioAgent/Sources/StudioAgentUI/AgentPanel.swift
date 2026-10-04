@@ -48,8 +48,25 @@ public struct AgentPanel: View {
                 .padding(.vertical, 16)
             }
             .scrollDismissesKeyboard(.interactively)
-            .onChange(of: model.items.count) { proxy.scrollTo("bottom", anchor: .bottom) }
-            .onChange(of: lastItemSize) { proxy.scrollTo("bottom", anchor: .bottom) }
+            // New messages and the streaming one stay in view until the user
+            // scrolls up; reaching the bottom again, or sending a message,
+            // resumes following.
+            .followsBottom(StreamProgress(items: model.items.count, last: lastItemSize),
+                           resume: userMessageCount) {
+                proxy.scrollTo("bottom", anchor: .bottom)
+            }
+        }
+    }
+
+    private struct StreamProgress: Equatable {
+        var items: Int
+        var last: Int
+    }
+
+    private var userMessageCount: Int {
+        model.items.reduce(0) { n, item in
+            if case .user = item.kind { return n + 1 }
+            return n
         }
     }
 

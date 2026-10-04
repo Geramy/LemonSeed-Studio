@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#16213A"/>
+      <stop offset="1" stop-color="#0A0F1C"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="512" cy="512" r="470" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD43B" stop-opacity="0.30"/>
+      <stop offset="0.7" stop-color="#FFD43B" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#FFD43B" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="rind" cx="470" cy="440" r="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFE14D"/>
+      <stop offset="0.85" stop-color="#F5BE12"/>
+      <stop offset="1" stop-color="#D99A00"/>
+    </radialGradient>
+    <radialGradient id="flesh" cx="512" cy="512" r="310" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF2A8"/>
+      <stop offset="0.55" stop-color="#FFE266"/>
+      <stop offset="1" stop-color="#FFCF2E"/>
+    </radialGradient>
+    <linearGradient id="seed" x1="0" y1="-1" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0" stop-color="#FFFDF4"/>
+      <stop offset="1" stop-color="#E9D7A6"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5BD982"/>
+      <stop offset="1" stop-color="#1F9A52"/>
+    </linearGradient>
+    <!-- A lemon seed: pointed end up, 120 long, 68 wide, centred on the origin -->
+    <path id="seedShape" d="M0,-60 C22,-35 34,-5 34,18 C34,44 18,60 0,60 C-18,60 -34,44 -34,18 C-34,-5 -22,-35 0,-60 Z"/>
+    <g id="seedG">
+      <use href="#seedShape" fill="url(#seed)" stroke="#B89A55" stroke-opacity="0.55" stroke-width="3"/>
+      <path d="M-12,-28 C-6,-40 0,-48 0,-48" fill="none" stroke="#FFFFFF" stroke-opacity="0.8" stroke-width="5" stroke-linecap="round"/>
+    </g>
+  </defs>
+
+  <!-- Background (full bleed; iPadOS applies the corner mask) -->
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <circle cx="512" cy="512" r="470" fill="url(#glow)"/>
+
+  <!-- Lemon slice -->
+  <circle cx="512" cy="512" r="362" fill="url(#rind)"/>
+  <circle cx="512" cy="512" r="328" fill="#FFF6D2"/>
+  <circle cx="512" cy="512" r="310" fill="url(#flesh)"/>
+
+  <!-- Segment membranes -->
+  <g stroke="#FFF6D2" stroke-width="10" stroke-linecap="round" opacity="0.95">
+    <line x1="512" y1="512" x2="512" y2="204"/>
+    <line x1="512" y1="512" x2="693" y2="263"/>
+    <line x1="512" y1="512" x2="805" y2="417"/>
+    <line x1="512" y1="512" x2="805" y2="607"/>
+    <line x1="512" y1="512" x2="693" y2="761"/>
+    <line x1="512" y1="512" x2="512" y2="820"/>
+    <line x1="512" y1="512" x2="331" y2="761"/>
+    <line x1="512" y1="512" x2="219" y2="607"/>
+    <line x1="512" y1="512" x2="219" y2="417"/>
+    <line x1="512" y1="512" x2="331" y2="263"/>
+  </g>
+  <circle cx="512" cy="512" r="300" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="6"/>
+
+  <!-- Seeds spelling </> : the chevrons are pairs of seeds, the slash is a sprouting seed -->
+  <g transform="translate(0,6)">
+    <!-- < -->
+    <use href="#seedG" transform="translate(394,483) rotate(235) scale(0.78)"/>
+    <use href="#seedG" transform="translate(394,557) rotate(305) scale(0.78)"/>
+    <!-- > -->
+    <use href="#seedG" transform="translate(630,483) rotate(125) scale(0.78)"/>
+    <use href="#seedG" transform="translate(630,557) rotate(55) scale(0.78)"/>
+    <!-- / with a sprout -->
+    <path d="M538,463 C548,430 566,410 592,396" fill="none" stroke="#2BA85C" stroke-width="9" stroke-linecap="round"/>
+    <path d="M592,396 C612,360 655,350 686,360 C670,392 632,414 592,396 Z" fill="url(#leaf)"/>
+    <path d="M596,394 C622,382 648,372 674,364" fill="none" stroke="#C8F5D6" stroke-opacity="0.7" stroke-width="3" stroke-linecap="round"/>
+    <path d="M556,424 C540,398 514,390 492,396 C504,420 530,432 556,424 Z" fill="url(#leaf)" opacity="0.92"/>
+    <use href="#seedG" transform="translate(512,530) rotate(25) scale(1.05)"/>
+  </g>
+</svg>

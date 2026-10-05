@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="Studio/App/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png" width="160" alt="LemonSeed Studio icon: a house with a seedling and three seeds inside">
+</p>
+
 # LemonSeed Studio
 
 An editor and IDE for iPad with on-device LLM inference on an AMD GPU.

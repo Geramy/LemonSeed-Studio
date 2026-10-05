@@ -50,38 +50,10 @@
       <use href="#seedShape" fill="url(#seed)" stroke="#A88A4C" stroke-opacity="0.55" stroke-width="2.5"/>
       <path d="M-13,-26 C-7,-40 -1,-48 -1,-48" fill="none" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="5" stroke-linecap="round"/>
     </g>
-    <radialGradient id="vig" cx="512" cy="560" r="560" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#0A0F1C" stop-opacity="0.85"/>
-      <stop offset="0.55" stop-color="#0A0F1C" stop-opacity="0.35"/>
-      <stop offset="1" stop-color="#0A0F1C" stop-opacity="0"/>
-    </radialGradient>
   </defs>
 
-  <rect width="1024" height="1024" fill="url(#bg)"/>
-  <g font-family="Menlo, Monaco, monospace" font-size="30" opacity="0.22">
-    <text x="60" y="70" xml:space="preserve"><tspan fill="#C792EA">struct</tspan><tspan fill="#C7D0E0"> </tspan><tspan fill="#FFCB6B">Seed</tspan><tspan fill="#C7D0E0"> {</tspan></text>
-    <text x="60" y="116" xml:space="preserve"><tspan fill="#C792EA">  float</tspan><tspan fill="#C7D0E0"> growth = </tspan><tspan fill="#F78C6C">0.0f</tspan><tspan fill="#C7D0E0">;</tspan></text>
-    <text x="60" y="162" xml:space="preserve"><tspan fill="#C792EA">  void</tspan><tspan fill="#82AAFF"> sprout</tspan><tspan fill="#C7D0E0">() {</tspan></text>
-    <text x="60" y="208" xml:space="preserve"><tspan fill="#C792EA">    while</tspan><tspan fill="#C7D0E0"> (growth &lt; </tspan><tspan fill="#F78C6C">1.0f</tspan><tspan fill="#C7D0E0">) {</tspan></text>
-    <text x="60" y="254" xml:space="preserve"><tspan fill="#C7D0E0">      growth += </tspan><tspan fill="#82AAFF">light</tspan><tspan fill="#C7D0E0">() * </tspan><tspan fill="#82AAFF">water</tspan><tspan fill="#C7D0E0">();</tspan></text>
-    <text x="60" y="300" xml:space="preserve"><tspan fill="#C7D0E0">    }</tspan></text>
-    <text x="60" y="346" xml:space="preserve"><tspan fill="#C7D0E0">  }</tspan></text>
-    <text x="60" y="392" xml:space="preserve"><tspan fill="#C7D0E0">};</tspan></text>
-    <text x="60" y="438" xml:space="preserve"><tspan fill="#C7D0E0"></tspan></text>
-    <text x="60" y="484" xml:space="preserve"><tspan fill="#C792EA">int</tspan><tspan fill="#82AAFF"> main</tspan><tspan fill="#C7D0E0">() {</tspan></text>
-    <text x="60" y="530" xml:space="preserve"><tspan fill="#FFCB6B">  Studio</tspan><tspan fill="#C7D0E0"> studio;</tspan></text>
-    <text x="60" y="576" xml:space="preserve"><tspan fill="#C792EA">  for</tspan><tspan fill="#C7D0E0"> (</tspan><tspan fill="#C792EA">int</tspan><tspan fill="#C7D0E0"> i = </tspan><tspan fill="#F78C6C">0</tspan><tspan fill="#C7D0E0">; i &lt; </tspan><tspan fill="#F78C6C">3</tspan><tspan fill="#C7D0E0">; i++)</tspan></text>
-    <text x="60" y="622" xml:space="preserve"><tspan fill="#C7D0E0">    studio.</tspan><tspan fill="#82AAFF">plant</tspan><tspan fill="#C7D0E0">(</tspan><tspan fill="#FFCB6B">Seed</tspan><tspan fill="#C7D0E0">{});</tspan></text>
-    <text x="60" y="668" xml:space="preserve"><tspan fill="#C7D0E0">  studio.</tspan><tspan fill="#82AAFF">grow</tspan><tspan fill="#C7D0E0">();</tspan></text>
-    <text x="60" y="714" xml:space="preserve"><tspan fill="#C792EA">  return</tspan><tspan fill="#F78C6C"> 0</tspan><tspan fill="#C7D0E0">;</tspan></text>
-    <text x="60" y="760" xml:space="preserve"><tspan fill="#C7D0E0">}</tspan></text>
-    <text x="60" y="806" xml:space="preserve"><tspan fill="#5C6A85">// lemonseed studio</tspan></text>
-    <text x="60" y="852" xml:space="preserve"><tspan fill="#C7D0E0">git commit -m </tspan><tspan fill="#C3E88D">&quot;sprout&quot;</tspan></text>
-    <text x="60" y="898" xml:space="preserve"><tspan fill="#C7D0E0">$ clang++ seed.cpp -o seed.wasm</tspan></text>
-    <text x="60" y="944" xml:space="preserve"><tspan fill="#C7D0E0">$ run seed.wasm</tspan></text>
-  </g>
-  <rect width="1024" height="1024" fill="url(#vig)"/>
-  <circle cx="512" cy="660" r="400" fill="url(#glow)"/>
+  
+  
   <ellipse cx="512" cy="846" rx="360" ry="30" fill="#000000" opacity="0.5" filter="url(#soft)"/>
 
   <g filter="url(#drop)">

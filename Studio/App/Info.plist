@@ -34,10 +34,14 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<true/>
 	</dict>
+	<!-- The LemonSeed mark, centered on the system background (it reads on
+	     light and dark alike). -->
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
 		<string></string>
+		<key>UIImageName</key>
+		<string>LemonSeedMark</string>
 	</dict>
 	<!-- No "driverkit" requirement: the Studio is a complete editor without
 	     the GPU driver, which only matters when an eGPU is attached. -->

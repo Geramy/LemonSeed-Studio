@@ -23,6 +23,8 @@ let package = Package(
             name: "StudioDesign",
             resources: [
                 .copy("Resources/Fonts"),
+                // The LemonSeed mark (vector source: Brand/LemonSeedMark.svg).
+                .process("Resources/Brand.xcassets"),
             ]
         ),
         .testTarget(

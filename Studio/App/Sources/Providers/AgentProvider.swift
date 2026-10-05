@@ -77,7 +77,9 @@ final class StudioAgentProvider: AgentProviding {
             return existing
         }
         let workspace = LocalWorkspace(rootURL: root, displayName: displayName, securityScoped: true)
-        let model = AgentViewModel(workspace: workspace, client: client(), configuration: configuration())
+        // Git tools when the Git package is present (create a branch, open a draft request).
+        let gitTools = (AppModel.shared.services.git as? StudioGitProvider).map { GitAgentTools.all(root: root, services: $0.services) } ?? []
+        let model = AgentViewModel(workspace: workspace, client: client(), configuration: configuration(), extraTools: gitTools)
         let engine = self.engine
         model.onSessionDeleted = { id in engine.closeSession(id) }
         model.refreshSessions()

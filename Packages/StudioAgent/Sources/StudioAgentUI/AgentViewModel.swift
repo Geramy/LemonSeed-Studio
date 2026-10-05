@@ -197,6 +197,7 @@ public final class AgentViewModel {
     private let shell: any ShellProviding
     private let isScripted: Bool
     private var agent: Agent?
+    private let extraTools: [any AgentTool]
     private var runTask: Task<Void, Never>?
     private var approvalContinuation: CheckedContinuation<PermissionResponse, Never>?
     private var index: [String: Int] = [:]
@@ -210,8 +211,11 @@ public final class AgentViewModel {
     private var flushTask: Task<Void, Never>?
     private static let flushInterval: Duration = .milliseconds(33)
 
+    /// - Parameter extraTools: tools offered beside the defaults (the
+    ///   Studio's Git tools); each goes through the same permission gate.
     public init(workspace: any AgentWorkspace, client: any LLMClient, configuration: AgentConfiguration = .init(),
-                shell: any ShellProviding = InProcessShell()) {
+                shell: any ShellProviding = InProcessShell(), extraTools: [any AgentTool] = []) {
+        self.extraTools = extraTools
         self.workspace = workspace
         self.client = client
         self.configuration = configuration
@@ -267,7 +271,7 @@ public final class AgentViewModel {
     public func open(_ summary: SessionSummary) {
         stop()
         do {
-            let a = try Agent.resume(url: summary.url, workspace: workspace, client: client, shell: shell,
+            let a = try Agent.resume(url: summary.url, workspace: workspace, client: client, shell: shell, tools: tools,
                                      approver: approver(), configuration: configuration)
             agent = a
             sessionTitle = summary.title
@@ -447,9 +451,12 @@ public final class AgentViewModel {
         config.permissionMode = mode
         let title = String(firstMessage.split(separator: "\n").first ?? "").prefix(60)
         sessionTitle = String(title)
-        return try Agent.start(workspace: workspace, client: client, shell: shell, approver: approver(),
+        return try Agent.start(workspace: workspace, client: client, shell: shell, tools: tools, approver: approver(),
                                configuration: config, name: String(title))
     }
+
+    /// The default tools plus the host's extra tools.
+    private var tools: [any AgentTool] { DefaultTools.all(shell: shell) + extraTools }
 
     /// Stops the run at the next token.
     public func stop() {

@@ -30,6 +30,15 @@ extension View {
         #endif
     }
 
+    /// The URL keyboard on iPad, no autocapitalization or autocorrection.
+    func urlEntry() -> some View {
+        #if os(iOS)
+        return keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+        #else
+        return autocorrectionDisabled()
+        #endif
+    }
+
     /// No autocapitalization or autocorrection (URLs, tokens, names).
     func plainTextEntry() -> some View {
         #if os(iOS)

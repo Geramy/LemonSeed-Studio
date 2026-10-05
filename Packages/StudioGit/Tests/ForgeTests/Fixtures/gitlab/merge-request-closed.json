@@ -1,0 +1,10 @@
+{
+  "iid": 5,
+  "title": "Sparkline for queue occupancy",
+  "state": "closed",
+  "target_branch": "main",
+  "source_branch": "sparkline",
+  "source_project_id": 4001,
+  "target_project_id": 4001,
+  "references": { "full": "lemonade/tools/amdgpu_mtopg!5" }
+}

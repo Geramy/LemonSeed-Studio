@@ -114,6 +114,21 @@ struct WorkspaceWindow: View {
         } message: {
             Text("This cannot be undone.")
         }
+        .sheet(item: $controller.gitSheet) { request in
+            if let git = app.services.git as? StudioGitProvider {
+                Group {
+                    switch request {
+                    case .clone:
+                        GitCloneSheet(provider: git, library: app.library) { reference in controller.router?.open(reference) }
+                    case .workbench:
+                        GitWorkbenchSheet(provider: git, controller: controller, request: request)
+                    }
+                }
+                .modifier(StudioEnvironment())
+                .environment(app)
+                .presentationSizing(.page)
+            }
+        }
         .dropDestination(for: URL.self) { urls, _ in
             controller.importItems(urls, into: controller.rootURL)
             return true

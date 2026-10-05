@@ -1,0 +1,45 @@
+{
+  "data": {
+    "viewer": {
+      "repositories": {
+        "pageInfo": { "hasNextPage": false, "endCursor": "Y3Vyc29yOnYyOpK5MjAyNS0wMS0wMVQwMDowMDowMCswMDowMM4AFGHIJ" },
+        "nodes": [
+          {
+            "id": "R_kgDOK1fork",
+            "name": "LSE",
+            "nameWithOwner": "octo-dev/LSE",
+            "owner": { "login": "octo-dev" },
+            "description": "Fork of the LemonSeed Engine",
+            "isPrivate": false,
+            "isFork": true,
+            "isArchived": false,
+            "defaultBranchRef": { "name": "main" },
+            "url": "https://github.com/octo-dev/LSE",
+            "sshUrl": "git@github.com:octo-dev/LSE.git",
+            "stargazerCount": 1,
+            "primaryLanguage": { "name": "C++" },
+            "updatedAt": "2026-08-01T00:00:00Z",
+            "diskUsage": 54000
+          },
+          {
+            "id": "R_kgDOKold",
+            "name": "gpu-notes-2024",
+            "nameWithOwner": "octo-dev/gpu-notes-2024",
+            "owner": { "login": "octo-dev" },
+            "description": "Old experiments",
+            "isPrivate": false,
+            "isFork": false,
+            "isArchived": true,
+            "defaultBranchRef": null,
+            "url": "https://github.com/octo-dev/gpu-notes-2024",
+            "sshUrl": "git@github.com:octo-dev/gpu-notes-2024.git",
+            "stargazerCount": 3,
+            "primaryLanguage": { "name": "Python" },
+            "updatedAt": "2025-01-01T00:00:00Z",
+            "diskUsage": 900
+          }
+        ]
+      }
+    }
+  }
+}

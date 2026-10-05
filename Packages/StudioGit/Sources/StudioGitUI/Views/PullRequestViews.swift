@@ -2,7 +2,8 @@ public import SwiftUI
 import GitKit
 public import Forge
 
-/// Pull/merge requests with CI badges.
+/// Pull/merge requests with CI badges, and for a repository a state
+/// (open/closed/merged) and scope (everyone's, mine, review requested) bar.
 public struct PullRequestListView: View {
     @Bindable var model: PullRequestListModel
     @Binding var selection: PullRequest?
@@ -15,12 +16,19 @@ public struct PullRequestListView: View {
 
     public var body: some View {
         List(selection: $selection) {
+            if model.repository != nil {
+                Section {
+                    filterBar.listRowSeparator(.hidden)
+                }
+            }
             ErrorBanner(message: $model.errorMessage)
             ForEach(model.requests) { pr in
                 row(pr).tag(pr)
+                    .accessibilityIdentifier("git.pull.\(pr.number)")
             }
             if model.requests.isEmpty && !model.isLoading && model.errorMessage == nil {
-                ContentUnavailableView("No open requests", systemImage: "arrow.triangle.pull")
+                ContentUnavailableView("No \(model.scope == .all ? "" : model.scope.title.lowercased() + " ")\(model.state.rawValue) \(model.client.host.kind.requestNoun)s",
+                                       systemImage: "arrow.triangle.pull")
             }
         }
         .overlay { if model.isLoading && model.requests.isEmpty { ProgressView() } }
@@ -29,20 +37,35 @@ public struct PullRequestListView: View {
         .navigationTitle(model.title)
     }
 
+    private var filterBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("State", selection: Binding(get: { model.state }, set: { s in Task { await model.set(state: s) } })) {
+                Text("Open").tag(PullRequestState.open)
+                Text("Closed").tag(PullRequestState.closed)
+                Text("Merged").tag(PullRequestState.merged)
+            }
+            .pickerStyle(.segmented)
+            .disabled(model.scope == .reviewRequested)
+            .accessibilityIdentifier("git.pulls.state")
+            Picker("Show", selection: Binding(get: { model.scope }, set: { s in Task { await model.set(scope: s) } })) {
+                ForEach(PullRequestListModel.Scope.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("git.pulls.scope")
+        }
+    }
+
     private func row(_ pr: PullRequest) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: pr.isDraft ? "arrow.triangle.pull" : (pr.state == .merged ? "arrow.triangle.merge" : "arrow.triangle.pull"))
-                .foregroundStyle(pr.isDraft ? Color.secondary : (pr.state == .merged ? Color.purple : theme.added))
+            Image(systemName: pr.state == .merged ? "arrow.triangle.merge" : (pr.state == .closed ? "xmark.circle" : "arrow.triangle.pull"))
+                .foregroundStyle(pr.isDraft ? Color.secondary : (pr.state == .merged ? Color.purple : pr.state == .closed ? theme.deleted : theme.added))
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(pr.title).font(.body.weight(.semibold)).lineLimit(2)
-                    if pr.isDraft {
-                        Text("Draft").font(.caption2.weight(.semibold)).padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(.quaternary, in: Capsule())
-                    }
+                    if pr.isDraft { Badge(text: "Draft", color: theme.secondaryText) }
                 }
                 HStack(spacing: 6) {
-                    Text("#\(pr.number)").monospacedDigit()
+                    Text("\(model.client.host.kind.requestSigil)\(pr.number)").monospacedDigit()
                     if let author = pr.author { Text(author.login) }
                     if !pr.sourceBranch.isEmpty { Text("\(pr.sourceBranch) → \(pr.targetBranch)").lineLimit(1) }
                     if let updated = pr.updatedAt { Text(updated.relative) }
@@ -51,10 +74,7 @@ public struct PullRequestListView: View {
                 .foregroundStyle(.secondary)
                 if !pr.labels.isEmpty {
                     HStack(spacing: 4) {
-                        ForEach(pr.labels, id: \.self) { label in
-                            Text(label).font(.caption2.weight(.medium)).padding(.horizontal, 6).padding(.vertical, 1)
-                                .background(theme.accent.opacity(0.12), in: Capsule())
-                        }
+                        ForEach(pr.labels, id: \.self) { Badge(text: $0, color: theme.accent) }
                     }
                 }
             }
@@ -70,35 +90,46 @@ public struct PullRequestListView: View {
     }
 }
 
-/// A request's description, checks, files with diffs and line comments,
-/// conversation, review and merge.
+/// A request's description, commits, files with diffs and line comments,
+/// conversation and review threads, checks; and its actions: check out,
+/// comment, approve or request changes, merge with the repository's allowed
+/// methods, close and reopen. Actions the user's permission does not allow
+/// are disabled with the reason.
 public struct PullRequestDetailView: View {
     @Bindable var model: PullRequestDetailModel
+    /// The local repository and remote to check the request out into.
+    var checkout: (sourceControl: SourceControlModel, remote: String)?
     @State private var commentingOn: (line: DiffLine, path: String)?
     @State private var lineCommentText = ""
-    @State private var tab = Tab.files
+    @State private var tab = Tab.conversation
+    @State private var confirmMerge: MergeMethod?
+    @State private var confirmClose = false
     @Environment(\.gitTheme) private var theme
     @Environment(\.openURL) private var openURL
 
-    enum Tab: String, CaseIterable { case conversation = "Conversation", files = "Files", checks = "Checks" }
+    enum Tab: String, CaseIterable { case conversation = "Conversation", commits = "Commits", files = "Files", checks = "Checks" }
 
-    public init(model: PullRequestDetailModel) {
+    public init(model: PullRequestDetailModel, checkout: (sourceControl: SourceControlModel, remote: String)? = nil) {
         self.model = model
+        self.checkout = checkout
     }
 
     public var body: some View {
         VStack(spacing: 0) {
             if let pr = model.request {
                 header(pr)
+                actionBar(pr)
                 Picker("View", selection: $tab) {
-                    ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    ForEach(Tab.allCases, id: \.self) { t in Text(tabTitle(t)).tag(t) }
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal)
-                .padding(.bottom, 8)
+                .padding(.vertical, 8)
+                .accessibilityIdentifier("git.pull.tabs")
                 Divider()
                 switch tab {
                 case .conversation: conversation(pr)
+                case .commits: commits
                 case .files: files
                 case .checks: checks
                 }
@@ -109,44 +140,37 @@ public struct PullRequestDetailView: View {
             }
         }
         .task(id: model.number) { await model.load() }
-        .navigationTitle(model.request.map { "#\($0.number)" } ?? "")
+        .navigationTitle(model.request.map { "\(model.kind.requestSigil)\($0.number)" } ?? "")
+        .confirmationDialog("Merge \(model.title)?", isPresented: Binding(get: { confirmMerge != nil }, set: { if !$0 { confirmMerge = nil } }),
+                            titleVisibility: .visible, presenting: confirmMerge) { method in
+            Button(method.title) { Task { await model.merge(method) } }
+        } message: { method in
+            Text("\(model.request?.sourceBranch ?? "") into \(model.request?.targetBranch ?? "") on \(model.client.host.hostname).")
+        }
+        .confirmationDialog("Close \(model.title) without merging?", isPresented: $confirmClose, titleVisibility: .visible) {
+            Button("Close \(model.kind.requestNoun.capitalized)", role: .destructive) { Task { await model.setOpen(false) } }
+        }
         .sheet(isPresented: Binding(get: { commentingOn != nil }, set: { if !$0 { commentingOn = nil } })) {
-            NavigationStack {
-                Form {
-                    if let target = commentingOn {
-                        Section("\(target.path):\(target.line.newLineNumber ?? target.line.oldLineNumber ?? 0)") {
-                            Text(target.line.text).font(theme.codeFont)
-                        }
-                    }
-                    TextEditor(text: $lineCommentText).frame(minHeight: 120)
-                }
-                .navigationTitle("Comment on Line")
-                .inlineTitle()
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { commentingOn = nil } }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Post") {
-                            if let target = commentingOn {
-                                let text = lineCommentText
-                                Task { await model.postLineComment(text, path: target.path, line: target.line) }
-                            }
-                            lineCommentText = ""
-                            commentingOn = nil
-                        }
-                        .disabled(lineCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-                }
-            }
+            lineCommentSheet
+        }
+    }
+
+    private func tabTitle(_ t: Tab) -> String {
+        switch t {
+        case .conversation: return "Conversation"
+        case .commits: return "Commits \(model.commits.count)"
+        case .files: return "Files \(model.files.count)"
+        case .checks: return "Checks"
         }
     }
 
     private func header(_ pr: PullRequest) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(pr.title).font(.title2.weight(.semibold))
+            Text(pr.title).font(.title2.weight(.semibold)).textSelection(.enabled)
             HStack(spacing: 8) {
                 stateChip(pr)
-                Text("\(pr.author?.login ?? "someone") wants to merge \(pr.sourceBranch) into \(pr.targetBranch)")
-                    .font(.callout).foregroundStyle(.secondary)
+                Text("\(pr.author?.login ?? "someone") wants to merge \(pr.isCrossRepository ? "\(pr.sourceRepository ?? "a fork"):" : "")\(pr.sourceBranch) into \(pr.targetBranch)")
+                    .font(.callout).foregroundStyle(.secondary).lineLimit(2)
                 Spacer()
                 if let ci = model.ci { CIBadge(ci.state).font(.title3) }
                 if let url = pr.webURL {
@@ -159,7 +183,78 @@ public struct PullRequestDetailView: View {
             }
             ErrorBanner(message: $model.errorMessage)
         }
-        .padding()
+        .padding([.horizontal, .top])
+        .padding(.bottom, 6)
+    }
+
+    private func actionBar(_ pr: PullRequest) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                if let checkout {
+                    Button {
+                        Task { await model.checkOut(into: checkout.sourceControl, remote: checkout.remote) }
+                    } label: {
+                        Label("Check Out", systemImage: "arrow.down.circle")
+                    }
+                    .disabled(model.isWorking)
+                    .accessibilityIdentifier("git.pull.checkout")
+                }
+                reviewMenu
+                mergeMenu
+                if pr.state == .open {
+                    Button(role: .destructive) { confirmClose = true } label: { Label("Close", systemImage: "xmark.circle") }
+                        .disabled(model.stateChangeBlocker != nil || model.isWorking)
+                        .help(model.stateChangeBlocker ?? "")
+                        .accessibilityIdentifier("git.pull.close")
+                } else if pr.state == .closed {
+                    Button { Task { await model.setOpen(true) } } label: { Label("Reopen", systemImage: "arrow.uturn.left.circle") }
+                        .disabled(model.stateChangeBlocker != nil || model.isWorking)
+                        .accessibilityIdentifier("git.pull.reopen")
+                }
+                if model.isWorking { ProgressView().controlSize(.small) }
+                if let blocker = model.mergeBlocker, pr.state == .open {
+                    Text(blocker).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .padding(.horizontal)
+        }
+    }
+
+    private var reviewMenu: some View {
+        Menu {
+            Button("Approve", systemImage: "checkmark.circle") { Task { await model.review(.approve) } }
+                .disabled(model.isAuthor)
+            Button("Request Changes", systemImage: "exclamationmark.bubble") {
+                model.reviewBody = model.draftComment
+                model.draftComment = ""
+                Task { await model.review(.requestChanges) }
+            }
+            .disabled(model.isAuthor)
+            Button("Comment Review", systemImage: "text.bubble") {
+                model.reviewBody = model.draftComment
+                model.draftComment = ""
+                Task { await model.review(.comment) }
+            }
+        } label: {
+            Label("Review", systemImage: "eye")
+        }
+        .disabled(model.reviewBlocker != nil || model.isWorking)
+        .accessibilityIdentifier("git.pull.review")
+    }
+
+    private var mergeMenu: some View {
+        Menu {
+            ForEach(model.mergeMethods, id: \.self) { method in
+                Button(method.title) { confirmMerge = method }
+            }
+        } label: {
+            Label("Merge", systemImage: "arrow.triangle.merge")
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(model.mergeBlocker != nil || model.isWorking)
+        .accessibilityIdentifier("git.pull.merge")
     }
 
     private func stateChip(_ pr: PullRequest) -> some View {
@@ -172,12 +267,14 @@ public struct PullRequestDetailView: View {
     private func conversation(_ pr: PullRequest) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                if !pr.body.isEmpty {
-                    commentCard(author: pr.author?.login ?? "", date: pr.createdAt, body: pr.body, location: nil)
+                commentCard(author: pr.author?.login ?? "", date: pr.createdAt,
+                            body: pr.body.isEmpty ? "_No description._" : pr.body, location: nil)
+                ForEach(model.conversation) { c in
+                    commentCard(author: c.author?.login ?? "", date: c.createdAt, body: c.body, location: nil)
                 }
-                ForEach(model.comments) { c in
-                    commentCard(author: c.author?.login ?? "", date: c.createdAt, body: c.body,
-                                location: c.path.map { "\($0)\(c.line.map { ":\($0)" } ?? "")" })
+                if !model.threads.isEmpty {
+                    Text("Review Threads").font(.headline).padding(.top, 4)
+                    ForEach(model.threads) { thread in threadCard(thread) }
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     TextEditor(text: $model.draftComment)
@@ -185,49 +282,51 @@ public struct PullRequestDetailView: View {
                         .scrollContentBackground(.hidden)
                         .padding(6)
                         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+                        .accessibilityIdentifier("git.pull.commentField")
                     HStack {
                         Button("Comment") { Task { await model.postComment() } }
-                            .disabled(model.draftComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        Spacer()
-                        reviewMenu
-                        mergeMenu(pr)
+                            .buttonStyle(.bordered)
+                            .disabled(model.draftComment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isWorking)
+                            .accessibilityIdentifier("git.pull.comment")
+                        Text("Write a comment, or use it as the body of Review › Request Changes.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.bordered)
                 }
             }
             .padding()
         }
     }
 
-    private var reviewMenu: some View {
-        Menu {
-            Button("Approve", systemImage: "checkmark.circle") { Task { await model.review(.approve) } }
-            Button("Request Changes", systemImage: "exclamationmark.bubble") {
-                model.reviewBody = model.draftComment
-                model.draftComment = ""
-                Task { await model.review(.requestChanges) }
+    private func threadCard(_ thread: ReviewThread) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "text.bubble").foregroundStyle(theme.accent)
+                Text("\(thread.path)\(thread.line.map { ":\($0)" } ?? "")").font(.caption.monospaced()).foregroundStyle(theme.accent)
+                    .lineLimit(1).truncationMode(.head)
+                Spacer()
+                if thread.isResolved { Badge(text: "Resolved", color: theme.added) } else { Badge(text: "Unresolved", color: theme.modified) }
+                Button {
+                    model.selectedFile = thread.path
+                    tab = .files
+                } label: {
+                    Image(systemName: "arrow.right.circle")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Show in Files")
             }
-            Button("Comment Review", systemImage: "text.bubble") {
-                model.reviewBody = model.draftComment
-                model.draftComment = ""
-                Task { await model.review(.comment) }
+            ForEach(thread.comments) { c in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(c.author?.login ?? "").font(.caption.weight(.semibold))
+                        if let date = c.createdAt { Text(date.relative).font(.caption2).foregroundStyle(.secondary) }
+                    }
+                    Text(LocalizedStringKey(c.body)).font(.callout).textSelection(.enabled)
+                }
             }
-        } label: {
-            Label("Review", systemImage: "eye")
         }
-        .disabled(model.isWorking)
-    }
-
-    private func mergeMenu(_ pr: PullRequest) -> some View {
-        Menu {
-            Button("Create a Merge Commit") { Task { await model.merge(.merge) } }
-            Button("Squash and Merge") { Task { await model.merge(.squash) } }
-            Button("Rebase and Merge") { Task { await model.merge(.rebase) } }
-        } label: {
-            Label("Merge", systemImage: "arrow.triangle.merge")
-        }
-        .buttonStyle(.borderedProminent)
-        .disabled(pr.state != .open || pr.isDraft || pr.isMergeable == false || model.isWorking)
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(thread.isResolved ? 0.2 : 0.35), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private func commentCard(author: String, date: Date?, body: String, location: String?) -> some View {
@@ -245,6 +344,25 @@ public struct PullRequestDetailView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private var commits: some View {
+        List(model.commits) { commit in
+            VStack(alignment: .leading, spacing: 3) {
+                Text(commit.summary).font(.body.weight(.medium)).lineLimit(2)
+                HStack(spacing: 8) {
+                    Text(commit.shortSHA).font(.caption.monospaced())
+                    Text(commit.authorLogin ?? commit.authorName).font(.caption)
+                    if let date = commit.date { Text(date.relative).font(.caption) }
+                }
+                .foregroundStyle(.secondary)
+            }
+            .contextMenu {
+                Button("Copy Commit ID", systemImage: "doc.on.doc") { Pasteboard.copy(commit.sha) }
+            }
+        }
+        .listStyle(.plain)
+        .overlay { if model.commits.isEmpty { ContentUnavailableView("No commits", systemImage: "point.3.connected.trianglepath.dotted") } }
     }
 
     private var files: some View {
@@ -274,17 +392,21 @@ public struct PullRequestDetailView: View {
             }
             Divider()
             if let path = model.selectedFile {
-                Text(path).font(.caption.monospaced()).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 12).padding(.vertical, 6)
+                HStack {
+                    Text(path).font(.caption.monospaced()).foregroundStyle(.secondary)
+                    Spacer()
+                    Text("Tap a line to comment on it").font(.caption).foregroundStyle(.tertiary)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 6)
                 DiffView(hunks: model.selectedHunks,
                          isBinary: model.files.first { $0.path == path }?.patch == nil,
-                         onTapLine: { line, _ in commentingOn = (line, path) },
+                         onTapLine: { line, _ in if model.request?.state == .open { commentingOn = (line, path) } },
                          lineMarker: { line in
                              guard let n = line.newLineNumber else { return 0 }
                              return model.comments(onLine: n, path: path).count
                          })
             } else {
-                ContentUnavailableView("Select a file", systemImage: "doc")
+                ContentUnavailableView("No files changed", systemImage: "doc")
             }
         }
     }
@@ -307,7 +429,107 @@ public struct PullRequestDetailView: View {
                     }
                 }
             } else {
-                ContentUnavailableView("No checks", systemImage: "checklist")
+                ContentUnavailableView("No checks", systemImage: "checklist",
+                                       description: Text("No CI has reported on this \(model.kind.requestNoun)'s latest commit."))
+            }
+        }
+    }
+
+    private var lineCommentSheet: some View {
+        NavigationStack {
+            Form {
+                if let target = commentingOn {
+                    Section("\(target.path):\(target.line.newLineNumber ?? target.line.oldLineNumber ?? 0)") {
+                        Text(target.line.text).font(theme.codeFont)
+                    }
+                }
+                TextEditor(text: $lineCommentText).frame(minHeight: 120)
+            }
+            .navigationTitle("Comment on Line")
+            .inlineTitle()
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { commentingOn = nil } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Post") {
+                        if let target = commentingOn {
+                            let text = lineCommentText
+                            Task { await model.postLineComment(text, path: target.path, line: target.line) }
+                        }
+                        lineCommentText = ""
+                        commentingOn = nil
+                    }
+                    .disabled(lineCommentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+/// A new pull/merge request from the current branch.
+public struct PullRequestComposerView: View {
+    @Bindable var model: PullRequestComposerModel
+    var done: (PullRequest?) -> Void
+
+    public init(model: PullRequestComposerModel, done: @escaping (PullRequest?) -> Void) {
+        self.model = model
+        self.done = done
+    }
+
+    public var body: some View {
+        Form {
+            Section {
+                LabeledContent("From", value: model.sourceBranch ?? "(detached HEAD)")
+                Picker("Into", selection: $model.targetBranch) {
+                    ForEach(model.targetBranches) { Text($0.name).tag($0.name) }
+                    if !model.targetBranch.isEmpty && !model.targetBranches.contains(where: { $0.name == model.targetBranch }) {
+                        Text(model.targetBranch).tag(model.targetBranch)
+                    }
+                }
+                .accessibilityIdentifier("git.compose.base")
+                if let target = model.hosting.pullTarget {
+                    LabeledContent("Repository", value: target.repository)
+                }
+            } footer: {
+                if let source = model.sourceBranch, source == model.targetBranch {
+                    Text("You are on \(source), the branch to merge into. Create a branch for your change first (Branches › New Branch).")
+                        .foregroundStyle(.red)
+                } else if model.needsPush, let source = model.sourceBranch {
+                    Text("\(source) will be pushed to \((model.hosting.pushRemote ?? model.hosting.pullTarget)?.name ?? "the remote") first.")
+                }
+            }
+            Section("Title and Description") {
+                TextField("Title", text: $model.title)
+                    .accessibilityIdentifier("git.compose.title")
+                TextEditor(text: $model.body)
+                    .frame(minHeight: 140)
+                    .accessibilityIdentifier("git.compose.body")
+            }
+            Section {
+                Toggle("Create as Draft", isOn: $model.isDraft)
+                TextField("Reviewers (logins, comma-separated)", text: $model.reviewers).plainTextEntry()
+                TextField("Labels (comma-separated)", text: $model.labels).plainTextEntry()
+            } footer: {
+                Text("Reviewers and labels must exist on \(model.hosting.pullTarget?.reference.hostname ?? "the forge"); the request is still created if they cannot be added, and the error says which.")
+            }
+            if !model.phase.isEmpty {
+                Section { Label(model.phase, systemImage: "hourglass") }
+            }
+            ErrorBanner(message: $model.errorMessage)
+        }
+        .navigationTitle("New \(model.hosting.requestNoun.capitalized)")
+        .inlineTitle()
+        .task { await model.prepare() }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { done(nil) }.disabled(model.isWorking) }
+            ToolbarItem(placement: .confirmationAction) {
+                Button(model.needsPush ? "Push and Create" : "Create") {
+                    Task {
+                        let pr = await model.submit()
+                        if pr != nil && model.errorMessage == nil { done(pr) }
+                    }
+                }
+                .disabled(!model.canSubmit)
+                .accessibilityIdentifier("git.compose.create")
             }
         }
     }

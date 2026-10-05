@@ -1,0 +1,19 @@
+[
+  {
+    "id": 4002,
+    "description": null,
+    "name": "dotfiles",
+    "path": "dotfiles",
+    "path_with_namespace": "octo/dotfiles",
+    "default_branch": "main",
+    "ssh_url_to_repo": "git@gitlab.example.com:octo/dotfiles.git",
+    "http_url_to_repo": "https://gitlab.example.com/octo/dotfiles.git",
+    "web_url": "https://gitlab.example.com/octo/dotfiles",
+    "star_count": 0,
+    "last_activity_at": "2026-01-02T00:00:00.000Z",
+    "namespace": { "id": 3, "name": "octo", "path": "octo", "kind": "user", "full_path": "octo" },
+    "visibility": "public",
+    "forked_from_project": { "id": 99 },
+    "archived": true
+  }
+]

@@ -1,0 +1,4 @@
+[
+  { "id": 208045946, "node_id": "MDU6TGFiZWwyMDgwNDU5NDY=", "name": "telemetry", "color": "f29513", "default": false },
+  { "id": 208045947, "node_id": "MDU6TGFiZWwyMDgwNDU5NDc=", "name": "ui", "color": "1d76db", "default": false }
+]

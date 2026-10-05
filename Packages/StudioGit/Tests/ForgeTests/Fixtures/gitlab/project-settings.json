@@ -1,0 +1,12 @@
+{
+  "id": 4001,
+  "path_with_namespace": "lemonade/tools/amdgpu_mtopg",
+  "default_branch": "main",
+  "merge_method": "ff",
+  "squash_option": "default_off",
+  "archived": false,
+  "permissions": {
+    "project_access": { "access_level": 30, "notification_level": 3 },
+    "group_access": { "access_level": 20, "notification_level": 3 }
+  }
+}

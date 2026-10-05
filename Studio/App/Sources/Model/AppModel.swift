@@ -78,6 +78,9 @@ final class AppModel {
         StudioCommands.register(into: commands)
         FontRegistry.registerBundledFonts()
         SampleContent.installIfRequested(library: library)
+        #if DEBUG
+        GitSampleMode.makeSampleProject(in: library)
+        #endif
         if let forced = LaunchOptions.hardwareKeyboard { keyboard.override = forced }
         #if DEBUG
         // The development remote control (Settings › Developer).
@@ -207,6 +210,11 @@ enum LaunchOptions {
     static var terminalCommand: String? { defaults.string(forKey: "StudioTerminalCommand") }
     static var revealPath: String? { defaults.string(forKey: "StudioReveal") }
     static var showSettings: Bool { defaults.bool(forKey: "StudioShowSettings") }
+    /// Opens a Git screen in the workspace: history, branches, pullRequests,
+    /// changes, compose or clone (see GitSheetRequest).
+    static var gitSheet: String? { defaults.string(forKey: "StudioGitSheet") }
+    /// Opens the clone sheet on the welcome screen.
+    static var showClone: Bool { defaults.bool(forKey: "StudioShowClone") }
     /// Copies a folder into Projects on launch (for demos): "name=/abs/path".
     static var sampleProject: String? { defaults.string(forKey: "StudioSampleProject") }
     /// Starts with an empty library and no restored windows (UI tests).

@@ -84,11 +84,12 @@ public final class SavedFolderStore: @unchecked Sendable {
 extension CloneLocation {
     /// Runs `body` with the parent directory for a new clone, inside the
     /// folder's security scope when it is a user folder.
-    public func withDirectory<T>(_ store: SavedFolderStore, isolation: isolated (any Actor)? = #isolation,
+    public func withDirectory<T>(_ store: SavedFolderStore, appFolder: URL = CloneLocation.workspacesDirectory,
+                                 isolation: isolated (any Actor)? = #isolation,
                                  _ body: (URL) async throws -> T) async throws -> T {
         switch self {
         case .appContainer:
-            let dir = Self.workspacesDirectory
+            let dir = appFolder
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             return try await body(dir)
         case .folder(var folder):

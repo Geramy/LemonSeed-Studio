@@ -16,6 +16,14 @@ public final class GitServices {
     /// A host key waiting for the user's decision (shown as an alert).
     public var pendingHostKey: HostKeyQuestion?
 
+    /// Replaces the forge clients and accounts every Git view uses: set
+    /// only for previews, automation and screenshots (sample data). Nil in
+    /// normal use, where the signed-in accounts and their tokens are used.
+    @ObservationIgnored public var sampleForge: (accounts: [ForgeAccount], client: @MainActor (ForgeAccount) -> any ForgeClient)?
+
+    /// Bumped when accounts change, so views reload.
+    public private(set) var accountsRevision = 0
+
     public struct HostKeyQuestion: Identifiable {
         public let id = UUID()
         public let host: String
@@ -63,6 +71,21 @@ public final class GitServices {
                     sshKeys: SSHKeyStore(store: InMemorySecretStore()),
                     knownHosts: KnownHostsStore(file: nil), defaults: defaults)
     }
+
+    /// The accounts to list (the signed-in ones).
+    public func allAccounts() async -> [ForgeAccount] {
+        if let sampleForge { return sampleForge.accounts }
+        return await accounts.accounts()
+    }
+
+    /// A client for an account; its token is read from the Keychain per request.
+    public func client(for account: ForgeAccount) -> any ForgeClient {
+        if let sampleForge { return sampleForge.client(account) }
+        return accounts.client(for: account)
+    }
+
+    /// Call after signing in or out.
+    public func accountsDidChange() { accountsRevision += 1 }
 
     private func askHostKey(host: String, keyType: String, fingerprint: String) async -> Bool {
         await withCheckedContinuation { continuation in

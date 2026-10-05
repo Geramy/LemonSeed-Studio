@@ -402,6 +402,7 @@ public final class PullRequestComposerModel {
 
     /// Fills the title from the branch's commits and loads target branches.
     public func prepare() async {
+        if hosting.state != .ready { await hosting.resolve() }
         guard let client = hosting.client, let target = hosting.pullTarget else {
             errorMessage = "Sign in to the account that hosts this repository first."
             return

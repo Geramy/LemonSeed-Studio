@@ -183,6 +183,7 @@ public struct GitWorkbenchView: View {
                         .buttonStyle(.borderedProminent)
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("git.pulls.signIn")
         case .failed(let message):
             ContentUnavailableView("Cannot read the remotes", systemImage: "exclamationmark.triangle", description: Text(message))

@@ -75,6 +75,7 @@ public struct RepositoryBrowserView: View {
             Button("Clone by URL…") { cloning = RepositoryBrowserModel.CloneRequest(url: "") }
                 .buttonStyle(.bordered)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("git.browser.signInPrompt")
     }
 

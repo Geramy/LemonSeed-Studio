@@ -490,7 +490,10 @@ public struct PullRequestComposerView: View {
                     LabeledContent("Repository", value: target.repository)
                 }
             } footer: {
-                if model.needsPush, let source = model.sourceBranch {
+                if let source = model.sourceBranch, source == model.targetBranch {
+                    Text("You are on \(source), the branch to merge into. Create a branch for your change first (Branches › New Branch).")
+                        .foregroundStyle(.red)
+                } else if model.needsPush, let source = model.sourceBranch {
                     Text("\(source) will be pushed to \((model.hosting.pushRemote ?? model.hosting.pullTarget)?.name ?? "the remote") first.")
                 }
             }

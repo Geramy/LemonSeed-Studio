@@ -289,6 +289,7 @@ struct GitWorkbenchSheet: View {
             model?.sourceControl.selection = nil
             Task { await controller.refreshGitStatus() }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("git.workbench")
     }
 }
@@ -340,6 +341,7 @@ struct GitCloneSheet: View {
                 model = RepositoryBrowserModel(services: provider.services, appFolder: library.projectsFolder)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("git.cloneSheet")
     }
 }
@@ -362,7 +364,8 @@ extension GitTheme {
 /// Offline sample data for screenshots and UI checks, only with
 /// `-StudioGitSample YES` in a Debug build: a sample GitHub account and
 /// client, and with `-StudioGitSampleProject name` a sample repository in
-/// Projects whose origin is the sample client's repository.
+/// Projects whose origin is the sample client's repository (on the branch
+/// `-StudioGitSampleBranch`, mid-merge with `-StudioGitSampleConflict YES`).
 enum GitSampleMode {
     static var isEnabled: Bool { UserDefaults.standard.bool(forKey: "StudioGitSample") }
 
@@ -408,11 +411,13 @@ enum GitSampleMode {
         guard isEnabled, let name = UserDefaults.standard.string(forKey: "StudioGitSampleProject") else { return }
         let url = library.projectsFolder.appendingPathComponent(name)
         let conflict = UserDefaults.standard.bool(forKey: "StudioGitSampleConflict")
+        let branch = UserDefaults.standard.string(forKey: "StudioGitSampleBranch")
         let done = DispatchSemaphore(value: 0)
         Task.detached {
             do {
                 let repo = try await SampleRepository.make(at: url, withConflict: conflict)
                 try await repo.addRemote("origin", url: "https://github.com/lemonade-sdk/amdgpu_mtopg.git")
+                if let branch { try await repo.createBranch(branch, checkout: true) }
             } catch {
                 print("StudioGitSample: could not create \(url.path): \(error)")
             }

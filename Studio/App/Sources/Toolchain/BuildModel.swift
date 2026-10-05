@@ -46,10 +46,50 @@ final class BuildModel {
         return "Nothing to build"
     }
 
-    /// The project's target from its manifest (the default for single files).
-    var projectTarget: CompileTarget {
-        guard let root, let manifest = try? ProjectManifest.load(from: root) else { return .wasip1 }
-        return manifest.target ?? .wasip1
+    /// What single files (no studio-build.json) are built for, remembered
+    /// across launches.
+    private(set) var fileTarget: CompileTarget = {
+        UserDefaults.standard.string(forKey: BuildModel.fileTargetKey).flatMap(CompileTarget.init(rawValue:)) ?? .wasip1
+    }()
+    static let fileTargetKey = "build.fileTarget"
+
+    /// Bumped when the manifest's target changes here, so the panel rereads it.
+    private var manifestRevision = 0
+
+    var hasManifest: Bool {
+        guard let root else { return false }
+        return FileManager.default.fileExists(atPath: root.appending(path: ProjectManifest.fileName).path)
+    }
+
+    /// What Build builds for: the manifest's target for a project, the
+    /// remembered choice for a single file.
+    var currentTarget: CompileTarget {
+        _ = manifestRevision
+        guard let root, hasManifest else { return fileTarget }
+        return (try? ProjectManifest.load(from: root))?.target ?? .wasip1
+    }
+
+    /// The targets this build of the app has libraries for.
+    var availableTargets: [CompileTarget] {
+        ToolchainService.shared.resources?.availableTargets ?? []
+    }
+
+    /// Chooses the target: written into studio-build.json for a project,
+    /// remembered for single files.
+    func choose(_ target: CompileTarget) {
+        guard let root else { return }
+        if hasManifest {
+            do {
+                try ProjectManifest.setTarget(target, in: root)
+                manifestRevision += 1
+                controller?.workspace.output.append("Target set to \(target.rawValue) in \(ProjectManifest.fileName)", channel: "Build")
+            } catch {
+                state = .failed(error.localizedDescription)
+            }
+        } else {
+            fileTarget = target
+            UserDefaults.standard.set(target.rawValue, forKey: Self.fileTargetKey)
+        }
     }
 
     var buildableFile: URL? {
@@ -68,7 +108,7 @@ final class BuildModel {
         do {
             // The editor's unsaved changes are what the user means to build.
             try await controller.workspace.saveAll()
-            let build = try await ToolchainService.shared.build(file: buildableFile, root: root)
+            let build = try await ToolchainService.shared.build(file: buildableFile, root: root, fileTarget: fileTarget)
             title = build.title
             log = build.log
             output = build.output

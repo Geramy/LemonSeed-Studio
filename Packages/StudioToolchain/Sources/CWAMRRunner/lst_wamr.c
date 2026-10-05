@@ -9,6 +9,8 @@
 
 #include <wamr/wasm_export.h>
 
+#include "lst_wasix.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -35,6 +37,7 @@ typedef struct reader {
 
 static pthread_once_t g_init_once = PTHREAD_ONCE_INIT;
 static bool g_init_ok;
+static const char *g_init_error;
 
 /// Threads one program may start (wasi-threads, WASIX thread_spawn).
 #define LST_MAX_THREADS 64
@@ -44,7 +47,14 @@ static void runtime_init(void) {
   memset(&args, 0, sizeof args);
   args.mem_alloc_type = Alloc_With_System_Allocator;
   args.max_thread_num = LST_MAX_THREADS;
-  g_init_ok = wasm_runtime_full_init(&args);
+  // WASIX (wasix_32v1) natives go in before any module loads.
+  if (!wasm_runtime_full_init(&args)) {
+    g_init_error = "WAMR failed to initialize";
+  } else if (!lst_wasix_register()) {
+    g_init_error = "WAMR lacks the WASI socket and file calls the WASIX layer is built on";
+  } else {
+    g_init_ok = true;
+  }
 }
 
 static double now_ms(void) {
@@ -131,7 +141,7 @@ int lst_wamr_session_run(lst_wamr_session *s, const lst_wamr_options *o,
 
   pthread_once(&g_init_once, runtime_init);
   if (!g_init_ok) {
-    snprintf(result->error, sizeof result->error, "WAMR failed to initialize");
+    snprintf(result->error, sizeof result->error, "%s", g_init_error);
     return -1;
   }
   bool thread_env = wasm_runtime_init_thread_env();

@@ -105,9 +105,10 @@ final class ToolchainService {
         var arguments: [String]
     }
 
-    /// Builds the project's studio-build.json when there is one, otherwise
-    /// the single file, to `build/<name>.wasm`.
-    func build(file: URL?, root: URL) async throws -> Build {
+    /// Builds the project's studio-build.json when there is one (for its
+    /// target), otherwise the single file for `fileTarget`, to
+    /// `build/<name>.wasm`.
+    func build(file: URL?, root: URL, fileTarget: CompileTarget) async throws -> Build {
         guard let compiler else { throw ToolchainError.unavailable(unavailableReason ?? "") }
         if FileManager.default.fileExists(atPath: root.appending(path: ProjectManifest.fileName).path) {
             let manifest = try ProjectManifest.load(from: root)
@@ -123,9 +124,9 @@ final class ToolchainService {
         let output = root.appending(path: "build/\(file.deletingPathExtension().lastPathComponent).wasm")
         try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
         let result = await compiler.compile(sources: [file], output: output, language: SourceLanguage(path: file.path),
-                                            extraArguments: ["-Wall"], workingDirectory: root)
+                                            extraArguments: ["-Wall"], workingDirectory: root, target: fileTarget)
         return Build(title: file.lastPathComponent, succeeded: result.succeeded, output: output, log: result.log,
-                     diagnostics: result.diagnostics, milliseconds: result.totalMilliseconds, target: .wasip1,
+                     diagnostics: result.diagnostics, milliseconds: result.totalMilliseconds, target: fileTarget,
                      arguments: [])
     }
 

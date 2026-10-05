@@ -4,12 +4,15 @@ import StudioToolchain
 
 /// `clang`, `clang++`, `cc` and `c++` in the terminal: the in-process clang,
 /// compiling to wasm32-wasip1 unless the command line names another target
-/// (`--target=wasm32-wasip1-threads`, or `-pthread`). Everything else is
-/// clang's own command line.
+/// (`--target=wasm32-wasip1-threads` or `-pthread`, `--target=wasm32-wasix`).
+/// Everything else is clang's own command line.
 struct ClangCommand: AsyncShellCommand {
     let name: String
     var cxx: Bool { name == "clang++" || name == "c++" }
-    var summary: String { cxx ? "Compile C++ to WebAssembly (clang++, wasm32-wasip1)" : "Compile C to WebAssembly (clang, wasm32-wasip1)" }
+    var summary: String {
+        (cxx ? "Compile C++ to WebAssembly" : "Compile C to WebAssembly")
+            + " (wasm32-wasip1; --target=wasm32-wasip1-threads or wasm32-wasix)"
+    }
     var usage: String { "\(name) [clang options] file... [-o out.wasm]" }
 
     func run(_ arguments: [String], context: inout ShellContext, io: ShellIO) async -> Int32 {

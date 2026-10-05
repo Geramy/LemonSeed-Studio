@@ -34,6 +34,9 @@ Studio connects to the internet only to do something you asked for:
   requests.
 - **Model endpoints you set up.** If you point Studio at a model server, such
   as lse-server on your Mac, requests go to that server.
+- **Programs you build.** Programs you compile and run in Studio can open the
+  network connections you write them to make. Studio itself doesn't see or
+  collect that traffic.
 
 What you send to these services is governed by their own privacy policies.
 

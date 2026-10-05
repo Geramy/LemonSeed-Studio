@@ -1,0 +1,34 @@
+--- a/core/iwasm/libraries/lib-wasi-threads/lib_wasi_threads_wrapper.c
++++ b/core/iwasm/libraries/lib-wasi-threads/lib_wasi_threads_wrapper.c
+@@ -175,3 +175,31 @@
+     tid_allocator_deinit(&tid_allocator);
+     os_mutex_destroy(&thread_id_lock);
+ }
++
++/* LemonSeed Studio: WASIX's thread_exit and thread_id on top of wasi-threads
++ * (Packages/StudioToolchain/Sources/CWAMRRunner/lst_wasix.c). */
++
++/* The wasi-threads id of the thread running exec_env, or -1 for the thread
++ * that started the module. */
++int32
++lst_wasi_threads_current_id(wasm_exec_env_t exec_env)
++{
++    ThreadStartArg *arg = exec_env->thread_arg;
++    return arg ? arg->thread_id : -1;
++}
++
++/* Ends a spawned thread now, releasing what thread_start would have on its
++ * way out (its id and start argument), then the cluster's resources. Returns
++ * false, doing nothing, on the thread that started the module. */
++bool
++lst_wasi_threads_exit_current(wasm_exec_env_t exec_env)
++{
++    ThreadStartArg *arg = exec_env->thread_arg;
++    if (!arg)
++        return false;
++    deallocate_thread_id(arg->thread_id);
++    wasm_runtime_free(arg);
++    exec_env->thread_arg = NULL;
++    wasm_cluster_exit_thread(exec_env, NULL);
++    return true;
++}

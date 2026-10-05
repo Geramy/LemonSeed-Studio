@@ -1,0 +1,63 @@
+--- a/core/iwasm/libraries/libc-wasi/libc_wasi_wrapper.c
++++ b/core/iwasm/libraries/libc-wasi/libc_wasi_wrapper.c
+@@ -2413,3 +2413,13 @@
+     *p_libc_wasi_apis = native_symbols_libc_wasi;
+     return sizeof(native_symbols_libc_wasi) / sizeof(NativeSymbol);
+ }
++
++/* LemonSeed Studio: the preopens of the program running exec_env, for the
++ * absolute-path handling in posix.c's path_get. */
++struct fd_prestats *
++lst_wasi_prestats(wasm_exec_env_t exec_env)
++{
++    if (exec_env == NULL)
++        return NULL;
++    return wasi_ctx_get_prestats(get_wasi_ctx(get_module_inst(exec_env)));
++}
+--- a/core/iwasm/libraries/libc-wasi/sandboxed-system-primitives/src/posix.c	2026-10-04 19:33:57
++++ b/core/iwasm/libraries/libc-wasi/sandboxed-system-primitives/src/posix.c	2026-10-04 19:33:57
+@@ -1289,6 +1289,36 @@
+     struct fd_object *fd_object; // Internal: directory file descriptor object.
+ };
+ 
++/* LemonSeed Studio: the preopens of the program running exec_env
++ * (libc_wasi_wrapper.c). */
++struct fd_prestats *
++lst_wasi_prestats(wasm_exec_env_t exec_env);
++
++/* LemonSeed Studio: an absolute path on a preopened directory names a path
++ * under that directory. wasix-libc resolves every path against its working
++ * directory and passes it, absolute, with the preopen registered as "/"; the
++ * root of the program's file system is the preopen. wasi-libc never passes an
++ * absolute path, so WASI programs see no change. */
++static void
++lst_strip_root(wasm_exec_env_t exec_env, __wasi_fd_t fd, char *path)
++{
++    if (path[0] != '/')
++        return;
++    struct fd_prestats *pt = lst_wasi_prestats(exec_env);
++    if (pt == NULL)
++        return;
++    struct fd_prestat *prestat;
++    rwlock_rdlock(&pt->lock);
++    bool preopen = fd_prestats_get_entry(pt, fd, &prestat) == 0;
++    rwlock_unlock(&pt->lock);
++    if (!preopen)
++        return;
++    size_t skip = strspn(path, "/");
++    memmove(path, path + skip, strlen(path + skip) + 1);
++    if (path[0] == '\0')
++        strcpy(path, "."); /* the buffer holds at least the stripped "/" */
++}
++
+ // Creates a lease to a file descriptor and pathname pair. If the
+ // operating system does not implement Capsicum, it also normalizes the
+ // pathname to ensure the target path is placed underneath the
+@@ -1303,6 +1333,7 @@
+     char *path = str_nullterminate(upath, upathlen);
+     if (path == NULL)
+         return convert_errno(errno);
++    lst_strip_root(exec_env, fd, path);
+ 
+     // Fetch the directory file descriptor.
+     struct fd_object *fo;

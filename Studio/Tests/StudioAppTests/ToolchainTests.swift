@@ -225,6 +225,47 @@ final class ToolchainTests: XCTestCase {
         XCTAssertEqual(again.stdout, "52 ok\n")
     }
 
+    func testTheTargetIsSetInTheManifestAndBuildsForWASIX() async throws {
+        _ = try write("#include <stdio.h>\n#include <unistd.h>\nint main(void) { char d[64]; printf(\"in %s\\n\", getcwd(d, sizeof d)); return 0; }\n", "main.c")
+        let original = """
+            {
+                "name": "pick",
+                "sources": ["main.c"]
+            }
+            """
+        _ = try write(original, "studio-build.json")
+        try ProjectManifest.setTarget(.wasix, in: root)
+        let text = try String(contentsOf: root.appending(path: "studio-build.json"), encoding: .utf8)
+        XCTAssertEqual(text, """
+            {
+                "target": "wasm32-wasix",
+                "name": "pick",
+                "sources": ["main.c"]
+            }
+            """)
+        try ProjectManifest.setTarget(.wasip1Threads, in: root)
+        XCTAssertEqual(try ProjectManifest.load(from: root).target, .wasip1Threads)
+        try ProjectManifest.setTarget(.wasix, in: root)
+        let manifest = try ProjectManifest.load(from: root)
+        XCTAssertEqual(manifest, ProjectManifest(name: "pick", target: .wasix, sources: ["main.c"]))
+
+        let compiler = try XCTUnwrap(service.compiler)
+        let result = try await ProjectBuilder(compiler: compiler, root: root, manifest: manifest).build()
+        XCTAssertTrue(result.succeeded, result.log)
+        let info = try WasmModuleInfo(data: Data(contentsOf: result.output))
+        XCTAssertTrue(info.imports.contains { $0.module == "wasix_32v1" }, "\(info.imports)")
+        let (outcome, out) = try await run(result.output)
+        XCTAssertEqual(outcome.runner, .wamr)
+        XCTAssertEqual(out.stdout, "in /\n")
+
+        // A one-line manifest gets the key too.
+        let empty = root.appending(path: "e")
+        try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+        try Data(#"{"name": "e", "sources": []}"#.utf8).write(to: empty.appending(path: "studio-build.json"))
+        try ProjectManifest.setTarget(.wasip1, in: empty)
+        XCTAssertEqual(try ProjectManifest.load(from: empty).target, .wasip1)
+    }
+
     // MARK: The terminal
 
     func testTerminalCompilesAndRunsWithPipedInput() async throws {
@@ -410,5 +451,145 @@ final class ToolchainTests: XCTestCase {
         XCTAssertEqual(outcome.runner, .wamr, outcome.reason)
         XCTAssertEqual(outcome.result.exitCode, 0, out.stdout + out.stderr + (outcome.result.error ?? ""))
         XCTAssertEqual(out.stdout, "total 10000\n")
+    }
+
+    // MARK: WASIX
+
+    func compileWASIX(_ source: String, _ name: String) async throws -> URL {
+        let url = try write(source, name)
+        let (wasm, result) = try await compile(url, ["--target=wasm32-wasix"])
+        XCTAssertTrue(result.succeeded, result.log)
+        XCTAssertTrue(try WasmModuleInfo(data: Data(contentsOf: wasm)).usesWASIX)
+        return wasm
+    }
+
+    func testWASIXHelloRunsOnWAMR() async throws {
+        let wasm = try await compileWASIX("#include <stdio.h>\nint main(void) { printf(\"hello wasix\\n\"); return 7; }\n", "wx_hello.c")
+        let (outcome, out) = try await run(wasm)
+        XCTAssertEqual(outcome.runner, .wamr, outcome.reason)
+        XCTAssertEqual(outcome.result.exitCode, 7, out.stderr + (outcome.result.error ?? ""))
+        XCTAssertEqual(out.stdout, "hello wasix\n")
+    }
+
+    func testWASIXClientWithGetaddrinfoReachesALocalServer() async throws {
+        let server = try EchoServer()
+        let wasm = try await compileWASIX("""
+            #include <stdio.h>
+            #include <string.h>
+            #include <unistd.h>
+            #include <sys/socket.h>
+            #include <netdb.h>
+            int main(int argc, char **argv) {
+              struct addrinfo hints = {0}, *res = NULL;
+              hints.ai_family = AF_INET; hints.ai_socktype = SOCK_STREAM;
+              int rc = getaddrinfo("localhost", argv[1], &hints, &res);
+              if (rc != 0) { printf("getaddrinfo: %s\\n", gai_strerror(rc)); return 2; }
+              int fd = socket(res->ai_family, res->ai_socktype, 0);
+              if (fd < 0 || connect(fd, res->ai_addr, res->ai_addrlen) != 0) { perror("connect"); return 3; }
+              freeaddrinfo(res);
+              const char *msg = "hello from wasix";
+              send(fd, msg, strlen(msg), 0);
+              char buf[64] = {0};
+              ssize_t n = recv(fd, buf, sizeof buf - 1, 0);
+              printf("echo: %s\\n", n > 0 ? buf : "(none)");
+              close(fd);
+              return n > 0 ? 0 : 5;
+            }
+            """, "wx_client.c")
+        let (outcome, out) = try await run(wasm, [String(server.port)])
+        server.wait()
+        XCTAssertEqual(outcome.result.exitCode, 0, out.stdout + out.stderr + (outcome.result.error ?? ""))
+        XCTAssertEqual(server.received, "hello from wasix")
+        XCTAssertEqual(out.stdout, "echo: hello from wasix\n")
+    }
+
+    func testWASIXServerWithPollAcceptsAConnection() async throws {
+        let wasm = try await compileWASIX("""
+            #include <stdio.h>
+            #include <stdlib.h>
+            #include <unistd.h>
+            #include <poll.h>
+            #include <sys/socket.h>
+            #include <netinet/in.h>
+            #include <arpa/inet.h>
+            int main(int argc, char **argv) {
+              int fd = socket(AF_INET, SOCK_STREAM, 0); int one = 1;
+              setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+              struct sockaddr_in a = {0}; a.sin_family = AF_INET; a.sin_port = htons(atoi(argv[1]));
+              a.sin_addr.s_addr = inet_addr("127.0.0.1");
+              if (bind(fd, (struct sockaddr *)&a, sizeof a) || listen(fd, 1)) { perror("bind/listen"); return 2; }
+              struct pollfd p = { fd, POLLIN, 0 };
+              if (poll(&p, 1, 10000) != 1) { printf("poll timed out\\n"); return 4; }
+              struct sockaddr_in peer; socklen_t len = sizeof peer;
+              int c = accept(fd, (struct sockaddr *)&peer, &len);
+              if (c < 0) { perror("accept"); return 5; }
+              char b[64] = {0}; ssize_t n = recv(c, b, 63, 0);
+              char r[128]; int l = snprintf(r, sizeof r, "server got: %s from %s", b, inet_ntoa(peer.sin_addr));
+              send(c, r, l, 0); close(c); close(fd);
+              return n > 0 ? 0 : 6;
+            }
+            """, "wx_server.c")
+        let probe = try EchoServer()
+        let port = probe.port
+        close(probe.fd)
+        let task = Task { try await self.run(wasm, [String(port)]) }
+        var reply = ""
+        for _ in 0..<50 {
+            try await Task.sleep(for: .milliseconds(100))
+            if let text = Self.exchange(port: port, message: "ping") { reply = text; break }
+        }
+        let (outcome, out) = try await task.value
+        XCTAssertEqual(outcome.result.exitCode, 0, out.stdout + out.stderr + (outcome.result.error ?? ""))
+        XCTAssertEqual(reply, "server got: ping from 127.0.0.1")
+    }
+
+    func testWASIXThreadsSignalsAndTheWorkingDirectory() async throws {
+        try FileManager.default.createDirectory(at: root.appending(path: "data"), withIntermediateDirectories: true)
+        try Data("inside\n".utf8).write(to: root.appending(path: "data/in.txt"))
+        let wasm = try await compileWASIX("""
+            #include <pthread.h>
+            #include <signal.h>
+            #include <stdatomic.h>
+            #include <stdio.h>
+            #include <string.h>
+            #include <unistd.h>
+            static atomic_int total;
+            static volatile int caught;
+            static void on_signal(int s) { caught = s; }
+            static void *work(void *arg) { for (int i = 0; i < 1000; i++) atomic_fetch_add(&total, (int)(long)arg); return NULL; }
+            int main(void) {
+              pthread_t t[4];
+              for (long i = 0; i < 4; i++) if (pthread_create(&t[i], NULL, work, (void *)(i + 1))) return 2;
+              for (int i = 0; i < 4; i++) pthread_join(t[i], NULL);
+              // Threads that end are reused: start and join more than the runtime's 64.
+              for (int round = 0; round < 80; round++) { pthread_t x; if (pthread_create(&x, NULL, work, (void *)0L)) return 3; pthread_join(x, NULL); }
+              signal(SIGUSR1, on_signal);
+              raise(SIGUSR1);
+              char cwd[256];
+              if (chdir("data") != 0) { perror("chdir"); return 4; }
+              if (!getcwd(cwd, sizeof cwd)) { perror("getcwd"); return 6; }
+              FILE *f = fopen("in.txt", "r");
+              char line[32] = {0};
+              if (!f || !fgets(line, sizeof line, f)) { perror("fopen"); return 5; }
+              fclose(f);
+              printf("total %d, signal %s, cwd %s, read %s", atomic_load(&total), caught == SIGUSR1 ? "caught" : "missed", cwd, line);
+              return 0;
+            }
+            """, "wx_threads.c")
+        let (outcome, out) = try await run(wasm)
+        XCTAssertEqual(outcome.runner, .wamr)
+        XCTAssertEqual(outcome.result.exitCode, 0, out.stdout + out.stderr + (outcome.result.error ?? ""))
+        XCTAssertEqual(out.stdout, "total 10000, signal caught, cwd /data, read inside\n")
+    }
+
+    func testWASIXCoverageListsEveryCall() {
+        let coverage = WAMRRunner.wasixCoverage
+        XCTAssertEqual(coverage.count, Set(coverage.map(\.call)).count, "each call once")
+        for call in ["sock_open", "sock_accept_v2", "resolve", "futex_wait", "thread_exit", "getcwd", "path_open2"] {
+            XCTAssertTrue(coverage.contains { $0.call == call && $0.implemented }, call)
+        }
+        for call in ["proc_fork", "proc_exec", "dlopen", "epoll_create"] {
+            XCTAssertTrue(coverage.contains { $0.call == call && !$0.implemented }, call)
+        }
     }
 }

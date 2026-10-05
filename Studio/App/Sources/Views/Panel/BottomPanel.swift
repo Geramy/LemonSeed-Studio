@@ -283,8 +283,7 @@ struct BuildView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(builds.subject)
                         .foregroundStyle(theme.palette.textPrimary.color)
-                    Text("Target: \(builds.projectTarget.title) (\(builds.projectTarget.rawValue))")
-                        .foregroundStyle(theme.palette.textTertiary.color)
+                    targetMenu
                 }
                 .font(.system(size: 12))
                 Spacer()
@@ -316,6 +315,34 @@ struct BuildView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("build.view")
+    }
+
+    /// The target, chosen here: a project's goes into its studio-build.json.
+    private var targetMenu: some View {
+        let current = builds.currentTarget
+        return Menu {
+            ForEach(builds.availableTargets, id: \.self) { target in
+                Button {
+                    builds.choose(target)
+                } label: {
+                    if target == current {
+                        Label("\(target.title) (\(target.rawValue))", systemImage: "checkmark")
+                    } else {
+                        Text("\(target.title) (\(target.rawValue))")
+                    }
+                    Text(target.summary)
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text("Target: \(current.title) (\(current.rawValue))")
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(theme.palette.accent.color)
+        }
+        .disabled(builds.isBuilding)
+        .accessibilityIdentifier("build.target")
+        .help(builds.hasManifest ? "Sets \"target\" in studio-build.json" : "The target for single files")
     }
 
     @ViewBuilder private var status: some View {

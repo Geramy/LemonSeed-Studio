@@ -4,7 +4,7 @@ import Foundation
 ///
 ///     {
 ///       "name": "server",
-///       "target": "wasm32-wasip1",        // or "wasm32-wasip1-threads"; default wasm32-wasip1
+///       "target": "wasm32-wasip1",        // or "wasm32-wasip1-threads", "wasm32-wasix"; default wasm32-wasip1
 ///       "sources": ["src/*.c", "src/**/*.cpp", "main.c"],
 ///       "includes": ["include"],
 ///       "defines": ["VERSION=2"],
@@ -55,6 +55,30 @@ public struct ProjectManifest: Codable, Sendable, Equatable {
     } catch let DecodingError.typeMismatch(_, context) {
       throw ManifestError.invalid("\(context.codingPath.map(\.stringValue).joined(separator: ".")): \(context.debugDescription)")
     }
+  }
+
+  /// Sets the manifest's "target", editing the file's text so the rest of
+  /// it (key order, formatting) stays as the user wrote it.
+  public static func setTarget(_ target: CompileTarget, in root: URL) throws {
+    let url = root.appending(path: fileName)
+    var text = try String(contentsOf: url, encoding: .utf8)
+    let value = "\"target\": \"\(target.rawValue)\""
+    if let range = text.range(of: #""target"\s*:\s*"[^"]*""#, options: .regularExpression) {
+      text.replaceSubrange(range, with: value)
+    } else if let brace = text.firstIndex(of: "{") {
+      // Indent like the next line that has a key, two spaces otherwise.
+      let after = text[text.index(after: brace)...]
+      let indent = after.split(separator: "\n", omittingEmptySubsequences: true)
+        .first { $0.contains("\"") }.map { String($0.prefix { $0 == " " || $0 == "\t" }) } ?? "  "
+      let rest = after.drop { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" }
+      let separator = rest.first == "}" ? "" : ","
+      text.insert(contentsOf: "\n\(indent)\(value)\(separator)", at: text.index(after: brace))
+    } else {
+      throw ManifestError.invalid("not a JSON object")
+    }
+    let data = Data(text.utf8)
+    _ = try JSONDecoder().decode(ProjectManifest.self, from: data)
+    try data.write(to: url, options: .atomic)
   }
 
   public enum ManifestError: Error, LocalizedError {
@@ -187,7 +211,7 @@ public struct ProjectBuilder: Sendable {
             let user = compileFlags + ["-c", relative(job.source), "-o", job.object.path, "-MMD", "-MF", depfile.path]
             do {
               let arguments = try compiler.driverArguments(
-                (target == .wasip1Threads ? ["-pthread", "--target=\(target.rawValue)"] : ["--target=\(target.rawValue)"]) + user,
+                ["--target=\(target.rawValue)"] + user,
                 cxx: job.language == .cxx, workingDirectory: root)
               return (job, await compiler.run(arguments: arguments, output: job.object), nil)
             } catch {
@@ -218,7 +242,7 @@ public struct ProjectBuilder: Sendable {
     if !failed, needsLink(output: output, objects: objects) {
       progress?("link \(relative(output))")
       let hasCxx = sources.contains { SourceLanguage(path: $0.path) == .cxx }
-      var user = (target == .wasip1Threads ? ["-pthread"] : []) + ["--target=\(target.rawValue)"]
+      var user = ["--target=\(target.rawValue)"]
       user += objects.map(\.path) + (manifest.linkFlags ?? []) + ["-o", output.path]
       let arguments = try compiler.driverArguments(user, cxx: hasCxx, workingDirectory: root)
       let result = await compiler.run(arguments: arguments, output: output)

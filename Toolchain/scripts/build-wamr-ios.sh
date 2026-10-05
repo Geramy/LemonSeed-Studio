@@ -30,6 +30,14 @@ fi
 echo "$WAMR_SHA256  $tarball" | shasum -a 256 -c -
 [[ -d "$SRC" ]] || tar -xzf "$tarball" -C "$BUILD_DIR/src"
 
+# patches/wamr: each applied once (skipped when it is already in the source).
+for p in "$TOOLCHAIN_DIR"/patches/wamr/*.patch; do
+  [[ -f "$p" ]] || continue
+  if patch -d "$SRC" -p1 -R --dry-run -s -f <"$p" >/dev/null 2>&1; then continue; fi
+  echo "applying $(basename "$p")"
+  patch -d "$SRC" -p1 --forward <"$p"
+done
+
 # WAMR feature set shared by every slice.
 WAMR_FLAGS=(
   -DWAMR_BUILD_PLATFORM=darwin

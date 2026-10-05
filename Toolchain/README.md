@@ -6,20 +6,22 @@ WKWebView (JIT, out of process) or in WAMR's interpreter (in process).
 
 ```
 Toolchain/
-  versions.env                 pins: LLVM 21.1.8, wasi-sdk 30, WAMR 2.4.5, iOS 26.2
+  versions.env                 pins: LLVM 21.1.8, wasi-sdk 30, wasix-libc v2026-10-02.1, WAMR 2.4.5, iOS 26.2
   scripts/
     build-llvm-ios.sh          LLVM -> build/xcframeworks/LemonSeedLLVM.xcframework
     build-wamr-ios.sh          WAMR -> build/xcframeworks/LemonSeedWAMR.xcframework
-    fetch-wasi-sysroot.sh      sysroot (wasm32-wasip1, -threads) + clang resource dir -> build/resources/WASIToolchain
+    fetch-wasi-sysroot.sh      sysroots (wasm32-wasip1, -threads, wasix) + clang resource dir -> build/resources/WASIToolchain
     build-wasi-extensions.sh   BSD socket headers and libwasi_socket_ext.a -> WASIToolchain/extensions
     make-stub-xcframeworks.sh  placeholders, so the package builds without LLVM
     build-sample-wasm.sh       hello.wasm built on the Mac (run-side fallback)
   patches/llvm/                applied to the LLVM source on extraction
+  patches/wamr/                applied to the WAMR source (WASIX thread exit, absolute paths on a preopen)
   extensions/sockets/          <sys/socket.h> and <netdb.h> overlays, netdb_extra.c
   samples/                     hello.c (the demo), medium.cpp (clangd spike)
   Demo/                        spike app (XcodeGen; ./build.sh)
   build/                       everything generated (gitignored)
-Packages/StudioToolchain/      Compiler, ProjectBuilder, WasmModuleInfo, WAMRRunner, WebKitRunner
+Packages/StudioToolchain/      Compiler, ProjectBuilder, WasmModuleInfo, WAMRRunner, WebKitRunner,
+                               lst_wasix.c (the wasix_32v1 calls on WAMR)
 Studio/App/Sources/Toolchain/  the app: clang/clang++/cc/c++ and run in the terminal, Build panel
 ```
 
@@ -128,7 +130,7 @@ measured (the plan's week-2 clangd spike).
 
 - **Terminal:** `clang`, `clang++`, `cc` and `c++` take clang's own command
   line and compile to `wasm32-wasip1` unless it names `--target=wasm32-wasip1-threads`
-  (or `-pthread`); other targets are an error. `run [--runner wamr|webkit]
+  (or `-pthread`) or `--target=wasm32-wasix`; other targets are an error. `run [--runner wamr|webkit]
   prog.wasm [args]` runs a program with stdin, stdout and stderr on the
   terminal (Ctrl-C stops it, Ctrl-D ends its input), its files confined to the
   current directory (WASI preopen), and returns its exit code. The runner and
@@ -136,11 +138,35 @@ measured (the plan's week-2 clangd spike).
 - **Build panel:** Build (⌘⇧B) compiles the project's `studio-build.json`
   (`ProjectBuilder`: incremental from clang's dependency files, parallel
   compiles, then one link) or the C/C++ file in the editor; Run (⌘R) builds and
-  runs in the terminal. Diagnostics go to Problems (file:line:column).
+  runs in the terminal. Diagnostics go to Problems (file:line:column). The
+  panel's Target menu picks WASI, WASI + threads or WASIX: for a project it
+  sets `"target"` in `studio-build.json`, for a single file it is remembered.
 - **Runner choice** (`WasmRunner.choose`, from the module's import section):
   WebKit's JIT when every import is one its JavaScript shim implements (output,
   arguments, environment, clocks, random); WAMR for anything else: stdin,
-  files, sockets, threads.
+  files, sockets, threads, and every WASIX program.
+
+### Targets
+
+| Target | Library | For |
+|---|---|---|
+| `wasm32-wasip1` (default) | wasi-libc (wasi-sdk 30) + WAMR's socket extension | Single-threaded programs: files, stdin, BSD sockets |
+| `wasm32-wasip1-threads` | the same, threaded | Adds pthreads (wasi-threads, shared memory) |
+| `wasm32-wasix` | wasix-libc | Fuller POSIX: everything above plus `raise`/`signal` handlers, `chdir`/`getcwd`, futexes, thread sleep and exit. Always threaded |
+
+WASIX programs import `wasix_32v1` alongside WASI preview 1. `lst_wasix.c`
+implements those calls on WAMR: sockets go through WAMR's own socket calls
+(so a socket is an ordinary WASI descriptor that `fd_read`, `fd_write`,
+`poll_oneoff` and `fd_close` handle), threads through wasi-threads, and the
+working directory is kept per program. Calls that need what iOS does not
+allow (another process, `fork`, `exec`, `dlopen`) or that wasix-libc does
+not need for POSIX programs return ENOSYS. `WAMRRunner.wasixCoverage` lists
+each call and how it is handled.
+
+| wasix_32v1 | Calls |
+|---|---|
+| Implemented (39) | sockets: `sock_open`, `sock_bind`, `sock_connect`, `sock_listen`, `sock_accept_v2`, `sock_addr_local`, `sock_addr_peer`, `sock_recv_from`, `sock_send_to`, `sock_set/get_opt_flag`, `sock_set/get_opt_size`, `sock_set/get_opt_time`, `sock_status`, `resolve`; threads: `futex_wait`, `futex_wake`, `futex_wake_all`, `thread_id`, `thread_exit`, `thread_sleep`, `thread_parallelism`, `thread_signal`, `callback_signal`; process: `proc_exit2`, `proc_id`, `proc_parent`, `proc_signals_get`, `proc_signals_sizes_get`; files: `getcwd`, `chdir`, `path_open2`, `fd_fdflags_get/set`, `tty_get/set` |
+| ENOSYS (55) | `proc_fork`, `proc_exec*`, `proc_spawn*`, `proc_join`, `proc_signal`, `proc_raise_interval`, `proc_snapshot`, `proc_fork_env`; `dlopen`, `dlsym`, `dl_invalid_handle`, `call_dynamic`, `reflect_signature`, `closure_*`; `context_*`, `stack_checkpoint`, `stack_restore`; `epoll_*`, `fd_event`, `fd_pipe`, `fd_dup`, `fd_dup2`; `sock_pair`, `sock_send_file`, multicast join/leave; `port_*` (virtual networking); `thread_spawn_v2`, `thread_join` (threads use `wasi.thread-spawn`); `clock_time_set` |
 
 ### What WASI programs can and cannot do
 
@@ -148,13 +174,13 @@ measured (the plan's week-2 clangd spike).
 |---|---|
 | Standard C and C++ (C17, C++20 libc++) | Yes. C++ exceptions no (`-fno-exceptions`); no RTTI limits |
 | stdin, stdout, stderr | Yes; stdin is typed in the terminal or piped |
-| Files | Yes, inside the directory the program runs in (and below); nothing outside it |
+| Files | Yes, inside the directory the program runs in (and below), which is the program's `/`; nothing outside it. WASIX adds `chdir`/`getcwd` |
 | Sockets | TCP and UDP over BSD sockets: `socket`, `bind`, `listen`, `accept`, `connect`, `send`/`recv`, `getaddrinfo`, `poll`/`select`, socket options. No raw sockets, no Unix domain sockets, no ports below 1024 (iOS). The local network needs the user's permission (iOS prompt) |
-| Threads | pthreads with `--target=wasm32-wasip1-threads` (or `-pthread`): mutexes, condition variables, atomics, up to 64 threads |
+| Threads | pthreads with `--target=wasm32-wasip1-threads` (or `-pthread`) or `wasm32-wasix`: mutexes, condition variables, atomics, up to 64 at once (ended threads are reused) |
 | Time | Wall and monotonic clocks, `nanosleep`/`sleep` |
 | SIMD | 128-bit WebAssembly SIMD (`-msimd128`) in both runtimes |
-| Processes | No `fork`, `exec`, `system` or `popen`; one program, one process |
-| Signals | No signal delivery (`signal()` compiles, handlers never run) |
+| Processes | No `fork`, `exec`, `system`, `popen` or pipes between programs; one program, one process |
+| Signals | WASIX: `raise` runs the program's handler. WASI: handlers never run. No signals between processes |
 | Dynamic loading | No `dlopen`; programs link statically |
 | GPU, graphics, windows | No; text in, text out |
 | Speed | WebKit's JIT runs near native speed; WAMR, an interpreter, is about 4-5x slower on pure computation |
@@ -184,6 +210,16 @@ measured (the plan's week-2 clangd spike).
   of the version strings.
 - **wasm-opt** is not bundled; the driver's optional post-link wasm-opt job is
   skipped.
+- **Stack arguments on Apple arm64:** WAMR's native call gives every argument
+  after the seventh an 8-byte stack slot, while Apple's convention packs
+  32-bit stack arguments into 4 bytes. Host functions with more than seven
+  wasm arguments declare those as 64-bit (`x_path_open2` in `lst_wasix.c`).
+- **WAMR's natives check pointers against the program's memory**, so the
+  WASIX shim builds WAMR-format socket addresses in the program's own
+  buffers (and restores them) rather than on the host stack.
+- **Absolute paths:** wasix-libc resolves paths against its working
+  directory and hands them, absolute, to the root preopen; `patches/wamr/0002`
+  treats an absolute path on a preopened directory as relative to it.
 
 ## Next steps
 
@@ -194,6 +230,5 @@ measured (the plan's week-2 clangd spike).
    in-memory `Transport`) and measure the LSE tree on device.
 4. Package one dynamic `Toolchain.framework` (plan 2.6) so clang, lld and clangd
    share one copy of LLVM between the app and any extensions.
-5. WASIX target (wasix-libc sysroot, host shim over WAMR) for fuller POSIX.
-6. llvm-ar / llvm-objdump / llvm-nm entry points and the AMDGPU target for the
+5. llvm-ar / llvm-objdump / llvm-nm entry points and the AMDGPU target for the
    GPU Kernel Lab; CI caching of the XCFrameworks.

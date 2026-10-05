@@ -11,6 +11,15 @@ public final class WAMRRunner: Sendable {
 
   public static var version: String { String(cString: lst_wamr_version()) }
 
+  /// How each WASIX (wasix_32v1) call is handled: implemented, or ENOSYS.
+  public static var wasixCoverage: [(call: String, implemented: Bool)] {
+    String(cString: lst_wasix_coverage()).split(separator: "\n").compactMap { line in
+      let parts = line.split(separator: ":")
+      guard parts.count == 2 else { return nil }
+      return (String(parts[0]), parts[1] == "implemented")
+    }
+  }
+
   /// Output from the reader threads, in order, to the handler on the main actor.
   private final class OutputSink: @unchecked Sendable {
     let continuation: AsyncStream<WasmOutput>.Continuation

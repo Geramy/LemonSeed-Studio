@@ -1,21 +1,29 @@
 import CToolchainBridge
 import Foundation
 
-/// Where the WASI sysroot and clang's resource directory live. The app ships
+/// Where the WASI sysroots and clang's resource directory live. The app ships
 /// them as a folder named "WASIToolchain" (see Toolchain/scripts/fetch-wasi-sysroot.sh).
 public struct ToolchainResources: Sendable {
   public var root: URL
+  /// wasi-libc (wasm32-wasip1 and wasm32-wasip1-threads).
   public var sysroot: URL { root.appending(path: "sysroot") }
+  /// wasix-libc (wasm32-wasix).
+  public var wasixSysroot: URL { root.appending(path: "wasix/sysroot") }
   public var resourceDir: URL { root.appending(path: "clang") }
   /// BSD sockets for wasi-libc targets (Toolchain/scripts/build-wasi-extensions.sh).
   public var socketHeaders: URL { root.appending(path: "extensions/sockets/include") }
   public func socketLibrary(_ target: CompileTarget) -> URL {
     root.appending(path: "extensions/sockets/lib/\(target.rawValue)")
   }
+
+  public func sysroot(for target: CompileTarget) -> URL {
+    target == .wasix ? wasixSysroot : sysroot
+  }
+
   /// The targets whose libraries are present.
   public var availableTargets: [CompileTarget] {
     CompileTarget.allCases.filter {
-      FileManager.default.fileExists(atPath: sysroot.appending(path: "lib/\($0.rawValue)").path)
+      FileManager.default.fileExists(atPath: sysroot(for: $0).appending(path: "lib/\($0.clangTriple)").path)
     }
   }
 
@@ -69,19 +77,37 @@ public enum CompileTarget: String, Sendable, CaseIterable, Codable {
   case wasip1 = "wasm32-wasip1"
   /// The same with pthreads (wasi-threads on shared memory).
   case wasip1Threads = "wasm32-wasip1-threads"
+  /// WASIX on wasix-libc: fuller POSIX (sockets, threads, signals raised by
+  /// the program, the working directory) through the wasix_32v1 calls the
+  /// app implements on WAMR. Always threaded (shared memory).
+  case wasix = "wasm32-wasix"
 
   public var title: String {
     switch self {
     case .wasip1: "WASI"
     case .wasip1Threads: "WASI + threads"
+    case .wasix: "WASIX"
     }
   }
+
+  /// What a program built for the target can use, for target pickers.
+  public var summary: String {
+    switch self {
+    case .wasip1: "Single-threaded. Files, stdin and BSD sockets."
+    case .wasip1Threads: "WASI with pthreads on shared memory."
+    case .wasix: "Fuller POSIX: getaddrinfo, poll, pthreads, signals, chdir."
+    }
+  }
+
+  /// The triple clang compiles for.
+  public var clangTriple: String { self == .wasix ? "wasm32-wasi" : rawValue }
 
   /// A --target value as users write it.
   public init?(triple: String) {
     switch triple {
     case "wasm32-wasip1", "wasm32-wasi", "wasm32-unknown-wasi", "wasm32-unknown-wasip1": self = .wasip1
     case "wasm32-wasip1-threads", "wasm32-wasi-threads", "wasm32-unknown-wasip1-threads": self = .wasip1Threads
+    case "wasm32-wasix", "wasm32-wasmer-wasi": self = .wasix
     default: return nil
     }
   }
@@ -109,39 +135,35 @@ public final class Compiler: Sendable {
     optimization: String = "-O2", extraArguments: [String] = [],
     workingDirectory: URL? = nil, target: CompileTarget = .wasip1
   ) async -> CompileResult {
-    var arguments = [
-      language == .c ? "clang" : "clang++",
-      "--target=\(target.rawValue)",
-      "-resource-dir", resources.resourceDir.path,
-      "--sysroot=\(resources.sysroot.path)",
-      language.driverFlag, optimization,
-      // C++ exceptions need a libc++ built for wasm exceptions; the stock
-      // wasi-sdk 30 sysroot is built without them.
-      language == .cxx ? "-fno-exceptions" : nil,
-      target == .wasip1Threads ? "-pthread" : nil,
-      "-isystem", resources.socketHeaders.path,
-    ].compactMap { $0} + Self.emulationDefines
-    arguments += extraArguments
+    var user = ["--target=\(target.rawValue)", language.driverFlag, optimization] + extraArguments
     if let workingDirectory {
       let base = workingDirectory.standardizedFileURL.path + "/"
-      arguments += ["-working-directory", workingDirectory.path]
-      arguments += sources.map { url in
+      user += sources.map { url in
         let path = url.standardizedFileURL.path
         return path.hasPrefix(base) ? String(path.dropFirst(base.count)) : url.path
       }
     } else {
-      arguments += sources.map(\.path)
+      user += sources.map(\.path)
     }
-    arguments += ["-L\(resources.socketLibrary(target).path)", "-lwasi_socket_ext"] + Self.emulationLibraries
-      + ["-o", output.path]
-    if target == .wasip1Threads { arguments.append("-Wl,--max-memory=\(Self.threadsMaxMemory)") }
-    return await run(arguments: arguments, output: output)
+    user += ["-o", output.path]
+    do {
+      let arguments = try driverArguments(user, cxx: language == .cxx, workingDirectory: workingDirectory)
+      return await run(arguments: arguments, output: output)
+    } catch {
+      return CompileResult(exitCode: 1, output: output, log: "error: \(error.localizedDescription)\n", diagnostics: [],
+                           driverMilliseconds: 0, compileMilliseconds: 0, linkMilliseconds: 0, totalMilliseconds: 0)
+    }
   }
 
   /// A clang command line as a user typed it (after `clang` or `clang++`),
   /// completed for this toolchain: the target (wasm32-wasip1 unless the
-  /// arguments name one or ask for -pthread), the sysroot and resource
-  /// directory, the socket headers and, when linking, the socket library.
+  /// arguments name one or ask for -pthread), its sysroot and the resource
+  /// directory, and what the target needs besides:
+  /// - wasm32-wasip1(-threads): the socket headers and, when linking, the
+  ///   socket library; wasi-libc's emulations (signal, mmap, getpid, clock);
+  /// - threaded targets: shared memory with room to grow;
+  /// - wasm32-wasix: atomics, bulk memory and an imported shared memory, as
+  ///   wasix-libc expects.
   /// Unknown targets are an error, never silently replaced.
   public func driverArguments(_ userArguments: [String], cxx: Bool, workingDirectory: URL?) throws -> [String] {
     var target: CompileTarget?
@@ -168,27 +190,36 @@ public final class Compiler: Sendable {
         if a.hasPrefix("--sysroot") { hasSysroot = true }
         if a == "-resource-dir" || a.hasPrefix("-resource-dir=") { hasResourceDir = true }
       }
-      rest.append(a)
+      if a != "-pthread" && a != "-pthreads" { rest.append(a) }
       i += 1
     }
     let chosen = target ?? (wantsThreads ? .wasip1Threads : .wasip1)
     if wantsThreads, chosen == .wasip1 { throw DriverError.threadsNeedThreadsTarget }
     guard resources.availableTargets.contains(chosen) else { throw DriverError.targetNotInstalled(chosen.rawValue) }
-    var arguments = [cxx ? "clang++" : "clang", "--target=\(chosen.rawValue)"]
+    var arguments = [cxx ? "clang++" : "clang", "--target=\(chosen.clangTriple)"]
     if !hasResourceDir { arguments += ["-resource-dir", resources.resourceDir.path] }
-    if !hasSysroot { arguments.append("--sysroot=\(resources.sysroot.path)") }
-    // C++ exceptions need a libc++ built for wasm exceptions; wasi-sdk 30's is not.
+    if !hasSysroot { arguments.append("--sysroot=\(resources.sysroot(for: chosen).path)") }
+    // C++ exceptions need a libc++ built for wasm exceptions; neither sysroot's is.
     if cxx, !hasExceptions { arguments.append("-fno-exceptions") }
-    arguments += ["-isystem", resources.socketHeaders.path] + Self.emulationDefines
+    switch chosen {
+    case .wasip1, .wasip1Threads:
+      if chosen == .wasip1Threads { arguments.append("-pthread") }
+      arguments += ["-isystem", resources.socketHeaders.path] + Self.emulationDefines
+    case .wasix:
+      arguments += ["-pthread", "-matomics", "-mbulk-memory", "-mmutable-globals"]
+    }
     if let workingDirectory { arguments += ["-working-directory", workingDirectory.path] }
     arguments += rest
     if linking {
-      arguments += ["-L\(resources.socketLibrary(chosen).path)", "-lwasi_socket_ext"] + Self.emulationLibraries
+      if chosen != .wasix {
+        arguments += ["-L\(resources.socketLibrary(chosen).path)", "-lwasi_socket_ext"] + Self.emulationLibraries
+      }
+      if chosen == .wasix { arguments += ["-Wl,--shared-memory", "-Wl,--import-memory"] }
       // Shared memory (threads) cannot grow past its declared maximum, and
       // wasm-ld makes that maximum the initial size: no room for thread
       // stacks. 1 GiB unless the user sets one; the runtime commits only what
       // the program touches.
-      if chosen == .wasip1Threads, !userArguments.contains(where: { $0.contains("--max-memory") }) {
+      if chosen != .wasip1, !userArguments.contains(where: { $0.contains("--max-memory") }) {
         arguments.append("-Wl,--max-memory=\(Self.threadsMaxMemory)")
       }
     }
@@ -219,9 +250,9 @@ public final class Compiler: Sendable {
     public var errorDescription: String? {
       switch self {
       case .unsupportedTarget(let t):
-        "unsupported target '\(t)': use wasm32-wasip1 (the default) or wasm32-wasip1-threads"
+        "unsupported target '\(t)': use wasm32-wasip1 (the default), wasm32-wasip1-threads or wasm32-wasix"
       case .targetNotInstalled(let t): "the \(t) libraries are not installed in this app"
-      case .threadsNeedThreadsTarget: "-pthread needs --target=wasm32-wasip1-threads"
+      case .threadsNeedThreadsTarget: "-pthread needs --target=wasm32-wasip1-threads (or wasm32-wasix)"
       }
     }
   }

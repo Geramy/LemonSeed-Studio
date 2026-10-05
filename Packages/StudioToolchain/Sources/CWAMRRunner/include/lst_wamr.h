@@ -6,6 +6,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "lst_wasix.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

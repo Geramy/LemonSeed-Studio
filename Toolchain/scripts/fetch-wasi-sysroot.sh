@@ -6,7 +6,10 @@
 #                                   (static libraries and headers only)
 #   WASIToolchain/clang/            clang resource dir: builtin headers from the
 #                                   pinned LLVM source, compiler-rt builtins
-#                                   from the pinned wasi-sdk
+#                                   from the pinned wasi-sdk (and wasix-libc's
+#                                   for the wasm32-wasi triple WASIX uses)
+#   WASIToolchain/wasix/sysroot/    wasix-libc + libc++ (static libraries and
+#                                   headers only)
 #
 # Output: Toolchain/build/resources/WASIToolchain (gitignored).
 #
@@ -41,8 +44,10 @@ fetch() { # url sha256 dest
 
 sysroot_tgz="$DOWNLOADS/wasi-sysroot-$WASI_SDK_FULL_VERSION.tar.gz"
 rt_tgz="$DOWNLOADS/libclang_rt-$WASI_SDK_FULL_VERSION.tar.gz"
+wasix_tgz="$DOWNLOADS/wasix-sysroot-$WASIX_LIBC_VERSION.tar.gz"
 fetch "$WASI_SYSROOT_URL" "$WASI_SYSROOT_SHA256" "$sysroot_tgz"
 fetch "$WASI_RT_URL" "$WASI_RT_SHA256" "$rt_tgz"
+fetch "$WASIX_SYSROOT_URL" "$WASIX_SYSROOT_SHA256" "$wasix_tgz"
 
 if [[ ! -d "$LLVM_SRC/clang/lib/Headers" ]]; then
   echo "LLVM source not found at $LLVM_SRC; run build-llvm-ios.sh fetch first" >&2
@@ -53,6 +58,7 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 tar -xzf "$sysroot_tgz" -C "$tmp"
 tar -xzf "$rt_tgz" -C "$tmp"
+mkdir -p "$tmp/wasix" && tar -xzf "$wasix_tgz" -C "$tmp/wasix"
 src_sysroot="$tmp/wasi-sysroot-$WASI_SDK_FULL_VERSION"
 src_rt="$tmp/libclang_rt-$WASI_SDK_FULL_VERSION"
 
@@ -70,6 +76,17 @@ for t in $WASI_TARGETS; do
   mkdir -p "$OUT/clang/lib/wasm32-unknown-${t#wasm32-}"
   cp "$rt_dir/libclang_rt.builtins.a" "$OUT/clang/lib/wasm32-unknown-${t#wasm32-}/"
 done
+
+# WASIX: wasix-libc's headers and static libraries (its profiling runtime and
+# the empty libc++experimental left out), and its compiler-rt builtins, built
+# with atomics, as the resource directory's wasm32-unknown-wasi builtins
+# (WASIX programs compile with --target=wasm32-wasi).
+src_wasix="$tmp/wasix/wasix-sysroot/sysroot"
+mkdir -p "$OUT/wasix/sysroot/lib/wasm32-wasi" "$OUT/clang/lib/wasm32-unknown-wasi"
+cp -R "$src_wasix/include" "$OUT/wasix/sysroot/include"
+find "$src_wasix/lib/wasm32-wasi" -maxdepth 1 -type f \( -name '*.a' -o -name '*.o' \) \
+  ! -name 'libclang_rt.*' ! -name 'libc++experimental.a' -exec cp {} "$OUT/wasix/sysroot/lib/wasm32-wasi/" \;
+cp "$src_wasix/lib/wasm32-wasi/libclang_rt.builtins-wasm32.a" "$OUT/clang/lib/wasm32-unknown-wasi/libclang_rt.builtins.a"
 
 # wasi-sdk ships the same headers for wasm32-wasip1 and wasm32-wasip1-threads
 # (the threads difference is in the libraries). Keep one copy: the threads

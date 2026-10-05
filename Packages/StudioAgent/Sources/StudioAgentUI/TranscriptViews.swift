@@ -34,13 +34,13 @@ struct AssistantMessageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !block.reasoning.isEmpty {
-                ReasoningView(text: block.reasoning, isThinking: block.isStreaming && block.text.isEmpty,
+            if !block.thinking.isEmpty {
+                ReasoningView(text: block.thinking, isThinking: block.isStreaming && block.answer.isEmpty,
                               seconds: block.reasoningSeconds, started: block.reasoningStarted)
             }
-            if !block.text.isEmpty {
-                MarkdownView(block.text)
-            } else if block.isStreaming && block.reasoning.isEmpty {
+            if !block.answer.isEmpty {
+                MarkdownView(chunks: block.answer)
+            } else if block.isStreaming && block.thinking.isEmpty {
                 TypingIndicator()
             }
             MessageStatsFooter(block: block)
@@ -69,7 +69,7 @@ struct AssistantMessageView: View {
 
 /// Reasoning, collapsed to one line by default; shimmering while it streams.
 struct ReasoningView: View {
-    let text: String
+    let text: ChunkedText
     let isThinking: Bool
     let seconds: Int?
     var started: Date? = nil
@@ -105,23 +105,25 @@ struct ReasoningView: View {
             .accessibilityLabel(expanded ? "Hide reasoning" : "Show reasoning")
 
             if expanded {
-                reasoningText
+                reasoningText(lastChunks: nil)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             } else if isThinking {
                 // Collapsed while it streams: the reasoning wrapped as usual in
                 // a few lines' height, following its newest line at the bottom
                 // like the transcript. The text itself never shifts: it grows
                 // downward and scrolls up, and scrolling up by hand stops the
-                // following until the bottom is reached again.
+                // following until the bottom is reached again. Only the last
+                // chunks are in it (the whole reasoning is a tap away), so an
+                // update costs the same at any length.
                 ScrollViewReader { proxy in
                     ScrollView(.vertical) {
                         VStack(alignment: .leading, spacing: 0) {
-                            reasoningText
+                            reasoningText(lastChunks: Self.liveChunks)
                             Color.clear.frame(height: 1).id(Self.liveBottom)
                         }
                     }
                     .defaultScrollAnchor(.bottom, for: .initialOffset)
-                    .followsBottom(text.count) { proxy.scrollTo(Self.liveBottom, anchor: .bottom) }
+                    .followsBottom(text.utf8Count) { proxy.scrollTo(Self.liveBottom, anchor: .bottom) }
                 }
                 .frame(maxHeight: Self.liveHeight)
                 .accessibilityIdentifier("agent.reasoning.live")
@@ -133,20 +135,21 @@ struct ReasoningView: View {
     private static let liveBottom = "reasoning.bottom"
     /// About four lines of the reasoning font.
     private static let liveHeight: CGFloat = 72
+    /// Sealed chunks (about 1 KB each) above the tail in the live preview.
+    private static let liveChunks = 2
 
     // Plain Text, never `.textSelection(.enabled)`: iPadOS backs selectable
     // text with a UITextView whose TextKit 2 layout runs on the main thread
     // each time the reasoning grows, and that stalled the app long enough
     // for the watchdog to kill it (0x8BADF00D). Copy is in the context menu.
-    private var reasoningText: some View {
-        Text(text)
-            .font(.system(size: 13))
-            .foregroundStyle(theme.tertiaryText)
-            .lineSpacing(2)
-            .frame(maxWidth: .infinity, alignment: .leading)
+    // Chunked (ChunkedText): sealed chunks are laid out once, and only the
+    // tail again as it grows; expanded, only the chunks on screen.
+    private func reasoningText(lastChunks: Int?) -> some View {
+        ChunkedTextView(text: text, lastChunks: lastChunks, lazy: lastChunks == nil,
+                        font: .system(size: 13), color: theme.tertiaryText)
             .contentShape(Rectangle())
             .contextMenu {
-                Button("Copy reasoning", systemImage: "doc.on.doc") { copy(text) }
+                Button("Copy reasoning", systemImage: "doc.on.doc") { copy(text.string) }
             }
             .padding(.leading, 12)
             .overlay(alignment: .leading) {
@@ -318,7 +321,7 @@ struct MessageStatsFooter: View {
     private func line(live now: Date?) -> some View {
         var parts: [String] = []
         if let now {
-            let phase = block.text.isEmpty && !block.reasoning.isEmpty ? "thinking" : "answering"
+            let phase = block.answer.isEmpty && !block.thinking.isEmpty ? "thinking" : "answering"
             parts.append("\(phase) · \(block.streamedTokens) tok")
             if let rate = block.liveTokensPerSecond(now: now) { parts.append(String(format: "%.1f tok/s", rate)) }
         } else if let t = block.finalTimings {

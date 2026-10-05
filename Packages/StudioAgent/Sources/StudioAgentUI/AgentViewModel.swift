@@ -19,8 +19,9 @@ public struct TranscriptItem: Identifiable, Sendable {
 
 /// A streaming or finished assistant message.
 public struct AssistantBlock: Sendable {
-    public var text = ""
-    public var reasoning = ""
+    /// The answer and the reasoning as they stream (views draw these).
+    public var answer = ChunkedText(.markdownBlocks)
+    public var thinking = ChunkedText(.lines)
     public var isStreaming = true
     public var reasoningStarted: Date?
     public var reasoningEnded: Date?
@@ -42,6 +43,24 @@ public struct AssistantBlock: Sendable {
         return seconds > 0.2 ? Double(streamedTokens - 1) / seconds : nil
     }
 
+    public init(text: String = "", reasoning: String = "", isStreaming: Bool = true) {
+        answer = ChunkedText(.markdownBlocks, text)
+        thinking = ChunkedText(.lines, reasoning)
+        self.isStreaming = isStreaming
+    }
+
+    /// The whole answer: O(n), for tests and tools, not for views.
+    public var text: String {
+        get { answer.string }
+        set { answer = ChunkedText(.markdownBlocks, newValue) }
+    }
+
+    /// The whole reasoning: O(n), for tests and tools, not for views.
+    public var reasoning: String {
+        get { thinking.string }
+        set { thinking = ChunkedText(.lines, newValue) }
+    }
+
     public var reasoningSeconds: Int? {
         guard let s = reasoningStarted, let e = reasoningEnded else { return nil }
         return max(1, Int(e.timeIntervalSince(s).rounded()))
@@ -56,8 +75,22 @@ public struct ToolCard: Sendable {
     public var arguments: JSONValue
     public var effect: ToolEffect?
     public var status: Status
-    public var liveOutput = ""
+    /// A running command's output as it streams; only its end is kept.
+    public var live = ChunkedText(.lines)
     public var result: ToolOutput?
+
+    /// The live output kept so far: O(n), for tools, not for views.
+    public var liveOutput: String { live.string }
+
+    public init(callID: String, name: String, arguments: JSONValue, effect: ToolEffect?, status: Status,
+                result: ToolOutput? = nil) {
+        self.callID = callID
+        self.name = name
+        self.arguments = arguments
+        self.effect = effect
+        self.status = status
+        self.result = result
+    }
 }
 
 /// Where the model is and how it is doing, shown in the panel header.
@@ -516,7 +549,7 @@ public final class AgentViewModel {
                 $0.text = m.text
             }
             if let id = currentAssistant, let i = index[id], case .assistant(let b) = items[i].kind,
-               b.text.isEmpty, b.reasoning.isEmpty, b.errorMessage == nil {
+               b.answer.isEmpty, b.thinking.isEmpty, b.errorMessage == nil {
                 items.remove(at: i)
                 reindex()
             }
@@ -533,8 +566,8 @@ public final class AgentViewModel {
             }
         case .toolExecutionUpdate(let callID, let output):
             updateTool(callID) {
-                $0.liveOutput += output
-                if $0.liveOutput.utf8.count > 64_000 { $0.liveOutput = String($0.liveOutput.suffix(48_000)) }
+                $0.live.append(output)
+                $0.live.dropFront(keepingUTF8: 48_000)
             }
         case .toolExecutionEnd(let callID, let name, let output, _):
             if index[callID] == nil {
@@ -617,11 +650,11 @@ public final class AgentViewModel {
             $0.streamedTokens += tokens
             if !reasoning.isEmpty {
                 if $0.reasoningStarted == nil { $0.reasoningStarted = now }
-                $0.reasoning += reasoning
+                $0.thinking.append(reasoning)
             }
             if !text.isEmpty {
                 if $0.reasoningStarted != nil, $0.reasoningEnded == nil { $0.reasoningEnded = now }
-                $0.text += text
+                $0.answer.append(text)
             }
         }
     }

@@ -74,8 +74,9 @@ public struct AgentPanel: View {
     private var lastItemSize: Int {
         guard let last = model.items.last else { return 0 }
         switch last.kind {
-        case .assistant(let b): return b.text.count + b.reasoning.count
-        case .tool(let c): return c.liveOutput.count + (c.result == nil ? 0 : 1)
+        // Kept counts: String.count would walk the whole reply on every update.
+        case .assistant(let b): return b.answer.utf8Count + b.thinking.utf8Count
+        case .tool(let c): return c.live.utf8Count + c.live.droppedUTF8 + (c.result == nil ? 0 : 1)
         default: return 0
         }
     }

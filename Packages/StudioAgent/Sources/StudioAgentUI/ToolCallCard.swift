@@ -27,7 +27,7 @@ struct ToolCallCard: View {
     }
 
     private var showsBody: Bool {
-        expanded || (card.status == .running && card.name == "bash" && !card.liveOutput.isEmpty)
+        expanded || (card.status == .running && card.name == "bash" && !card.live.isEmpty)
             || (card.status == .failed && card.result != nil && card.name != "read")
     }
 
@@ -71,17 +71,29 @@ struct ToolCallCard: View {
         if let diff = card.result?.details?["diff"]?.stringValue, !diff.isEmpty, card.result?.isError == false {
             UnifiedDiffText(diff: diff).padding(12)
         } else {
-            let text = card.result?.text ?? card.liveOutput
             ScrollView(.vertical) {
-                // Selectable once the output is final: selectable text is a
-                // UITextView, too costly to lay out again for every chunk of
-                // live output (see ReasoningView).
-                Text(text.isEmpty ? "(no output)" : String(text.suffix(12_000)))
-                    .font(theme.smallCodeFont)
-                    .foregroundStyle(card.result?.isError == true ? theme.danger : theme.secondaryText)
-                    .selectableText(card.result != nil)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
+                if let result = card.result {
+                    // Final: drawn once, and selectable.
+                    Text(result.text.isEmpty ? "(no output)" : String(result.text.suffix(12_000)))
+                        .font(theme.smallCodeFont)
+                        .foregroundStyle(result.isError ? theme.danger : theme.secondaryText)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                } else if card.live.isEmpty {
+                    Text("(no output)")
+                        .font(theme.smallCodeFont)
+                        .foregroundStyle(theme.secondaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                } else {
+                    // Live: the last chunks, each laid out once, and the tail.
+                    // Not selectable: selectable text is a UITextView, too
+                    // costly to lay out for every chunk (see ReasoningView).
+                    ChunkedTextView(text: card.live, lastChunks: 12, font: theme.smallCodeFont,
+                                    color: theme.secondaryText, lineSpacing: 0)
+                        .padding(12)
+                }
             }
             .defaultScrollAnchor(.bottom)
             .frame(maxHeight: 260)
@@ -258,9 +270,3 @@ struct UnifiedDiffText: View {
     }
 }
 
-extension View {
-    /// `.textSelection(.enabled)` only when `enabled`.
-    @ViewBuilder func selectableText(_ enabled: Bool) -> some View {
-        if enabled { textSelection(.enabled) } else { self }
-    }
-}

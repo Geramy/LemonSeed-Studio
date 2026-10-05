@@ -4,13 +4,36 @@ import SwiftUI
 /// quotes, rules and fenced code. Inline styles (bold, italics, code, links)
 /// use Foundation's Markdown parser. An unterminated fence (mid-stream)
 /// renders as a code block that grows as tokens arrive.
+///
+/// Streamed text comes as `ChunkedText` sealed at blank lines outside code
+/// fences: each sealed chunk is whole blocks, parsed and laid out once, and
+/// only the tail is parsed again as it grows.
 public struct MarkdownView: View {
+    let chunks: ChunkedText
+
+    public init(_ text: String) { chunks = ChunkedText(.markdownBlocks, text) }
+    public init(chunks: ChunkedText) { self.chunks = chunks }
+
+    public var body: some View {
+        // Lazy: in a long reply only the chunks on screen are laid out.
+        LazyVStack(alignment: .leading, spacing: 10) {
+            ForEach(chunks.chunks) { chunk in
+                MarkdownChunkView(text: chunk.text).equatable()
+            }
+            if !chunks.tail.isEmpty { MarkdownChunkView(text: chunks.tail) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The blocks of one chunk of Markdown.
+struct MarkdownChunkView: View, Equatable {
     let text: String
     @Environment(\.agentTheme) private var theme
 
-    public init(_ text: String) { self.text = text }
+    nonisolated static func == (a: Self, b: Self) -> Bool { a.text == b.text }
 
-    public var body: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(MarkdownBlock.parse(text).enumerated()), id: \.offset) { _, block in
                 view(for: block)

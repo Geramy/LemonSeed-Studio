@@ -88,6 +88,14 @@ struct StudioSceneView: View {
             }
             .ignoresSafeArea()
         }
+        .sheet(isPresented: $router.isClonePresented) {
+            if let git = app.services.git as? StudioGitProvider {
+                GitCloneSheet(provider: git, library: app.library) { reference in router.open(reference) }
+                    .modifier(StudioEnvironment())
+                    .environment(app)
+                    .presentationSizing(.page)
+            }
+        }
         .sheet(isPresented: $router.isSettingsPresented) {
             SettingsView(page: router.settingsPage)
                 .modifier(StudioEnvironment())
@@ -136,6 +144,7 @@ struct StudioSceneView: View {
             router.onReferenceChange = { referenceID = $0 }
             app.activeRouter = router
             openInitialWorkspace()
+            if LaunchOptions.showClone, router.controller == nil { router.isClonePresented = true }
         }
         .task {
             // Models, then the engine (when auto-start is on and the driver

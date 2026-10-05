@@ -15,6 +15,8 @@ final class SceneRouter {
     var isSettingsPresented = false
     var settingsPage: SettingsPage = .appearance
     var isNewProjectPresented = false
+    /// The repository browser (clone) over the welcome screen.
+    var isClonePresented = false
     var errorMessage: String?
     /// Set by the scene to persist which workspace the window shows.
     @ObservationIgnored var onReferenceChange: ((UUID?) -> Void)?
@@ -87,6 +89,11 @@ final class SceneRouter {
         isSettingsPresented = true
     }
     func showNewProject() { isNewProjectPresented = true }
+    /// Clone a repository: over the workspace when one is open (the clone
+    /// then replaces it in this window), else over the welcome screen.
+    func showClone() {
+        if let controller { controller.gitSheet = .clone } else { isClonePresented = true }
+    }
 }
 
 extension FocusedValues {

@@ -157,6 +157,8 @@ final class WorkspaceController: WorkspaceContext {
     var pendingDeletion: URL?
     /// A short confirmation shown at the bottom of the window.
     private(set) var toast: String?
+    /// A Git screen over the window (workbench or clone).
+    var gitSheet: GitSheetRequest?
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     @ObservationIgnored private var gitTask: Task<Void, Never>?
 
@@ -561,6 +563,12 @@ final class WorkspaceController: WorkspaceContext {
             }
         }
         if LaunchOptions.showSettings { router?.isSettingsPresented = true }
+        if let sheet = LaunchOptions.gitSheet.flatMap(GitSheetRequest.init(launchValue:)) {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                gitSheet = sheet
+            }
+        }
         if LaunchOptions.keyboardStress {
             let stress = KeyboardStress(controller: self)
             keyboardStress = stress

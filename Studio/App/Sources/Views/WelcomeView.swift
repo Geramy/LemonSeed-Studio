@@ -63,6 +63,8 @@ struct WelcomeView: View {
                        shortcut: "⌘O", identifier: "welcome.openFolder") { router.showOpenFolder() }
             ActionCard(symbol: "plus.square.on.square", title: "New Project", detail: "An empty folder in Projects",
                        shortcut: nil, identifier: "welcome.newProject") { router.showNewProject() }
+            ActionCard(symbol: "square.and.arrow.down.on.square", title: "Clone Repository", detail: "From GitHub, GitLab or a URL",
+                       shortcut: nil, identifier: "welcome.clone") { router.showClone() }
             ActionCard(symbol: StudioSymbol.settings, title: "Settings", detail: "Theme, fonts, keys, model",
                        shortcut: "⌘,", identifier: "welcome.settings") { router.showSettings() }
         }

@@ -6,7 +6,7 @@ import StudioGitUI
 /// Runs the StudioGit views on their own.
 ///
 /// Launch arguments (for screenshots and UI checks):
-///   -screen changes|history|repositories|clone|pulls|pull|signin|devicecode|conflict|accounts|keys
+///   -screen changes|history|repositories|cloning|pulls|pull|signin|devicecode|conflict|accounts|keys
 @main
 struct StudioGitDemoApp: App {
     @State private var services: GitServices = {
@@ -67,6 +67,7 @@ struct DemoRoot: View {
     @State private var signIn: SignInModel?
     @State private var setupError: String?
     @State private var clonedRepo: GitRepository?
+    @State private var startingClone: RepositoryBrowserModel.CloneRequest?
     @State private var columns: NavigationSplitViewVisibility = .automatic
 
     let arguments = ProcessInfo.processInfo.arguments
@@ -112,7 +113,7 @@ struct DemoRoot: View {
                 if let history { HistoryGraphView(model: history).navigationTitle("History") }
             case .repositories:
                 if let repoBrowser {
-                    RepositoryBrowserView(model: repoBrowser) { repo in
+                    RepositoryBrowserView(model: repoBrowser, startingClone: startingClone) { repo in
                         clonedRepo = repo
                         sourceControl = SourceControlModel(repository: repo, services: services)
                         screen = .changes
@@ -210,6 +211,17 @@ struct DemoRoot: View {
                 if let merge = history?.rows.first(where: { $0.commit.isMerge }) { await history?.select(merge.commit.id) }
             }
         case "repositories": screen = .repositories
+        case "cloning":
+            // The clone sheet with a clone under way: the progress header.
+            let repository = SampleForgeClient.sampleRepositories[1]
+            startingClone = RepositoryBrowserModel.CloneRequest(repository: repository, accountID: nil)
+            var progress = TransferProgress(phase: .receiving)
+            progress.step = "Fetching latest snapshot"
+            progress.totalObjects = 31_406
+            progress.receivedObjects = 19_472
+            progress.receivedBytes = 205_520_896
+            repoBrowser.showSampleCloneProgress(progress, repository: repository.fullName)
+            screen = .repositories
         case "pulls":
             screen = .pulls
             pullSelection = SampleForgeClient.samplePulls.first

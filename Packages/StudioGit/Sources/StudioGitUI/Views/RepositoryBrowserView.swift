@@ -10,13 +10,17 @@ import UniformTypeIdentifiers
 public struct RepositoryBrowserView: View {
     @Bindable var model: RepositoryBrowserModel
     var onCloned: (GitRepository) -> Void
+    /// A clone sheet to open as the browser appears (screenshots).
+    var startingClone: RepositoryBrowserModel.CloneRequest?
     /// The clone being set up, with an identity that lasts while its sheet is up.
     @State private var cloning: IdentifiedRequest?
     @State private var signingIn: SignInModel?
     @Environment(\.gitTheme) private var theme
 
-    public init(model: RepositoryBrowserModel, onCloned: @escaping (GitRepository) -> Void = { _ in }) {
+    public init(model: RepositoryBrowserModel, startingClone: RepositoryBrowserModel.CloneRequest? = nil,
+                onCloned: @escaping (GitRepository) -> Void = { _ in }) {
         self.model = model
+        self.startingClone = startingClone
         self.onCloned = onCloned
     }
 
@@ -29,6 +33,9 @@ public struct RepositoryBrowserView: View {
             }
         }
         .task { await model.load() }
+        .onAppear {
+            if let startingClone, cloning == nil { cloning = IdentifiedRequest(request: startingClone) }
+        }
         .navigationTitle("Clone a Repository")
         .inlineTitle()
         .toolbar {
@@ -324,27 +331,24 @@ struct CloneSheet: View {
                 Toggle("Submodules (recursive)", isOn: $request.submodules)
                 Toggle("Git LFS Files", isOn: $request.lfs)
             }
+            ErrorBanner(message: $model.errorMessage)
+        }
+        // The clone's progress stays at the top, above the options, for as
+        // long as it runs.
+        .safeAreaInset(edge: .top, spacing: 0) {
             if let job = model.cloneJob {
-                Section("Progress") {
-                    TransferProgressView(job.progress)
-                    if job.finished, let dest = job.destination {
-                        Label("Cloned to \(dest.lastPathComponent)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                    }
+                CloneProgressHeader(repository: job.repository, progress: job.progress, finished: job.finished) {
+                    model.cancelClone()
                 }
             }
-            ErrorBanner(message: $model.errorMessage)
         }
         .navigationTitle(editableURL ? "Clone by URL" : "Clone")
         .inlineTitle()
-        .interactiveDismissDisabled(model.isCloning)
+        .interactiveDismissDisabled(model.cloneJob != nil)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                if model.isCloning {
-                    Button("Cancel Clone", role: .destructive) { model.cancelClone() }
-                        .accessibilityIdentifier("git.clone.cancel")
-                } else {
-                    Button("Close") { model.dismissCloneJob(); done(nil) }
-                }
+                Button("Close") { model.dismissCloneJob(); done(nil) }
+                    .disabled(model.cloneJob != nil)
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Clone") {
@@ -357,7 +361,7 @@ struct CloneSheet: View {
                         }
                     }
                 }
-                .disabled(model.isCloning || request.problem != nil)
+                .disabled(model.cloneJob != nil || request.problem != nil)
                 .accessibilityIdentifier("git.clone.start")
             }
         }

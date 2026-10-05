@@ -254,6 +254,14 @@ public final class RepositoryBrowserModel {
     private func performClone(_ request: CloneRequest) async -> GitRepository? {
         cloneJob = CloneJob(repository: request.displayName, progress: TransferProgress(phase: .connecting))
         errorMessage = nil
+        if holdBeforeCloning > .zero {
+            try? await Task.sleep(for: holdBeforeCloning)
+            if Task.isCancelled {
+                cloneJob = nil
+                errorMessage = "Clone cancelled."
+                return nil
+            }
+        }
         let services = self.services
         let accountID = request.accountID ?? account?.id
         var createdDestination: URL?
@@ -297,4 +305,14 @@ public final class RepositoryBrowserModel {
     }
 
     public func dismissCloneJob() { cloneJob = nil }
+
+    /// Shows a clone in progress without cloning (screenshots of the
+    /// progress header).
+    public func showSampleCloneProgress(_ progress: TransferProgress, repository: String) {
+        cloneJob = CloneJob(repository: repository, progress: progress)
+    }
+
+    /// Holds a clone this long before it starts, so automation can see and
+    /// cancel a clone in progress. Zero (no hold) unless set.
+    public var holdBeforeCloning: Duration = .zero
 }

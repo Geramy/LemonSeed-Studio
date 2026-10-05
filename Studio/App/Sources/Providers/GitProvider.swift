@@ -338,7 +338,11 @@ struct GitCloneSheet: View {
         .gitTheme(GitTheme.studio(theme))
         .task {
             if model == nil {
-                model = RepositoryBrowserModel(services: provider.services, appFolder: library.projectsFolder)
+                let browser = RepositoryBrowserModel(services: provider.services, appFolder: library.projectsFolder)
+                #if DEBUG
+                GitSampleMode.configure(browser)
+                #endif
+                model = browser
             }
         }
         .accessibilityElement(children: .contain)
@@ -367,7 +371,8 @@ extension GitTheme {
 /// Projects whose origin is the sample client's repository (on the branch
 /// `-StudioGitSampleBranch`, mid-merge with `-StudioGitSampleConflict YES`).
 /// With `-StudioGitSampleLocalClone YES`, lemonade-sdk/amdgpu_mtopg clones
-/// from that sample project, so cloning works offline.
+/// from that sample project, so cloning works offline;
+/// `-StudioGitSampleCloneHold seconds` holds each clone before it starts.
 enum GitSampleMode {
     static var isEnabled: Bool { UserDefaults.standard.bool(forKey: "StudioGitSample") }
 
@@ -385,6 +390,13 @@ enum GitSampleMode {
             services.authorName = "Alice Moreau"
             services.authorEmail = "alice@example.com"
         }
+    }
+
+    @MainActor
+    static func configure(_ browser: RepositoryBrowserModel) {
+        guard isEnabled else { return }
+        let hold = UserDefaults.standard.double(forKey: "StudioGitSampleCloneHold")
+        if hold > 0 { browser.holdBeforeCloning = .milliseconds(Int(hold * 1000)) }
     }
 
     /// `-StudioGitSelect`: a request number, a changed file's path, or

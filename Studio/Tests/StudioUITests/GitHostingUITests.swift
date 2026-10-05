@@ -29,11 +29,13 @@ final class GitHostingUITests: StudioUITestCase {
         expect("git.clone.alice/gpu-notes-2024", exists: false, timeout: 2)
     }
 
-    /// A clone started from an open workspace opens in a window of its own
-    /// (the sample repository clones offline from the sample project).
-    func testCloneFromAWorkspaceOpensInANewWindow() {
+    /// Opens the clone options for the sample repository (which clones
+    /// offline from the sample project, held `hold` seconds before it
+    /// starts), names the folder uniquely and starts the clone. Returns the
+    /// folder name.
+    private func startSampleClone(hold: Int = 0, extra: [String] = []) -> String {
         launchSample(sheet: "clone", expecting: "git.cloneSheet",
-                     extra: ["-StudioGitSampleLocalClone", "YES", "-StudioExposeWindows", "YES"])
+                     extra: ["-StudioGitSampleLocalClone", "YES", "-StudioGitSampleCloneHold", "\(hold)"] + extra)
         // The row and its Clone button share the identifier; the button opens the options.
         let clone = app.buttons.matching(identifier: "git.clone.lemonade-sdk/amdgpu_mtopg")
             .matching(NSPredicate(format: "label == 'Clone'")).firstMatch
@@ -47,6 +49,37 @@ final class GitHostingUITests: StudioUITestCase {
         let current = (folder.value as? String) ?? ""
         folder.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2) + name)
         tap("git.clone.start")
+        return name
+    }
+
+    /// While a clone runs, its progress is a header at the top of the clone
+    /// sheet, right under the title bar and above the options, with Cancel.
+    func testCloneProgressIsAtTheTopAndCancels() {
+        // Held long enough to look at it; the test cancels it.
+        _ = startSampleClone(hold: 30)
+        let progress = element("git.clone.progress")
+        XCTAssertTrue(progress.waitForExistence(timeout: 3), "the progress header appears")
+        let title = app.navigationBars["Clone"].firstMatch
+        let folder = element("git.clone.folderName")
+        XCTAssertTrue(title.exists)
+        // The header's background runs up under the glass title bar; its
+        // first line sits right below the bar, above the clone options.
+        let repository = progress.staticTexts["lemonade-sdk/amdgpu_mtopg"]
+        let stage = element("git.clone.progress.stage")
+        XCTAssertTrue(repository.exists, "names the repository")
+        XCTAssertTrue(stage.exists, "shows the stage")
+        XCTAssertGreaterThanOrEqual(repository.frame.minY, title.frame.maxY, "below the title bar")
+        XCTAssertLessThan(repository.frame.minY - title.frame.maxY, 30, "directly below the title bar")
+        XCTAssertLessThan(progress.frame.maxY, folder.frame.minY, "above the clone options")
+        tap("git.clone.cancel")
+        expect("git.clone.progress", exists: false)
+        XCTAssertTrue(app.staticTexts["Clone cancelled."].waitForExistence(timeout: 5))
+    }
+
+    /// A clone started from an open workspace opens in a window of its own
+    /// (the sample repository clones offline from the sample project).
+    func testCloneFromAWorkspaceOpensInANewWindow() {
+        let name = startSampleClone(extra: ["-StudioExposeWindows", "YES"])
         let workspace = element("toolbar.workspaceMenu")
         let showsClone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", name), object: workspace)
         XCTAssertEqual(XCTWaiter.wait(for: [showsClone], timeout: 20), .completed, "the clone's window is in front")

@@ -78,8 +78,9 @@ Demo/build.sh run -screen history # install and open a screen on the shared simu
 scripts/screenshots.sh            # refresh docs/screenshots/git
 ```
 
-Screens: `changes`, `conflict`, `history`, `repositories`, `pulls`,
-`devicecode`, `signin`, `accounts`, `keys`. Without a signed-in account the
+Screens: `changes`, `conflict`, `history`, `repositories`, `cloning` (the
+clone sheet with a clone under way: its progress header at the top),
+`pulls`, `devicecode`, `signin`, `accounts`, `keys`. Without a signed-in account the
 repository browser and pull requests use `SampleForgeClient` data; after
 signing in they use the real account.
 

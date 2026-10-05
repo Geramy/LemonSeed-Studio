@@ -14,7 +14,7 @@ mkdir -p "$OUT"
 "$HERE/Demo/build.sh" run >/dev/null
 xcrun simctl status_bar "$SIMULATOR_ID" override --time 9:41 --batteryState charged --batteryLevel 100 >/dev/null 2>&1 || true
 screens=("$@")
-[[ ${#screens[@]} -gt 0 ]] || screens=(changes conflict history repositories pulls devicecode signin keys accounts)
+[[ ${#screens[@]} -gt 0 ]] || screens=(changes conflict history repositories cloning pulls devicecode signin keys accounts)
 # The simulator is shared with other apps. With FOREIGN_REFERENCE set to a
 # screenshot of another app, frames that match it (another app came to the
 # front) are retaken.

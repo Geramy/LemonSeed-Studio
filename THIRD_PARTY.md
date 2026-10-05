@@ -71,6 +71,8 @@ same legal review; option 3 removes the question entirely.
 | wasi-sdk sysroot: libc++, libc++abi | wasi-sdk 30 (LLVM 21.1.4) | Apache-2.0 WITH LLVM-exception | Yes (`WASIToolchain/sysroot`) | C++ standard library for user programs |
 | compiler-rt builtins (`libclang_rt.builtins.a`, wasm32) | wasi-sdk 30 | Apache-2.0 WITH LLVM-exception | Yes (`WASIToolchain/clang/lib`) | Runtime helpers linked into user programs |
 | WebAssembly Micro Runtime (WAMR) | 2.4.5 | Apache-2.0 WITH LLVM-exception | Yes (static library) | In-process WASI interpreter |
+| WAMR socket extension (`core/iwasm/libraries/lib-socket`) | 2.4.5 | Apache-2.0 WITH LLVM-exception | Yes (`WASIToolchain/extensions/sockets`: `wasi_socket_ext.h`, `libwasi_socket_ext.a`) | BSD sockets for user programs; linked into their `.wasm` |
+| SIMDe (SIMD Everywhere) | 0.8.2 (fetched by WAMR's build) | MIT | Yes (headers, compiled into WAMR) | WebAssembly SIMD in WAMR's fast interpreter |
 
 Notes:
 

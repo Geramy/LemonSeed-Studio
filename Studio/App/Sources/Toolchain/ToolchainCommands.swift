@@ -108,11 +108,11 @@ struct RunCommand: AsyncShellCommand {
             }
             let r = outcome.result
             if live {
-                var line = "\u{1B}[2m[\(outcome.runner.title): \(outcome.reason) · exit \(r.exitCode) · \(Int(r.totalMilliseconds.rounded())) ms]\u{1B}[0m\n"
+                // A dim status line at the terminal (never in a pipe or a file).
                 if !r.unsupportedImports.isEmpty {
-                    line = "\u{1B}[33mnot available in WebKit: \(r.unsupportedImports.joined(separator: ", ")) (try --runner wamr)\u{1B}[0m\n" + line
+                    io.error("not available in WebKit: \(r.unsupportedImports.joined(separator: ", ")) (try --runner wamr)\n")
                 }
-                io.error(line)
+                io.write("\u{1B}[2m[\(outcome.runner.title): \(outcome.reason) · exit \(r.exitCode) · \(Int(r.totalMilliseconds.rounded())) ms]\u{1B}[0m\n")
             }
             if let error = r.error {
                 io.error("run: \(program.lastPathComponent): \(error)\n")

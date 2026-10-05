@@ -9,3 +9,10 @@
 #if __has_include("fw_mailbox_service.h")
 #include "fw_mailbox_service.h"
 #endif
+
+// mac_linuxgpu's selector call (host/selector_call.h, device builds): every
+// DriverClient call goes through it, synchronous or async as the driver
+// serves the selector.
+#if __has_include("selector_call.h")
+#include "selector_call.h"
+#endif

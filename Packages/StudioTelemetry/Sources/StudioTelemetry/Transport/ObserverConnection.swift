@@ -24,6 +24,10 @@ public enum IOReturnValue {
     public static let notReady = IOReturnCode(bitPattern: 0xe00002d8)
     public static let notFound = IOReturnCode(bitPattern: 0xe00002f0)
     public static let notPermitted = IOReturnCode(bitPattern: 0xe00002e2)
+    /// A bounded read (SysfsRead, DrmInfo) that ran out of its 250 ms.
+    public static let timeout = IOReturnCode(bitPattern: 0xe00002d6)
+    /// A bounded read refused while an earlier one is still running.
+    public static let busy = IOReturnCode(bitPattern: 0xe00002d5)
     /// MACH_SEND_INVALID_DEST: the connection's port is gone.
     public static let machSendInvalidDest: IOReturnCode = 0x10000003
 

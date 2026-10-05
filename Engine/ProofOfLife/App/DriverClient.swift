@@ -208,6 +208,9 @@ enum DriverLookup {
 final class UserClient {
     let connection: io_connect_t
     let type: MLG.ClientType
+    /// Whether the driver serves session calls async (mlg_selector_call_on
+    /// fills it in on the first async call).
+    private var protocolState: Int32 = 0
 
     private init(connection: io_connect_t, type: MLG.ClientType) {
         self.connection = connection
@@ -222,14 +225,18 @@ final class UserClient {
     }
 
     /// Scalar-only call; returns the IOReturn and the scalars the dext wrote.
+    /// Goes through mac_linuxgpu's mlg_selector_call (host/selector_call.h):
+    /// synchronous for the calls that never sleep, an awaited async call for
+    /// the rest (GetIdentity, GetBARInfo, InitDevice, HostWindow, ...), which
+    /// build 243 on refuses to answer synchronously.
     func call(_ selector: MLG.Selector, _ input: [UInt64] = [], outputs: Int) -> (kern_return_t, [UInt64]) {
         var output = [UInt64](repeating: 0, count: max(outputs, 1))
         var outputCount = UInt32(outputs)
         let kr = input.withUnsafeBufferPointer { inBuf in
             output.withUnsafeMutableBufferPointer { outBuf in
-                IOConnectCallScalarMethod(connection, selector.rawValue,
-                                          inBuf.baseAddress, UInt32(input.count),
-                                          outBuf.baseAddress, &outputCount)
+                mlg_selector_call_on(connection, &protocolState, selector.rawValue,
+                                     inBuf.baseAddress, UInt32(input.count), nil, 0,
+                                     outBuf.baseAddress, &outputCount, nil, nil)
             }
         }
         return (kr, Array(output.prefix(Int(min(outputCount, UInt32(outputs))))))

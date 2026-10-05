@@ -128,7 +128,15 @@ final class LinuxTransport {
         case linux(Int32)          // the attribute's (or walk's) Linux errno
         case notReady
         case unsupported
+        /// The bounded read timed out or an earlier one is still running
+        /// (build 243 on): skip this sample, nothing is wrong.
+        case skipped
         case transport(IOReturnCode)
+    }
+
+    /// Timeout and Busy from SysfsRead and DrmInfo: skip the sample.
+    private static func skips(_ kr: IOReturnCode) -> Bool {
+        kr == IOReturnValue.timeout || kr == IOReturnValue.busy
     }
 
     let directory: any ObserverDirectory
@@ -185,6 +193,7 @@ final class LinuxTransport {
                          outputWords: 3, outputBytes: LinuxABI.chunk)
             if r.status == IOReturnValue.notReady { return .failure(.notReady) }
             if r.status == IOReturnValue.notPermitted { return .failure(.unsupported) }
+            if Self.skips(r.status) { return .failure(.skipped) }
             guard r.status == IOReturnValue.success, r.words.count == 3 else { return .failure(.transport(r.status)) }
             if let e = Self.linuxErrno(r.words[0]) { return .failure(.linux(e)) }
             guard r.words[1] == UInt64(r.bytes.count), r.bytes.count <= LinuxABI.chunk else {
@@ -213,6 +222,7 @@ final class LinuxTransport {
                      outputWords: 1, outputBytes: size)
         if r.status == IOReturnValue.notReady { return .failure(.notReady) }
         if r.status == IOReturnValue.notPermitted { return .failure(.unsupported) }
+        if Self.skips(r.status) { return .failure(.skipped) }
         guard r.status == IOReturnValue.success, r.words.count == 1 else { return .failure(.transport(r.status)) }
         if let e = Self.linuxErrno(r.words[0]) { return .failure(.linux(e)) }
         guard r.bytes.count == size else { return .failure(.transport(IOReturnValue.badArgument)) }
@@ -291,6 +301,9 @@ final class LinuxTransport {
     /// The ~1 Hz attributes. Returns false when the connection is dead.
     private func readSlow(_ c: Connection, into s: inout LinuxSample, at now: UInt64) -> Bool {
         guard sessionState(c, into: &s, probe: false) else { return false }
+        // What the last refresh read: a skipped read keeps its value.
+        let prior = (text: s.text, errnos: s.errnos, metrics: s.metrics, notReady: s.notReady,
+                     unsupported: s.unsupported, slowAtNs: s.slowAtNs)
         s.slowAtNs = now
         s.notReady = false
         s.unsupported = false
@@ -308,6 +321,10 @@ final class LinuxTransport {
             case .failure(.transport(let kr)) where Self.lost(kr):
                 s.error = "observer connection lost: \(IOReturnValue.hex(kr))"
                 return false
+            case .failure(.skipped):
+                // Discovery runs again next refresh; this one shows the last values.
+                (s.text, s.errnos, s.metrics, s.notReady, s.unsupported, s.slowAtNs) = prior
+                return true
             default:
                 break
             }
@@ -329,6 +346,9 @@ final class LinuxTransport {
             case .failure(.unsupported):
                 s.unsupported = true
                 return true
+            case .failure(.skipped):
+                if let text = prior.text[path] { s.text[path] = text }
+                if let e = prior.errnos[path] { s.errnos[path] = e }
             case .failure(.transport(let kr)):
                 if Self.lost(kr) {
                     s.error = "observer connection lost: \(IOReturnValue.hex(kr))"
@@ -342,6 +362,9 @@ final class LinuxTransport {
         switch sysfs(c, "gpu_metrics") {
         case .success(let bytes): s.metrics = GPUMetrics(bytes: bytes)
         case .failure(.linux(let e)): s.errnos["gpu_metrics"] = e
+        case .failure(.skipped):
+            s.metrics = prior.metrics
+            if let e = prior.errnos["gpu_metrics"] { s.errnos["gpu_metrics"] = e }
         case .failure: break
         }
         return true
@@ -358,12 +381,15 @@ final class LinuxTransport {
         case .success(let entries):
             if let dir = entries.first(where: { $0.kind == "d" && $0.name.hasPrefix("hwmon") }) {
                 c.hwmon = "hwmon/\(dir.name)"
-                if case .success(let files) = list(c, "hwmon/\(dir.name)") {
-                    c.hwmonFiles = Set(files.filter { $0.kind == "f" }.map(\.name))
+                switch list(c, "hwmon/\(dir.name)") {
+                case .success(let files): c.hwmonFiles = Set(files.filter { $0.kind == "f" }.map(\.name))
+                case .failure(.skipped): return .failure(.skipped)
+                case .failure: break
                 }
             }
         case .failure(.notReady): return .failure(.notReady)
         case .failure(.unsupported): return .failure(.unsupported)
+        case .failure(.skipped): return .failure(.skipped)
         case .failure: break
         }
         switch sysfs(c, "ip_discovery/die/0/GC/0/base_addr") {
@@ -376,6 +402,8 @@ final class LinuxTransport {
             }
         case .failure(.linux(let e)):
             c.grbmUnavailable = "ip_discovery GC base_addr: \(String(cString: strerror(e)))"
+        case .failure(.skipped):
+            return .failure(.skipped)
         case .failure(let e):
             c.grbmUnavailable = "ip_discovery GC base_addr: \(e)"
         }
@@ -409,6 +437,8 @@ final class LinuxTransport {
                 c.grbmUnavailable = "driver has no DrmInfo selector"
                 s.grbmStatus = c.grbmUnavailable
                 return
+            case .failure(.skipped):
+                continue                // no sample this time; the next one may answer
             case .failure(let e):
                 s.grbmStatus = "GRBM_STATUS read failed: \(e)"
                 return

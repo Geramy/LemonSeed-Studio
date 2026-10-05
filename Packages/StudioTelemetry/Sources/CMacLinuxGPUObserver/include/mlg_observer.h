@@ -10,6 +10,7 @@
 #ifndef MLG_OBSERVER_H
 #define MLG_OBSERVER_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -27,13 +28,20 @@ int64_t mlg_service_ids(const char *service_name, uint64_t *ids, uint32_t capaci
 /// entry ID. On success `*connection` is the connection port.
 int32_t mlg_open(uint64_t registry_id, uint32_t type, uint32_t *connection);
 
-/// IOConnectCallMethod. `*output_count` and `*output_struct_size` are
+/// A selector as the driver serves it (mac_linuxgpu host/selector_call.h):
+/// synchronously when it never sleeps or is a bounded read (SysfsRead,
+/// DrmInfo), else as an async call awaited here. Returns what
+/// IOConnectCallMethod would. `*output_count` and `*output_struct_size` are
 /// capacities on entry and the returned sizes on exit.
 int32_t mlg_call(uint32_t connection, uint32_t selector,
                  const uint64_t *input, uint32_t input_count,
                  const void *input_struct, size_t input_struct_size,
                  uint64_t *output, uint32_t *output_count,
                  void *output_struct, size_t *output_struct_size);
+
+/// Whether the driver answers `selector` (with these inputs) synchronously
+/// (mac_linuxgpu dext/sources/session_state.h), for tests.
+bool mlg_selector_is_synchronous(uint32_t selector, const uint64_t *input, uint32_t input_count);
 
 /// IOServiceClose.
 int32_t mlg_close(uint32_t connection);

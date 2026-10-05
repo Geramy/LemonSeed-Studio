@@ -299,6 +299,7 @@ struct EngineStatusView: View {
 /// The GPU monitor in its own window (Stage Manager, external display).
 struct GPUMonitorWindow: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         NavigationStack {
@@ -318,5 +319,11 @@ struct GPUMonitorWindow: View {
                 }
         }
         .modifier(StudioEnvironment())
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("gpu.monitorWindow")
+        .onWindowScene { scene in
+            app.replaceRestoredGPUMonitorIfResetting(scene.session) { openWindow(id: StudioScenes.workspace) }
+        }
     }
 }
+

@@ -76,8 +76,24 @@ final class ToolbarTests: StudioUITestCase {
         }
         tap("toolbar.more")
         app.buttons["GPU Monitor in New Window"].firstMatch.tap()
-        expect("engine.status", timeout: 10)
+        expect("gpu.monitorWindow", timeout: 10)
         menu("Window", "Close")
+    }
+
+    /// A window left open by an earlier run (here the GPU Monitor, in
+    /// front) must not take the place of the workspace a launch asks for.
+    func testARestoredGPUMonitorDoesNotReplaceTheWorkspace() {
+        launch()
+        tap("toolbar.more")
+        app.buttons["GPU Monitor in New Window"].firstMatch.tap()
+        expect("gpu.monitorWindow", timeout: 10)
+        // UIKit records which windows are open, and which is in front, on its
+        // own schedule a few seconds after a change; this is the state a run
+        // that failed with the monitor open leaves behind.
+        Thread.sleep(forTimeInterval: 10)
+        app.terminate()
+        launch()
+        expect("gpu.monitorWindow", exists: false)
     }
 
     func testActivityBar() {

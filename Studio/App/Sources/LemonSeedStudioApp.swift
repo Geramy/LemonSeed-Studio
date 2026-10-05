@@ -131,8 +131,10 @@ struct StudioSceneView: View {
         } message: {
             Text(router.errorMessage ?? "")
         }
+        .onWindowScene { scene in
+            app.discardRestoredWindowsIfResetting(keeping: scene.session)
+        }
         .onAppear {
-            app.discardRestoredWindowsIfResetting()
             router.onReferenceChange = { referenceID = $0 }
             app.activeRouter = router
             openInitialWorkspace()

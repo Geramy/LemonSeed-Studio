@@ -126,7 +126,10 @@ struct TopBar: View {
             Divider()
             Button("Split Editor Down", systemImage: StudioSymbol.splitDown) { controller.split(.down) }
             Button("New Terminal", systemImage: "plus.rectangle") { controller.newTerminal() }
-            Button("GPU Monitor in New Window", systemImage: StudioSymbol.gpu) { openWindow(id: StudioScenes.gpuMonitor) }
+            Button("GPU Monitor in New Window", systemImage: StudioSymbol.gpu) {
+                app.openedGPUMonitorWindow = true
+                openWindow(id: StudioScenes.gpuMonitor)
+            }
             Divider()
             Button("Settings…", systemImage: StudioSymbol.settings) { controller.router?.showSettings() }
         } label: {

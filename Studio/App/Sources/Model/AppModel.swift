@@ -45,19 +45,30 @@ final class AppModel {
     /// The launch-argument project opens in the first window only.
     @ObservationIgnored var claimedLaunchProject = false
     @ObservationIgnored private var discardedRestoredWindows = false
+    /// Set when this launch opens the GPU Monitor window, so a monitor
+    /// window restored from an earlier run can be told apart.
+    @ObservationIgnored var openedGPUMonitorWindow = false
 
-    /// With -StudioResetState, starts from a single window: windows restored
-    /// from earlier runs (Stage Manager keeps them) are discarded, so
-    /// automation always drives the window it launched.
-    func discardRestoredWindowsIfResetting() {
+    /// With -StudioResetState, starts from a single workspace window:
+    /// windows restored from earlier runs (Stage Manager keeps them, and the
+    /// window in front comes back first) are discarded, so automation always
+    /// drives the window it launched. `keeping` is that workspace window.
+    func discardRestoredWindowsIfResetting(keeping: UISceneSession) {
         guard LaunchOptions.resetState, !discardedRestoredWindows else { return }
         discardedRestoredWindows = true
         let application = UIApplication.shared
-        let keep = application.connectedScenes.first { $0.activationState == .foregroundActive }
-            ?? application.connectedScenes.first
-        for session in application.openSessions where session != keep?.session {
+        for session in application.openSessions where session != keeping {
             application.requestSceneSessionDestruction(session, options: nil)
         }
+    }
+
+    /// A GPU Monitor window restored into a -StudioResetState launch is not
+    /// what the launch asked for: it opens a workspace window in its place
+    /// (which discards the restored windows) and closes itself.
+    func replaceRestoredGPUMonitorIfResetting(_ session: UISceneSession, openWorkspace: () -> Void) {
+        guard LaunchOptions.resetState, !openedGPUMonitorWindow, !discardedRestoredWindows else { return }
+        openWorkspace()
+        UIApplication.shared.requestSceneSessionDestruction(session, options: nil)
     }
 
     private init() {

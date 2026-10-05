@@ -81,6 +81,7 @@ struct BottomPanel: View {
         case .terminal: terminal
         case .problems: ProblemsView(controller: controller)
         case .output: OutputView(controller: controller, channel: selectedChannel)
+        case .build: BuildView(controller: controller, builds: controller.builds)
         }
     }
 
@@ -247,5 +248,118 @@ struct OutputView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("output.view")
+    }
+}
+
+/// Build: builds the project (studio-build.json) or the C/C++ file in the
+/// editor with the in-process clang, and runs the program in the terminal.
+/// Shows the target, the compiler's output, the error and warning counts
+/// (their locations are in Problems) and which runner the program will use.
+struct BuildView: View {
+    @Environment(\.theme) private var theme
+    @Environment(\.codeFont) private var codeFont
+    let controller: WorkspaceController
+    let builds: BuildModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: Space.s) {
+                Button {
+                    Task { _ = await builds.build() }
+                } label: {
+                    Label("Build", systemImage: StudioSymbol.build)
+                }
+                .buttonStyle(.studioPrimary)
+                .disabled(builds.isBuilding || ToolchainService.shared.unavailableReason != nil)
+                .accessibilityIdentifier("build.build")
+                Button {
+                    Task { await builds.run() }
+                } label: {
+                    Label("Run", systemImage: "play.fill")
+                }
+                .buttonStyle(.studioSecondary)
+                .disabled(builds.isBuilding || ToolchainService.shared.unavailableReason != nil)
+                .accessibilityIdentifier("build.run")
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(builds.subject)
+                        .foregroundStyle(theme.palette.textPrimary.color)
+                    Text("Target: \(builds.projectTarget.title) (\(builds.projectTarget.rawValue))")
+                        .foregroundStyle(theme.palette.textTertiary.color)
+                }
+                .font(.system(size: 12))
+                Spacer()
+                status
+            }
+            .padding(Space.s)
+            Divider()
+            if let reason = ToolchainService.shared.unavailableReason {
+                StudioEmptyState(symbol: StudioSymbol.build, title: "No compiler in this build", message: reason)
+            } else if builds.log.isEmpty, case .built(true) = builds.state {
+                summary
+            } else if builds.log.isEmpty {
+                StudioEmptyState(symbol: StudioSymbol.build, title: "C and C++ to WebAssembly",
+                                 message: "Build compiles the project\u{2019}s studio-build.json, or the C or C++ file in the editor, with clang inside the app. Run builds, then runs the program in the terminal.")
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Space.s) {
+                        summary
+                        Text(builds.log)
+                            .font(CodeFont(family: codeFont.family, size: max(10, codeFont.size - 2)).font())
+                            .foregroundStyle(theme.palette.textPrimary.color)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(Space.m)
+                }
+                .defaultScrollAnchor(.bottom)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("build.view")
+    }
+
+    @ViewBuilder private var status: some View {
+        switch builds.state {
+        case .idle: EmptyView()
+        case .building:
+            ProgressView().controlSize(.small)
+        case .built(let ok):
+            Label(ok ? "Built" : "Failed", systemImage: ok ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                .foregroundStyle(ok ? theme.palette.success.color : theme.palette.error.color)
+                .font(.system(size: 12, weight: .medium))
+                .accessibilityIdentifier("build.status")
+        case .failed(let why):
+            Label(why, systemImage: "xmark.octagon.fill")
+                .foregroundStyle(theme.palette.error.color)
+                .font(.system(size: 12))
+                .lineLimit(2)
+                .accessibilityIdentifier("build.status")
+        }
+    }
+
+    @ViewBuilder private var summary: some View {
+        if case .built = builds.state {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(builds.title + String(format: " · %.0f ms", builds.milliseconds))
+                    .font(.system(size: 12, weight: .medium))
+                if builds.errorCount + builds.warningCount > 0 {
+                    Button {
+                        controller.show(.problems)
+                    } label: {
+                        Text("\(builds.errorCount) error\(builds.errorCount == 1 ? "" : "s"), \(builds.warningCount) warning\(builds.warningCount == 1 ? "" : "s") \u{2192} Problems")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(theme.palette.accent.color)
+                    .font(.system(size: 12))
+                    .accessibilityIdentifier("build.problems")
+                }
+                if let runner = builds.runner, let output = builds.output {
+                    Text("\(output.lastPathComponent) runs in \(runner.runner.title): \(runner.reason)")
+                        .font(.system(size: 12))
+                        .foregroundStyle(theme.palette.textSecondary.color)
+                        .accessibilityIdentifier("build.runner")
+                }
+            }
+        }
     }
 }

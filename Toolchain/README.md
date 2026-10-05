@@ -10,14 +10,17 @@ Toolchain/
   scripts/
     build-llvm-ios.sh          LLVM -> build/xcframeworks/LemonSeedLLVM.xcframework
     build-wamr-ios.sh          WAMR -> build/xcframeworks/LemonSeedWAMR.xcframework
-    fetch-wasi-sysroot.sh      sysroot + clang resource dir -> build/resources/WASIToolchain
+    fetch-wasi-sysroot.sh      sysroot (wasm32-wasip1, -threads) + clang resource dir -> build/resources/WASIToolchain
+    build-wasi-extensions.sh   BSD socket headers and libwasi_socket_ext.a -> WASIToolchain/extensions
     make-stub-xcframeworks.sh  placeholders, so the package builds without LLVM
     build-sample-wasm.sh       hello.wasm built on the Mac (run-side fallback)
   patches/llvm/                applied to the LLVM source on extraction
+  extensions/sockets/          <sys/socket.h> and <netdb.h> overlays, netdb_extra.c
   samples/                     hello.c (the demo), medium.cpp (clangd spike)
   Demo/                        spike app (XcodeGen; ./build.sh)
   build/                       everything generated (gitignored)
-Packages/StudioToolchain/      Compiler, WAMRRunner, WebKitRunner
+Packages/StudioToolchain/      Compiler, ProjectBuilder, WasmModuleInfo, WAMRRunner, WebKitRunner
+Studio/App/Sources/Toolchain/  the app: clang/clang++/cc/c++ and run in the terminal, Build panel
 ```
 
 ## Building
@@ -26,8 +29,12 @@ Packages/StudioToolchain/      Compiler, WAMRRunner, WebKitRunner
 Toolchain/scripts/build-llvm-ios.sh        # ~20 min per slice at JOBS=10
 Toolchain/scripts/build-wamr-ios.sh        # seconds
 Toolchain/scripts/fetch-wasi-sysroot.sh    # needs the LLVM source (first step above)
+Toolchain/scripts/build-wasi-extensions.sh # needs brew llvm@21 (same LLVM as the app's clang)
 Toolchain/Demo/build.sh                    # demo app for the simulator
 ```
+
+The app bundles `build/resources/WASIToolchain` as a folder and links
+StudioToolchain (Studio/project.yml).
 
 `build-llvm-ios.sh` takes steps (`fetch host sim device package`, default all).
 It builds clang, lld and clang-tools-extra (`WITH_CLANGD=0` to skip) with only
@@ -117,6 +124,41 @@ disk. The on-disk preamble is mapped from a file and is not counted by jetsam.
 Device numbers, the LSE tree and a mid-size CMake project are still to be
 measured (the plan's week-2 clangd spike).
 
+## In the app
+
+- **Terminal:** `clang`, `clang++`, `cc` and `c++` take clang's own command
+  line and compile to `wasm32-wasip1` unless it names `--target=wasm32-wasip1-threads`
+  (or `-pthread`); other targets are an error. `run [--runner wamr|webkit]
+  prog.wasm [args]` runs a program with stdin, stdout and stderr on the
+  terminal (Ctrl-C stops it, Ctrl-D ends its input), its files confined to the
+  current directory (WASI preopen), and returns its exit code. The runner and
+  why it was chosen are printed after the program's output.
+- **Build panel:** Build (⌘⇧B) compiles the project's `studio-build.json`
+  (`ProjectBuilder`: incremental from clang's dependency files, parallel
+  compiles, then one link) or the C/C++ file in the editor; Run (⌘R) builds and
+  runs in the terminal. Diagnostics go to Problems (file:line:column).
+- **Runner choice** (`WasmRunner.choose`, from the module's import section):
+  WebKit's JIT when every import is one its JavaScript shim implements (output,
+  arguments, environment, clocks, random); WAMR for anything else: stdin,
+  files, sockets, threads.
+
+### What WASI programs can and cannot do
+
+| | |
+|---|---|
+| Standard C and C++ (C17, C++20 libc++) | Yes. C++ exceptions no (`-fno-exceptions`); no RTTI limits |
+| stdin, stdout, stderr | Yes; stdin is typed in the terminal or piped |
+| Files | Yes, inside the directory the program runs in (and below); nothing outside it |
+| Sockets | TCP and UDP over BSD sockets: `socket`, `bind`, `listen`, `accept`, `connect`, `send`/`recv`, `getaddrinfo`, `poll`/`select`, socket options. No raw sockets, no Unix domain sockets, no ports below 1024 (iOS). The local network needs the user's permission (iOS prompt) |
+| Threads | pthreads with `--target=wasm32-wasip1-threads` (or `-pthread`): mutexes, condition variables, atomics, up to 64 threads |
+| Time | Wall and monotonic clocks, `nanosleep`/`sleep` |
+| SIMD | 128-bit WebAssembly SIMD (`-msimd128`) in both runtimes |
+| Processes | No `fork`, `exec`, `system` or `popen`; one program, one process |
+| Signals | No signal delivery (`signal()` compiles, handlers never run) |
+| Dynamic loading | No `dlopen`; programs link statically |
+| GPU, graphics, windows | No; text in, text out |
+| Speed | WebKit's JIT runs near native speed; WAMR, an interpreter, is about 4-5x slower on pure computation |
+
 ## Findings and open items
 
 - **C++ exceptions:** the stock wasi-sdk 30 libc++/libc++abi are built without
@@ -152,7 +194,6 @@ measured (the plan's week-2 clangd spike).
    in-memory `Transport`) and measure the LSE tree on device.
 4. Package one dynamic `Toolchain.framework` (plan 2.6) so clang, lld and clangd
    share one copy of LLVM between the app and any extensions.
-5. File system for WASI programs (preopened workspace, realpath jail) and the
-   prompt() bridge for stdin, then the Worker + sync-XHR spike for threads.
+5. WASIX target (wasix-libc sysroot, host shim over WAMR) for fuller POSIX.
 6. llvm-ar / llvm-objdump / llvm-nm entry points and the AMDGPU target for the
    GPU Kernel Lab; CI caching of the XCFrameworks.

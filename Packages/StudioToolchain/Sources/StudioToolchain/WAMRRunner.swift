@@ -2,35 +2,68 @@ import CWAMRRunner
 import Foundation
 
 /// Runs WASI command modules in this process on WAMR's fast interpreter.
-/// Starts instantly (no web view), which suits try_run, ctest and quick runs;
-/// it is several times slower than WebKit's JIT on long-running code.
+/// Starts instantly (no web view) and its host calls are synchronous, so a
+/// program can read stdin, use files in its directory, open sockets and
+/// start threads; it is several times slower than WebKit's JIT on
+/// long-running computation.
 public final class WAMRRunner: Sendable {
   public init() {}
 
   public static var version: String { String(cString: lst_wamr_version()) }
 
+  /// Output from the reader threads, in order, to the handler on the main actor.
   private final class OutputSink: @unchecked Sendable {
-    let handler: WasmOutputHandler
-    init(handler: @escaping WasmOutputHandler) { self.handler = handler }
+    let continuation: AsyncStream<WasmOutput>.Continuation
+    let consumer: Task<Void, Never>
+    init(handler: @escaping WasmOutputHandler) {
+      let (stream, continuation) = AsyncStream<WasmOutput>.makeStream()
+      self.continuation = continuation
+      consumer = Task { @MainActor in
+        for await chunk in stream { handler(chunk) }
+      }
+    }
+    func finish() async {
+      continuation.finish()
+      await consumer.value
+    }
   }
 
+  /// `preopenDirectory` is the program's "." and "/" (nothing outside it is
+  /// reachable); `input` its stdin (end of file when nil); with
+  /// `allowNetwork` it may open sockets to any address. Cancelling the task
+  /// stops the program.
   public func run(
     wasm: Data, arguments: [String], environment: [String: String] = [:],
-    preopenDirectory: URL? = nil, output: @escaping WasmOutputHandler
+    preopenDirectory: URL? = nil, input: WasmInput? = nil, allowNetwork: Bool = true,
+    output: @escaping WasmOutputHandler
   ) async -> WasmRunResult {
     let start = ContinuousClock.now
     let sink = OutputSink(handler: output)
-    var result = await Compiler.onCompilerThread {
-      Self.runBlocking(wasm: wasm, arguments: arguments, environment: environment,
-                       preopen: preopenDirectory?.path, sink: sink)
+    let session = Session()
+    var result = await withTaskCancellationHandler {
+      await Compiler.onCompilerThread {
+        Self.runBlocking(wasm: wasm, arguments: arguments, environment: environment,
+                         preopen: preopenDirectory?.path, stdinFD: input?.readFD ?? -1,
+                         allowNetwork: allowNetwork, session: session, sink: sink)
+      }
+    } onCancel: {
+      session.terminate()
     }
+    await sink.finish()
     result.totalMilliseconds = milliseconds(ContinuousClock.now - start)
     return result
   }
 
+  /// The C session, shared with the cancellation handler.
+  private final class Session: @unchecked Sendable {
+    let handle = lst_wamr_session_create()
+    func terminate() { lst_wamr_session_terminate(handle) }
+    deinit { lst_wamr_session_destroy(handle) }
+  }
+
   private static func runBlocking(
     wasm: Data, arguments: [String], environment: [String: String],
-    preopen: String?, sink: OutputSink
+    preopen: String?, stdinFD: Int32, allowNetwork: Bool, session: Session, sink: OutputSink
   ) -> WasmRunResult {
     let argStrings = arguments.map { strdup($0) }
     let envStrings = environment.map { strdup("\($0.key)=\($0.value)") }
@@ -43,8 +76,6 @@ public final class WAMRRunner: Sendable {
     let argv: [UnsafePointer<CChar>?] = argStrings.map { $0.map { UnsafePointer($0) } }
     let envp: [UnsafePointer<CChar>?] = envStrings.map { $0.map { UnsafePointer($0) } }
 
-    let session = lst_wamr_session_create()
-    defer { lst_wamr_session_destroy(session) }
     var result = lst_wamr_result()
     let user = Unmanaged.passUnretained(sink).toOpaque()
 
@@ -60,6 +91,8 @@ public final class WAMRRunner: Sendable {
             options.env = envBuffer.baseAddress
             options.env_count = Int32(envBuffer.count)
             options.preopen_dir = preopenString.map { UnsafePointer($0!) }
+            options.stdin_fd = stdinFD
+            options.allow_network = allowNetwork ? 1 : 0
             options.user = user
             options.output = { user, fd, data, length in
               guard let user, let data else { return }
@@ -68,10 +101,9 @@ public final class WAMRRunner: Sendable {
                 start: UnsafeRawPointer(data).assumingMemoryBound(to: UInt8.self), count: length)
               let chunk = WasmOutput(stream: fd == 2 ? .stderr : .stdout,
                                      text: String(decoding: buffer, as: UTF8.self))
-              let handler = sink.handler
-              Task { @MainActor in handler(chunk) }
+              sink.continuation.yield(chunk)
             }
-            return lst_wamr_session_run(session, &options, &result)
+            return lst_wamr_session_run(session.handle, &options, &result)
           }
         }
       }

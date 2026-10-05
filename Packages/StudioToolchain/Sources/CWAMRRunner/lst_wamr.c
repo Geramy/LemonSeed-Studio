@@ -10,6 +10,7 @@
 #include <wamr/wasm_export.h>
 
 #include <errno.h>
+#include <fcntl.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -35,10 +36,14 @@ typedef struct reader {
 static pthread_once_t g_init_once = PTHREAD_ONCE_INIT;
 static bool g_init_ok;
 
+/// Threads one program may start (wasi-threads, WASIX thread_spawn).
+#define LST_MAX_THREADS 64
+
 static void runtime_init(void) {
   RuntimeInitArgs args;
   memset(&args, 0, sizeof args);
   args.mem_alloc_type = Alloc_With_System_Allocator;
+  args.max_thread_num = LST_MAX_THREADS;
   g_init_ok = wasm_runtime_full_init(&args);
 }
 
@@ -135,7 +140,7 @@ int lst_wamr_session_run(lst_wamr_session *s, const lst_wamr_options *o,
   wasm_module_t module = NULL;
   wasm_module_inst_t inst = NULL;
   reader out = {0}, err = {0};
-  int out_w = -1, err_w = -1;
+  int out_w = -1, err_w = -1, null_in = -1;
   double t0 = now_ms();
 
   if (!bytes) {
@@ -155,6 +160,14 @@ int lst_wamr_session_run(lst_wamr_session *s, const lst_wamr_options *o,
     goto done;
   }
 
+  // WAMR takes -1 to mean the app's own stdin; a program without input gets
+  // /dev/null (end of file) instead.
+  int stdin_fd = o->stdin_fd;
+  if (stdin_fd < 0) {
+    null_in = open("/dev/null", O_RDONLY);
+    stdin_fd = null_in;
+  }
+
   const char *map_dirs[2];
   char map_buffer[1024 + 4];
   uint32_t map_count = 0;
@@ -164,7 +177,15 @@ int lst_wamr_session_run(lst_wamr_session *s, const lst_wamr_options *o,
   }
   wasm_runtime_set_wasi_args_ex(module, NULL, 0, map_dirs, map_count,
                                 (const char **)o->env, (uint32_t)o->env_count,
-                                (char **)o->argv, o->argc, -1, out_w, err_w);
+                                (char **)o->argv, o->argc, stdin_fd, out_w, err_w);
+  if (o->allow_network) {
+    // WAMR checks every socket address and name lookup against these pools:
+    // any IPv4 or IPv6 address, any name.
+    static const char *any_address[] = {"0.0.0.0/0", "::/0"};
+    static const char *any_name[] = {"*"};
+    wasm_runtime_set_wasi_addr_pool(module, any_address, 2);
+    wasm_runtime_set_wasi_ns_lookup_pool(module, any_name, 1);
+  }
 
   double t1 = now_ms();
   inst = wasm_runtime_instantiate(module, o->stack_size ? o->stack_size : 256 * 1024,
@@ -209,6 +230,8 @@ done:
     close(out_w);
   if (err_w >= 0)
     close(err_w);
+  if (null_in >= 0)
+    close(null_in);
   reader_finish(&out);
   reader_finish(&err);
   free(bytes);

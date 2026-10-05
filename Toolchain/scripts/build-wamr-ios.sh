@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds the WebAssembly Micro Runtime as a static library for iOS device arm64
 # and iOS simulator arm64, fast interpreter only (no AOT, no JIT: iOS apps
-# cannot map executable memory), with WASI preview 1, and packages it as
+# cannot map executable memory), with WASI preview 1 (its socket calls
+# included), wasi-threads and SIMD, and packages it as
 # Toolchain/build/xcframeworks/LemonSeedWAMR.xcframework.
 #
 # Usage: build-wamr-ios.sh [macos]   ("macos" also builds a host slice for tests)
@@ -41,9 +42,14 @@ WAMR_FLAGS=(
   -DWAMR_BUILD_LIBC_WASI=1
   -DWAMR_BUILD_LIBC_BUILTIN=0
   -DWAMR_BUILD_MULTI_MODULE=0
+  # Threads: wasi-threads (wasm32-wasip1-threads programs, pthreads on
+  # wasi-libc) and the WASIX thread calls (lst_wasix.c), on shared memory.
   -DWAMR_BUILD_LIB_PTHREAD=0
-  -DWAMR_BUILD_LIB_WASI_THREADS=0
-  -DWAMR_BUILD_SIMD=0
+  -DWAMR_BUILD_LIB_WASI_THREADS=1
+  -DWAMR_BUILD_SHARED_MEMORY=1
+  -DWAMR_BUILD_THREAD_MGR=1
+  # Fixed-width SIMD in the fast interpreter (through SIMDe).
+  -DWAMR_BUILD_SIMD=1
   -DWAMR_BUILD_REF_TYPES=1
   -DWAMR_BUILD_BULK_MEMORY=1
   -DWAMR_BUILD_DUMP_CALL_STACK=1

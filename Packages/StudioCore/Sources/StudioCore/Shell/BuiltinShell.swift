@@ -12,6 +12,69 @@ public protocol ShellCommand: Sendable {
     func run(_ arguments: [String], context: inout ShellContext) -> Int32
 }
 
+/// A command that runs asynchronously and may stream: the compilers and the
+/// program runner. At a terminal (last in its pipeline, no redirect) it
+/// writes as it goes and reads what the user types through `io`; otherwise
+/// `io` works on the pipeline's buffers. Cancelling the task (Ctrl-C)
+/// should stop it.
+public protocol AsyncShellCommand: ShellCommand {
+    func run(_ arguments: [String], context: inout ShellContext, io: ShellIO) async -> Int32
+}
+
+extension AsyncShellCommand {
+    /// Async commands only run through the async path.
+    public func run(_ arguments: [String], context: inout ShellContext) -> Int32 {
+        context.error("\(name): needs the terminal")
+        return 1
+    }
+}
+
+/// The terminal a streaming command writes to and reads from.
+public protocol ShellTerminal: AnyObject, Sendable {
+    func writeOutput(_ text: String)
+    func writeError(_ text: String)
+    /// The next input the user typed (a line, with its newline), nil at end
+    /// of input (Ctrl-D) or when the command was interrupted.
+    func readInput() async -> Data?
+}
+
+/// A streaming command's standard streams.
+public final class ShellIO: @unchecked Sendable {
+    private let lock = NSLock()
+    private let terminal: (any ShellTerminal)?
+    private var bufferedInput: String?
+    private var out = ""
+    private var err = ""
+
+    init(terminal: (any ShellTerminal)?, stdin: String?) {
+        self.terminal = terminal
+        self.bufferedInput = stdin
+    }
+
+    /// Whether output reaches a terminal as it is written.
+    public var isLive: Bool { terminal != nil }
+
+    public func write(_ text: String) {
+        if let terminal { terminal.writeOutput(text) } else { lock.withLock { out += text } }
+    }
+
+    public func error(_ text: String) {
+        if let terminal { terminal.writeError(text) } else { lock.withLock { err += text } }
+    }
+
+    /// Input: what the user types at a terminal, or the pipeline's stdin all
+    /// at once, then nil for end of input.
+    public func readInput() async -> Data? {
+        if let terminal { return await terminal.readInput() }
+        return lock.withLock {
+            defer { bufferedInput = nil }
+            return bufferedInput.map { Data($0.utf8) }
+        }
+    }
+
+    var collected: (stdout: String, stderr: String) { lock.withLock { (out, err) } }
+}
+
 /// What a running command sees: its working directory, the roots it may
 /// touch, stdin, and buffers for stdout and stderr.
 public struct ShellContext: Sendable {
@@ -109,7 +172,17 @@ public actor BuiltinShell {
     private var previousDirectory: URL?
     private var commands: [String: any ShellCommand]
 
-    public init(root: URL, workingDirectory: URL? = nil, commands: [any ShellCommand] = BuiltinCommands.all) {
+    /// Commands every new shell gets besides the built-ins (the app adds its
+    /// compilers and runner here at launch).
+    public static var extraCommands: [any ShellCommand] {
+        get { extraLock.withLock { extra } }
+        set { extraLock.withLock { extra = newValue } }
+    }
+    nonisolated(unsafe) private static var extra: [any ShellCommand] = []
+    private static let extraLock = NSLock()
+
+    public init(root: URL, workingDirectory: URL? = nil,
+                commands: [any ShellCommand] = BuiltinCommands.all + BuiltinShell.extraCommands) {
         let root = root.standardizedFileURL
         self.roots = [root]
         self.workingDirectory = (workingDirectory ?? root).standardizedFileURL
@@ -140,8 +213,11 @@ public actor BuiltinShell {
         environment[name] = value
     }
 
-    /// Runs one line, e.g. `mkdir -p build && ls | cat > listing.txt`.
-    public func run(_ line: String, columns: Int = 80, isTerminal: Bool = false) -> ShellOutput {
+    /// Runs one line, e.g. `mkdir -p build && ls | cat > listing.txt`. With
+    /// a `terminal`, a streaming command at the end of a pipeline writes to it
+    /// as it runs and reads the user's input from it.
+    public func run(_ line: String, columns: Int = 80, isTerminal: Bool = false,
+                    terminal: (any ShellTerminal)? = nil) async -> ShellOutput {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty, history.last != trimmed { history.append(trimmed) }
         environment["?"] = String(lastExitCode)
@@ -164,7 +240,9 @@ public actor BuiltinShell {
             var input: String?
             for (index, command) in pipeline.commands.enumerated() {
                 let isLast = index == pipeline.commands.count - 1
-                let result = execute(command, stdin: input, columns: columns, isTerminal: isTerminal && isLast && command.redirect == nil)
+                let live = isTerminal && isLast && command.redirect == nil
+                let result = await execute(command, stdin: input, columns: columns, isTerminal: live,
+                                           terminal: live ? terminal : nil)
                 output.stderr += result.stderr
                 if result.clearScreen {
                     output.clearScreen = true
@@ -179,7 +257,8 @@ public actor BuiltinShell {
         return output
     }
 
-    private func execute(_ command: ShellScript.Command, stdin: String?, columns: Int, isTerminal: Bool) -> ShellOutput {
+    private func execute(_ command: ShellScript.Command, stdin: String?, columns: Int, isTerminal: Bool,
+                         terminal: (any ShellTerminal)?) async -> ShellOutput {
         var context = ShellContext(workingDirectory: workingDirectory, roots: roots, environment: environment,
                                    stdin: stdin, columns: columns, isTerminal: isTerminal, commandTable: commands)
         let words = expand(command.words)
@@ -190,6 +269,12 @@ public actor BuiltinShell {
         var code: Int32
         if name == "cd" {
             code = changeDirectory(arguments, context: &context)
+        } else if let streaming = commands[name] as? any AsyncShellCommand {
+            let io = ShellIO(terminal: terminal, stdin: stdin)
+            code = await streaming.run(arguments, context: &context, io: io)
+            let (out, err) = io.collected
+            context.stdout += out
+            context.stderr += err
         } else if let tool = commands[name] {
             code = tool.run(arguments, context: &context)
         } else {

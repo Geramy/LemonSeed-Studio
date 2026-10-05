@@ -84,6 +84,15 @@ enum StudioCommands {
                           shortcut: KeyShortcut("m", [.command, .shift]), run: on { $0.show(.problems) }),
             StudioCommand(id: "view.output", title: "Show Output", category: "View", symbol: StudioSymbol.output,
                           shortcut: KeyShortcut("y", [.command, .shift]), run: on { $0.show(.output) }),
+            StudioCommand(id: "view.build", title: "Show Build", category: "View", symbol: StudioSymbol.build,
+                          run: on { $0.show(.build) }),
+            StudioCommand(id: "build.build", title: "Build", category: "Build", symbol: StudioSymbol.build,
+                          shortcut: KeyShortcut("b", [.command, .shift]), run: on { c in
+                              c.show(.build)
+                              Task { _ = await c.builds.build() }
+                          }),
+            StudioCommand(id: "build.run", title: "Build and Run", category: "Build", symbol: "play.fill",
+                          shortcut: KeyShortcut("r", .command), run: on { c in Task { await c.builds.run() } }),
 
             // Workspace
             StudioCommand(id: "search.clear", title: "Clear Search Results", category: "Search", symbol: "xmark.circle",

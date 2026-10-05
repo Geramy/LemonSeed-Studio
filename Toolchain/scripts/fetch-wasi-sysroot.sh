@@ -11,8 +11,8 @@
 # Output: Toolchain/build/resources/WASIToolchain (gitignored).
 #
 # Environment:
-#   WASI_TARGETS="wasm32-wasip1"   space-separated sysroot targets to keep
-#                                   (add wasm32-wasip1-threads for wasi-threads)
+#   WASI_TARGETS="wasm32-wasip1 wasm32-wasip1-threads"   sysroot targets to keep
+#                                   (wasm32-wasip1-threads: pthreads on wasi-threads)
 
 set -euo pipefail
 
@@ -24,7 +24,7 @@ source "$TOOLCHAIN_DIR/versions.env"
 BUILD_DIR="$TOOLCHAIN_DIR/build"
 DOWNLOADS="$BUILD_DIR/downloads"
 OUT="$BUILD_DIR/resources/WASIToolchain"
-WASI_TARGETS="${WASI_TARGETS:-wasm32-wasip1}"
+WASI_TARGETS="${WASI_TARGETS:-wasm32-wasip1 wasm32-wasip1-threads}"
 LLVM_MAJOR="${LLVM_VERSION%%.*}"
 LLVM_SRC="$BUILD_DIR/src/llvm-project-$LLVM_VERSION.src"
 
@@ -70,6 +70,16 @@ for t in $WASI_TARGETS; do
   mkdir -p "$OUT/clang/lib/wasm32-unknown-${t#wasm32-}"
   cp "$rt_dir/libclang_rt.builtins.a" "$OUT/clang/lib/wasm32-unknown-${t#wasm32-}/"
 done
+
+# wasi-sdk ships the same headers for wasm32-wasip1 and wasm32-wasip1-threads
+# (the threads difference is in the libraries). Keep one copy: the threads
+# target's include directory becomes a link to the plain one (16 MB less in
+# the app), but only while every file is identical.
+if [[ -d "$OUT/sysroot/include/wasm32-wasip1" && -d "$OUT/sysroot/include/wasm32-wasip1-threads" ]] &&
+   diff -rq "$OUT/sysroot/include/wasm32-wasip1" "$OUT/sysroot/include/wasm32-wasip1-threads" >/dev/null; then
+  rm -rf "$OUT/sysroot/include/wasm32-wasip1-threads"
+  ln -s wasm32-wasip1 "$OUT/sysroot/include/wasm32-wasip1-threads"
+fi
 
 # clang finds libc++'s version by listing <sysroot>/include/c++ (it expects
 # v1 there) before it adds <sysroot>/include/<target>/c++/v1. Keep that

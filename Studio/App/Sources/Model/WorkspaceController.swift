@@ -45,11 +45,10 @@ enum SidebarItem: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-/// The bottom panel's tabs. There is no Build tab until Studio has a build
-/// system to run; a saved state that names one (or any tab this version does
-/// not have) opens the terminal.
+/// The bottom panel's tabs. A saved state that names a tab this version does
+/// not have opens the terminal.
 enum PanelTab: String, CaseIterable, Identifiable, Codable {
-    case terminal, problems, output
+    case terminal, problems, output, build
 
     var id: String { rawValue }
 
@@ -62,6 +61,7 @@ enum PanelTab: String, CaseIterable, Identifiable, Codable {
         case .terminal: "Terminal"
         case .problems: "Problems"
         case .output: "Output"
+        case .build: "Build"
         }
     }
 
@@ -70,6 +70,7 @@ enum PanelTab: String, CaseIterable, Identifiable, Codable {
         case .terminal: StudioSymbol.terminal
         case .problems: StudioSymbol.problems
         case .output: StudioSymbol.output
+        case .build: StudioSymbol.build
         }
     }
 }
@@ -111,6 +112,8 @@ final class WorkspaceController: WorkspaceContext {
     let workspace: Workspace
     let layout = EditorLayout()
     let search: SearchModel
+    /// Build and Run for C and C++ (the in-process toolchain).
+    @ObservationIgnored private(set) lazy var builds = BuildModel(controller: self)
     @ObservationIgnored weak var router: SceneRouter?
     var app: AppModel { router?.app ?? .shared }
 

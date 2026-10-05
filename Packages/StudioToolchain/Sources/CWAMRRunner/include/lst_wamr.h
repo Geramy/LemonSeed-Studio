@@ -22,6 +22,13 @@ typedef struct lst_wamr_options {
   const char *preopen_dir;  ///< host directory mapped to "/" and ".", or NULL
   uint32_t stack_size;      ///< wasm operand stack; 0 means 256 KB
   uint32_t heap_size;       ///< app heap for the libc-less malloc; 0 is fine
+  /// Host fd the program reads as stdin (fd 0), e.g. a pipe's read end; -1
+  /// for none (end of file at once). Not closed by the runner.
+  int stdin_fd;
+  /// Nonzero: the program may open sockets to any address and resolve any
+  /// name (WAMR's socket calls, the WASIX socket calls). iOS still applies
+  /// its own rules (local network permission, no privileged ports).
+  int allow_network;
   void *user;
   /// stdout (fd 1) and stderr (fd 2) bytes, from a reader thread.
   void (*output)(void *user, int fd, const char *data, size_t length);

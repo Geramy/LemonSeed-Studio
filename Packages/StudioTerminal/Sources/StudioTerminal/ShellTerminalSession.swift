@@ -22,6 +22,9 @@ public final class ShellTerminalSession: TerminalSession {
     @ObservationIgnored private var started = false
     @ObservationIgnored private var appliedStyle: String?
     @ObservationIgnored private weak var context: (any WorkspaceContext)?
+    /// The line running now, and what it reads (a program's stdin).
+    @ObservationIgnored private var runTask: Task<Void, Never>?
+    @ObservationIgnored private var programInput: ProgramInput?
     @ObservationIgnored public private(set) lazy var terminalView: TerminalView = makeTerminalView()
 
     public init(root: URL, workingDirectory: URL? = nil, context: (any WorkspaceContext)?) {
@@ -111,9 +114,38 @@ public final class ShellTerminalSession: TerminalSession {
 
     fileprivate func receive(_ bytes: ArraySlice<UInt8>) {
         TextInputCoordinator.shared.didFocus(id: inputTargetID)
-        guard !isRunning else { return }
+        guard !isRunning else {
+            // A running program: typed lines go to its stdin, Ctrl-C stops it.
+            feedProgram(bytes)
+            return
+        }
         for event in editor.feed(bytes) {
             handle(event)
+        }
+    }
+
+    /// Input while a line runs: echoed and line-edited locally (Backspace),
+    /// delivered a line at a time on Return; Ctrl-D ends the input, Ctrl-C
+    /// interrupts the command.
+    private func feedProgram(_ bytes: ArraySlice<UInt8>) {
+        guard let input = programInput else { return }
+        for byte in bytes {
+            switch byte {
+            case 0x03:
+                write("^C\r\n")
+                input.finish()
+                runTask?.cancel()
+            case 0x04:
+                input.finish()
+            case 0x0D, 0x0A:
+                write("\r\n")
+                input.submitLine()
+            case 0x7F, 0x08:
+                if input.deleteLast() { write("\u{8} \u{8}") }
+            default:
+                input.append(byte)
+                write(String(decoding: [byte], as: UTF8.self))
+            }
         }
     }
 
@@ -152,17 +184,24 @@ public final class ShellTerminalSession: TerminalSession {
         }
         isRunning = true
         let columns = max(20, terminalView.getTerminal().cols)
-        Task {
-            let output = await shell.run(line, columns: columns, isTerminal: true)
+        let input = ProgramInput()
+        programInput = input
+        let terminal = TerminalBridge(session: self, input: input)
+        runTask = Task {
+            let output = await shell.run(line, columns: columns, isTerminal: true, terminal: terminal)
+            await terminal.drain()
             if output.clearScreen { write("\u{1B}[2J\u{1B}[3J\u{1B}[H") }
             if !output.stdout.isEmpty { write(Self.crlf(output.stdout)) }
             if !output.stderr.isEmpty { write("\u{1B}[31m" + Self.crlf(output.stderr) + "\u{1B}[0m") }
+            input.finish()
+            programInput = nil
+            runTask = nil
             isRunning = false
             await refreshPrompt()
         }
     }
 
-    static func crlf(_ text: String) -> String {
+    nonisolated static func crlf(_ text: String) -> String {
         text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\n", with: "\r\n")
     }
 
@@ -236,4 +275,87 @@ extension ShellTerminalSession: @preconcurrency TerminalViewDelegate {
     public func clipboardRead(source: TerminalView) -> Data? { nil }
     public func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
     public func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
+}
+
+/// What a running command reads: lines the user typed, queued until read.
+final class ProgramInput: @unchecked Sendable {
+    private let lock = NSLock()
+    private var line: [UInt8] = []
+    private var queued: [Data] = []
+    private var finished = false
+    private var waiter: CheckedContinuation<Data?, Never>?
+
+    func append(_ byte: UInt8) { lock.withLock { line.append(byte) } }
+
+    func deleteLast() -> Bool {
+        lock.withLock {
+            guard !line.isEmpty else { return false }
+            // Remove one UTF-8 character (its continuation bytes, then its lead).
+            while let last = line.last, last & 0xC0 == 0x80 { line.removeLast() }
+            if !line.isEmpty { line.removeLast() }
+            return true
+        }
+    }
+
+    func submitLine() {
+        let data: Data? = lock.withLock {
+            let d = Data(line + [0x0A])
+            line = []
+            if let waiter { self.waiter = nil; resume(waiter, d); return nil }
+            queued.append(d)
+            return nil
+        }
+        _ = data
+    }
+
+    func finish() {
+        lock.withLock {
+            finished = true
+            if let waiter { self.waiter = nil; resume(waiter, nil) }
+        }
+    }
+
+    func next() async -> Data? {
+        await withCheckedContinuation { continuation in
+            lock.withLock {
+                if !queued.isEmpty { continuation.resume(returning: queued.removeFirst()) }
+                else if finished { continuation.resume(returning: nil) }
+                else { waiter = continuation }
+            }
+        }
+    }
+
+    private func resume(_ c: CheckedContinuation<Data?, Never>, _ value: Data?) { c.resume(returning: value) }
+}
+
+/// The terminal side of a streaming command: output to the terminal view in
+/// the order it was written (stderr in red), input from what the user types.
+final class TerminalBridge: ShellTerminal, @unchecked Sendable {
+    private let input: ProgramInput
+    private let continuation: AsyncStream<String>.Continuation
+    private let consumer: Task<Void, Never>
+
+    @MainActor
+    init(session: ShellTerminalSession, input: ProgramInput) {
+        self.input = input
+        let (stream, continuation) = AsyncStream<String>.makeStream()
+        self.continuation = continuation
+        consumer = Task { @MainActor [weak session] in
+            for await text in stream { session?.terminalView.feed(text: text) }
+        }
+    }
+
+    func writeOutput(_ text: String) { continuation.yield(ShellTerminalSession.crlf(text)) }
+
+    func writeError(_ text: String) {
+        continuation.yield("\u{1B}[31m" + ShellTerminalSession.crlf(text) + "\u{1B}[0m")
+    }
+
+    func readInput() async -> Data? { await input.next() }
+
+    /// Waits until everything written has reached the terminal.
+    func drain() async {
+        continuation.finish()
+        await consumer.value
+    }
 }

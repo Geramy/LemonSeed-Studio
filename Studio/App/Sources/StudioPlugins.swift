@@ -33,7 +33,9 @@ enum StudioPlugins {
             services.register(editor: LemonTextEditorProvider())
         }
 
-        // Built into the shell.
+        // Built into the shell, with the C/C++ toolchain's clang, clang++, cc,
+        // c++ and run commands.
+        BuiltinShell.extraCommands = ToolchainCommands.all
         services.terminal = SwiftTermTerminalProvider()
 
         // StudioTelemetry's GPU monitor over the driver monitor and the engine.

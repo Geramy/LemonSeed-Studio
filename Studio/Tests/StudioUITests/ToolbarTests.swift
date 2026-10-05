@@ -157,7 +157,7 @@ final class ToolbarTests: StudioUITestCase {
     func testBottomPanel() {
         launch()
         tap("toolbar.togglePanel")
-        for (tab, content) in [("problems", "problems.empty"), ("output", "output.view"),
+        for (tab, content) in [("problems", "problems.empty"), ("output", "output.view"), ("build", "build.view"),
                                ("terminal", "terminal.view")] {
             tap("panel.tab.\(tab)")
             expect(content)

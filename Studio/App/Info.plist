@@ -52,12 +52,13 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<!-- Debug builds only (the "Debug-only Info.plist keys" build phase
-	     removes these three from other configurations): the development
-	     remote control listens on the Wi-Fi network (port 8765) and
-	     advertises itself with Bonjour. -->
+	<!-- Programs you build in the app can open sockets to devices on the
+	     local network (WAMR's socket support). -->
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Debug builds of LemonSeed Studio accept development commands from your Mac on the local network.</string>
+	<string>Programs you build and run in LemonSeed Studio can connect to devices and servers on your local network.</string>
+	<!-- Debug builds only (the "Debug-only Info.plist keys" build phase
+	     removes it from other configurations): the development remote
+	     control advertises itself with Bonjour. -->
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_lemonseed-dev._tcp</string>

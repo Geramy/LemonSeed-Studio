@@ -366,13 +366,20 @@ extension GitTheme {
 /// client, and with `-StudioGitSampleProject name` a sample repository in
 /// Projects whose origin is the sample client's repository (on the branch
 /// `-StudioGitSampleBranch`, mid-merge with `-StudioGitSampleConflict YES`).
+/// With `-StudioGitSampleLocalClone YES`, lemonade-sdk/amdgpu_mtopg clones
+/// from that sample project, so cloning works offline.
 enum GitSampleMode {
     static var isEnabled: Bool { UserDefaults.standard.bool(forKey: "StudioGitSample") }
 
     @MainActor
     static func installIfRequested(_ services: GitServices) {
         guard isEnabled else { return }
-        let client = SampleForgeClient()
+        var sources: [String: String] = [:]
+        if UserDefaults.standard.bool(forKey: "StudioGitSampleLocalClone"),
+           let project = UserDefaults.standard.string(forKey: "StudioGitSampleProject") {
+            sources["lemonade-sdk/amdgpu_mtopg"] = WorkspaceLibrary.standardProjectsFolder.appendingPathComponent(project).path
+        }
+        let client = SampleForgeClient(cloneSources: sources)
         services.sampleForge = ([SampleForgeClient.sampleAccount], { _ in client })
         if services.authorName.isEmpty {
             services.authorName = "Alice Moreau"

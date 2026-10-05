@@ -139,7 +139,7 @@ struct StudioSceneView: View {
         } message: {
             Text(router.errorMessage ?? "")
         }
-        .onWindowScene { scene in
+        .onActiveWindowScene { scene in
             app.discardRestoredWindowsIfResetting(keeping: scene.session)
         }
         .onAppear {
@@ -162,7 +162,7 @@ struct StudioSceneView: View {
 
     private func openInitialWorkspace() {
         guard router.controller == nil else { return }
-        if let id = referenceID, !LaunchOptions.resetState {
+        if let id = referenceID, !LaunchOptions.resetState || app.workspacesOpenedInNewWindows.contains(id) {
             router.open(referenceID: id)
         } else if let project = LaunchOptions.openProject, !app.claimedLaunchProject {
             app.claimedLaunchProject = true

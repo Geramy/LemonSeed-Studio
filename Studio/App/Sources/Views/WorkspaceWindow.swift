@@ -7,8 +7,12 @@ import StudioDesign
 struct WorkspaceWindow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
+    @Environment(\.openWindow) private var openWindow
     @Bindable var controller: WorkspaceController
     @State private var windowSize = CGSize(width: 1366, height: 1024)
+    /// A clone that could not get a window of its own: asks whether to open
+    /// it here instead.
+    @State private var cloneWithoutWindow: WorkspaceReference?
 
     /// The sidebar: at least 200 points, at most half the window.
     private var sidebarRange: ClosedRange<CGFloat> {
@@ -20,6 +24,27 @@ struct WorkspaceWindow: View {
     private var panelRange: ClosedRange<CGFloat> {
         let minimum = WorkspaceController.minPanelHeight
         return minimum...max(minimum, windowSize.height * 0.8)
+    }
+
+    /// A finished clone opens in a window of its own, next to this
+    /// workspace. When iPadOS gives the app no new window (multiple windows
+    /// unsupported, or none appears), the user decides whether it replaces
+    /// this one.
+    private func openClone(_ reference: WorkspaceReference) {
+        guard UIApplication.shared.supportsMultipleScenes else {
+            cloneWithoutWindow = reference
+            return
+        }
+        app.noteOpeningInNewWindow(reference.id)
+        openWindow(id: StudioScenes.workspace, value: reference.id)
+        Task { @MainActor in
+            // A new window opens its workspace as it appears.
+            for _ in 0..<50 {
+                if app.isShowing(reference.id) { return }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            cloneWithoutWindow = reference
+        }
     }
 
     var body: some View {
@@ -70,6 +95,13 @@ struct WorkspaceWindow: View {
             if LaunchOptions.exposeEditorText, let document = controller.activeDocument {
                 EditorContentsProbe(document: document)
             }
+            if LaunchOptions.exposeWindows {
+                Text(app.shownWorkspaceNames.joined(separator: ","))
+                    .font(.system(size: 6))
+                    .lineLimit(1)
+                    .frame(height: 8)
+                    .accessibilityIdentifier("app.windows")
+            }
         }
         .background(theme.palette.canvas.color)
         .onGeometryChange(for: CGSize.self, of: { $0.size }) { size in
@@ -119,7 +151,7 @@ struct WorkspaceWindow: View {
                 Group {
                     switch request {
                     case .clone:
-                        GitCloneSheet(provider: git, library: app.library) { reference in controller.router?.open(reference) }
+                        GitCloneSheet(provider: git, library: app.library) { reference in openClone(reference) }
                     case .workbench:
                         GitWorkbenchSheet(provider: git, controller: controller, request: request)
                     }
@@ -128,6 +160,19 @@ struct WorkspaceWindow: View {
                 .environment(app)
                 .presentationSizing(.page)
             }
+        }
+        .confirmationDialog(cloneWithoutWindow.map { "Open \u{201C}\($0.displayName)\u{201D} in this window?" } ?? "",
+                            isPresented: Binding(get: { cloneWithoutWindow != nil },
+                                                 set: { if !$0 { cloneWithoutWindow = nil } }),
+                            titleVisibility: .visible) {
+            Button("Open Here") {
+                if let reference = cloneWithoutWindow { controller.router?.open(reference) }
+                cloneWithoutWindow = nil
+            }
+            .accessibilityIdentifier("clone.openHere")
+            Button("Cancel", role: .cancel) { cloneWithoutWindow = nil }
+        } message: {
+            Text("Studio couldn\u{2019}t open a new window for the clone. Opening it here replaces \u{201C}\(controller.displayName)\u{201D} in this window; its files stay as they are.")
         }
         .dropDestination(for: URL.self) { urls, _ in
             controller.importItems(urls, into: controller.rootURL)

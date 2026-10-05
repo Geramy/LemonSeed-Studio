@@ -16,9 +16,24 @@ public final class SampleForgeClient: ForgeClient, @unchecked Sendable {
     public let pageSize: Int?
     public private(set) var requestedScopes: [RepositoryScope] = []
 
-    public init(host: ForgeHost = .github, pageSize: Int? = nil) {
+    /// Clone URLs served in place of the samples' own (full name to URL),
+    /// so a sample repository can be cloned offline from a local one.
+    public let cloneSources: [String: String]
+
+    public init(host: ForgeHost = .github, pageSize: Int? = nil, cloneSources: [String: String] = [:]) {
         self.host = host
         self.pageSize = pageSize
+        self.cloneSources = cloneSources
+    }
+
+    private func served(_ repositories: [ForgeRepository]) -> [ForgeRepository] {
+        repositories.map { repository in
+            guard let source = cloneSources[repository.fullName] else { return repository }
+            var local = repository
+            local.httpsCloneURL = source
+            local.sshCloneURL = nil
+            return local
+        }
     }
 
     /// An account to pair with the sample client.
@@ -101,7 +116,7 @@ public final class SampleForgeClient: ForgeClient, @unchecked Sendable {
     }
     public func repositories(_ scope: RepositoryScope, cursor: String?) async throws -> ForgePage<ForgeRepository> {
         lock.withLock { requestedScopes.append(scope) }
-        let all = Self.repositories(in: scope)
+        let all = served(Self.repositories(in: scope))
         guard let pageSize else { return ForgePage(items: all, nextCursor: nil) }
         let start = Int(cursor ?? "0") ?? 0
         let end = min(start + pageSize, all.count)
@@ -115,16 +130,16 @@ public final class SampleForgeClient: ForgeClient, @unchecked Sendable {
         }
     }
     public func repositories(organization: String) async throws -> [ForgeRepository] {
-        Self.sampleRepositories.filter { $0.owner == organization }
+        served(Self.sampleRepositories.filter { $0.owner == organization })
     }
     public func searchRepositories(_ query: String, scope: RepositoryScope) async throws -> [ForgeRepository] {
-        Self.repositories(in: scope).filter { $0.fullName.localizedCaseInsensitiveContains(query) }
+        served(Self.repositories(in: scope).filter { $0.fullName.localizedCaseInsensitiveContains(query) })
     }
     public func repositorySettings(_ repository: String) async throws -> ForgeRepositorySettings {
         ForgeRepositorySettings(fullName: repository, defaultBranch: "main", allowedMergeMethods: [.merge, .squash], permission: .write)
     }
     public func repository(_ fullName: String) async throws -> ForgeRepository {
-        guard let r = Self.sampleRepositories.first(where: { $0.fullName == fullName }) else { throw ForgeError.notFound }
+        guard let r = served(Self.sampleRepositories).first(where: { $0.fullName == fullName }) else { throw ForgeError.notFound }
         return r
     }
     public func branches(_ repository: String) async throws -> [ForgeBranch] {

@@ -321,7 +321,7 @@ struct GPUMonitorWindow: View {
         .modifier(StudioEnvironment())
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("gpu.monitorWindow")
-        .onWindowScene { scene in
+        .onActiveWindowScene { scene in
             app.replaceRestoredGPUMonitorIfResetting(scene.session) { openWindow(id: StudioScenes.workspace) }
         }
     }

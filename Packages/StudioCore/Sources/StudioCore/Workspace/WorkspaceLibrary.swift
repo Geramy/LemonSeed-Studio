@@ -103,9 +103,14 @@ public final class WorkspaceLibrary {
         let fm = FileManager.default
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? fm.createDirectory(at: support, withIntermediateDirectories: true)
-        let documents = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return WorkspaceLibrary(storageURL: support.appendingPathComponent("Workspaces.json"),
-                                projectsFolder: documents.appendingPathComponent("Projects", isDirectory: true))
+                                projectsFolder: standardProjectsFolder)
+    }
+
+    /// The standard library's projects: Documents/Projects in the app container.
+    public static var standardProjectsFolder: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Projects", isDirectory: true)
     }
 
     public func reference(id: UUID) -> WorkspaceReference? {

@@ -25,6 +25,7 @@ final class SceneRouter {
 
     init(app: AppModel = .shared) {
         self.app = app
+        app.register(self)
     }
 
     // MARK: Opening
@@ -90,7 +91,8 @@ final class SceneRouter {
     }
     func showNewProject() { isNewProjectPresented = true }
     /// Clone a repository: over the workspace when one is open (the clone
-    /// then replaces it in this window), else over the welcome screen.
+    /// then opens in a new window), else over the welcome screen (the clone
+    /// opens in this window).
     func showClone() {
         if let controller { controller.gitSheet = .clone } else { isClonePresented = true }
     }

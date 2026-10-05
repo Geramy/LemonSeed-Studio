@@ -81,6 +81,7 @@ struct WelcomeView: View {
                     .contextMenu {
                         Button("Open", systemImage: "arrow.up.forward.app") { router.open(reference) }
                         Button("Open in New Window", systemImage: "macwindow.badge.plus") {
+                            app.noteOpeningInNewWindow(reference.id)
                             openWindow(id: StudioScenes.workspace, value: reference.id)
                         }
                         Divider()

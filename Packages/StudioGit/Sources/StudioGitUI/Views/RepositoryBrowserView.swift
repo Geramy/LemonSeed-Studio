@@ -10,7 +10,8 @@ import UniformTypeIdentifiers
 public struct RepositoryBrowserView: View {
     @Bindable var model: RepositoryBrowserModel
     var onCloned: (GitRepository) -> Void
-    @State private var cloning: RepositoryBrowserModel.CloneRequest?
+    /// The clone being set up, with an identity that lasts while its sheet is up.
+    @State private var cloning: IdentifiedRequest?
     @State private var signingIn: SignInModel?
     @Environment(\.gitTheme) private var theme
 
@@ -33,14 +34,14 @@ public struct RepositoryBrowserView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    cloning = RepositoryBrowserModel.CloneRequest(url: "")
+                    cloning = IdentifiedRequest(request: RepositoryBrowserModel.CloneRequest(url: ""))
                 } label: {
                     Label("Clone by URL", systemImage: "link")
                 }
                 .accessibilityIdentifier("git.cloneByURL")
             }
         }
-        .sheet(item: Binding(get: { cloning.map(IdentifiedRequest.init) }, set: { cloning = $0?.request })) { item in
+        .sheet(item: $cloning) { item in
             NavigationStack {
                 CloneSheet(model: model, request: item.request, editableURL: item.request.httpsURL.isEmpty && item.request.sshURL == nil) { cloned in
                     cloning = nil
@@ -72,7 +73,7 @@ public struct RepositoryBrowserView: View {
             Button("Sign In…") { signingIn = SignInModel(accounts: model.services.accounts) }
                 .buttonStyle(.borderedProminent)
                 .accessibilityIdentifier("git.browser.signIn")
-            Button("Clone by URL…") { cloning = RepositoryBrowserModel.CloneRequest(url: "") }
+            Button("Clone by URL…") { cloning = IdentifiedRequest(request: RepositoryBrowserModel.CloneRequest(url: "")) }
                 .buttonStyle(.bordered)
         }
         .accessibilityElement(children: .contain)
@@ -181,7 +182,7 @@ public struct RepositoryBrowserView: View {
     private var rows: some View {
         ForEach(model.visibleRepositories) { repo in
             RepositoryRow(repo: repo) {
-                cloning = RepositoryBrowserModel.CloneRequest(repository: repo, accountID: model.account?.id)
+                cloning = IdentifiedRequest(request: RepositoryBrowserModel.CloneRequest(repository: repo, accountID: model.account?.id))
             }
             .task { await model.loadMoreIfNeeded(after: repo) }
         }

@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import UIKit
 import Observation
 import GameController
@@ -45,6 +46,27 @@ final class AppModel {
     /// The launch-argument project opens in the first window only.
     @ObservationIgnored var claimedLaunchProject = false
     @ObservationIgnored private var discardedRestoredWindows = false
+    /// Every window's router, to find which windows show a workspace.
+    @ObservationIgnored private let routers = NSHashTable<SceneRouter>.weakObjects()
+
+    func register(_ router: SceneRouter) { routers.add(router) }
+
+    /// The names of the workspaces this launch's windows show, sorted.
+    var shownWorkspaceNames: [String] {
+        routers.allObjects.compactMap { $0.controller?.displayName }.sorted()
+    }
+
+    /// Whether a window shows the workspace.
+    func isShowing(_ referenceID: UUID) -> Bool {
+        routers.allObjects.contains { $0.controller?.workspace.reference?.id == referenceID }
+    }
+
+    /// Workspaces this launch opened in new windows. A -StudioResetState
+    /// launch ignores the workspaces restored windows show, but not these.
+    @ObservationIgnored private(set) var workspacesOpenedInNewWindows: Set<UUID> = []
+
+    func noteOpeningInNewWindow(_ referenceID: UUID) { workspacesOpenedInNewWindows.insert(referenceID) }
+
     /// Set when this launch opens the GPU Monitor window, so a monitor
     /// window restored from an earlier run can be told apart.
     @ObservationIgnored var openedGPUMonitorWindow = false
@@ -58,7 +80,7 @@ final class AppModel {
         discardedRestoredWindows = true
         let application = UIApplication.shared
         for session in application.openSessions where session != keeping {
-            application.requestSceneSessionDestruction(session, options: nil)
+            Self.destroy(session)
         }
     }
 
@@ -68,7 +90,18 @@ final class AppModel {
     func replaceRestoredGPUMonitorIfResetting(_ session: UISceneSession, openWorkspace: () -> Void) {
         guard LaunchOptions.resetState, !openedGPUMonitorWindow, !discardedRestoredWindows else { return }
         openWorkspace()
-        UIApplication.shared.requestSceneSessionDestruction(session, options: nil)
+        Self.destroy(session)
+    }
+
+    private static let windowLog = Logger(subsystem: "com.geramyloveless.LemonSeedStudio", category: "windows")
+
+    /// Closes a window for good. iPadOS only accepts this once the window
+    /// asking is active (before that it knows no scene handles), so callers
+    /// run from an active window.
+    private static func destroy(_ session: UISceneSession) {
+        UIApplication.shared.requestSceneSessionDestruction(session, options: nil) { error in
+            windowLog.error("could not close window \(session.persistentIdentifier, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     private init() {
@@ -223,6 +256,9 @@ enum LaunchOptions {
     static var keyboardStress: Bool { defaults.bool(forKey: "StudioKeyboardStress") }
     /// Publishes the active document's text as an accessibility element (UI tests).
     static var exposeEditorText: Bool { defaults.bool(forKey: "StudioExposeEditorText") }
+    /// Publishes the workspaces this launch's windows show as an
+    /// accessibility element (UI tests of opening in new windows).
+    static var exposeWindows: Bool { defaults.bool(forKey: "StudioExposeWindows") }
     /// "plain" runs with only the built-in editor (tests of the fallback).
     static var editor: String? { defaults.string(forKey: "StudioEditor") }
     static var density: Density? { defaults.string(forKey: "StudioDensity").flatMap(Density.init(rawValue:)) }

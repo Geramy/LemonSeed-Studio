@@ -99,6 +99,8 @@ public struct GitHubClient: ForgeClient {
             PullRequest(number: number, title: title, body: body ?? "",
                         state: mergedAt != nil ? .merged : (state == "open" ? .open : .closed),
                         isDraft: draft ?? false, author: user?.model, repository: base.repo?.fullName ?? repository,
+                        sourceRepository: head.repo?.fullName,
+                        isCrossRepository: head.repo?.fullName != (base.repo?.fullName ?? repository),
                         sourceBranch: head.ref, targetBranch: base.ref, headSHA: head.sha, webURL: htmlUrl,
                         createdAt: createdAt, updatedAt: updatedAt, labels: labels?.map(\.name) ?? [],
                         reviewers: requestedReviewers?.map(\.login) ?? [], isMergeable: mergeable,
@@ -121,6 +123,8 @@ public struct GitHubClient: ForgeClient {
             var updatedAt: Date?
             var comments: Int?
             var labels: [Pull.Label]?
+            struct PullRef: Decodable, Sendable { var mergedAt: Date? }
+            var pullRequest: PullRef?
         }
         var items: [Item]
     }
@@ -192,73 +196,168 @@ public struct GitHubClient: ForgeClient {
         }
     }
 
+    struct RepoConnection: Decodable, Sendable {
+        struct PageInfo: Decodable, Sendable { var hasNextPage: Bool; var endCursor: String? }
+        var pageInfo: PageInfo
+        var nodes: [RepoNode]
+    }
+
+    struct RepoNode: Decodable, Sendable {
+        struct Owner: Decodable, Sendable { var login: String }
+        struct Ref: Decodable, Sendable { var name: String }
+        struct Lang: Decodable, Sendable { var name: String }
+        var id: String
+        var name: String
+        var nameWithOwner: String
+        var owner: Owner
+        var description: String?
+        var isPrivate: Bool
+        var isFork: Bool
+        var isArchived: Bool
+        var defaultBranchRef: Ref?
+        var url: URL
+        var sshUrl: String
+        var stargazerCount: Int
+        var primaryLanguage: Lang?
+        var updatedAt: Date?
+        var diskUsage: Int?
+
+        var model: ForgeRepository {
+            ForgeRepository(id: id, fullName: nameWithOwner, owner: owner.login, name: name, description: description,
+                            isPrivate: isPrivate, isFork: isFork, isArchived: isArchived, defaultBranch: defaultBranchRef?.name,
+                            httpsCloneURL: url.absoluteString + ".git", sshCloneURL: sshUrl, webURL: url,
+                            stars: stargazerCount, language: primaryLanguage?.name, updatedAt: updatedAt, sizeKB: diskUsage)
+        }
+    }
+
     struct ViewerRepos: Decodable, Sendable {
-        struct Viewer: Decodable, Sendable { var repositories: Connection }
-        struct Connection: Decodable, Sendable {
-            struct PageInfo: Decodable, Sendable { var hasNextPage: Bool; var endCursor: String? }
-            var pageInfo: PageInfo
-            var nodes: [Node]
-        }
-        struct Node: Decodable, Sendable {
-            struct Owner: Decodable, Sendable { var login: String }
-            struct Ref: Decodable, Sendable { var name: String }
-            struct Lang: Decodable, Sendable { var name: String }
-            var id: String
-            var name: String
-            var nameWithOwner: String
-            var owner: Owner
-            var description: String?
-            var isPrivate: Bool
-            var isFork: Bool
-            var isArchived: Bool
-            var defaultBranchRef: Ref?
-            var url: URL
-            var sshUrl: String
-            var stargazerCount: Int
-            var primaryLanguage: Lang?
-            var updatedAt: Date?
-            var diskUsage: Int?
-        }
+        struct Viewer: Decodable, Sendable { var repositories: RepoConnection }
         var viewer: Viewer
     }
 
+    struct OwnerRepos: Decodable, Sendable {
+        struct Owner: Decodable, Sendable { var repositories: RepoConnection }
+        var repositoryOwner: Owner?
+    }
+
+    static let repositoryFields = """
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      id name nameWithOwner owner { login } description isPrivate isFork isArchived
+      defaultBranchRef { name } url sshUrl stargazerCount primaryLanguage { name } updatedAt diskUsage
+    }
+    """
+
     static let viewerRepositoriesQuery = """
-    query($after: String) {
+    query($after: String, $affiliations: [RepositoryAffiliation]) {
       viewer {
         repositories(first: 50, after: $after, orderBy: {field: UPDATED_AT, direction: DESC},
-                     ownerAffiliations: [OWNER, COLLABORATOR, ORGANIZATION_MEMBER]) {
-          pageInfo { hasNextPage endCursor }
-          nodes {
-            id name nameWithOwner owner { login } description isPrivate isFork isArchived
-            defaultBranchRef { name } url sshUrl stargazerCount primaryLanguage { name } updatedAt diskUsage
-          }
+                     ownerAffiliations: $affiliations) {
+          \(repositoryFields)
         }
       }
     }
     """
 
-    /// Lists the viewer's repositories through GraphQL (one round trip per
-    /// 50 repositories, owner/collaborator/organization member).
-    public func repositories(cursor: String?) async throws -> ForgePage<ForgeRepository> {
-        let data = try await http.graphQL(ViewerRepos.self, url: host.graphQLURL, query: Self.viewerRepositoriesQuery,
-                                          variables: ["after": cursor.map(GraphQLValue.string) ?? .null])
-        let conn = data.viewer.repositories
-        let items = conn.nodes.map { n in
-            ForgeRepository(id: n.id, fullName: n.nameWithOwner, owner: n.owner.login, name: n.name, description: n.description,
-                            isPrivate: n.isPrivate, isFork: n.isFork, isArchived: n.isArchived, defaultBranch: n.defaultBranchRef?.name,
-                            httpsCloneURL: n.url.absoluteString + ".git", sshCloneURL: n.sshUrl, webURL: n.url,
-                            stars: n.stargazerCount, language: n.primaryLanguage?.name, updatedAt: n.updatedAt, sizeKB: n.diskUsage)
+    static let ownerRepositoriesQuery = """
+    query($login: String!, $after: String) {
+      repositoryOwner(login: $login) {
+        repositories(first: 50, after: $after, orderBy: {field: UPDATED_AT, direction: DESC}) {
+          \(repositoryFields)
         }
-        return ForgePage(items: items, nextCursor: conn.pageInfo.hasNextPage ? conn.pageInfo.endCursor : nil)
+      }
+    }
+    """
+
+    /// Lists repositories through GraphQL, 50 per round trip. `.all` is the
+    /// viewer's own, collaborator and organization-member repositories;
+    /// `.organization` is any organization's or user's repositories the
+    /// token can see.
+    public func repositories(_ scope: RepositoryScope, cursor: String?) async throws -> ForgePage<ForgeRepository> {
+        let after = cursor.map(GraphQLValue.string) ?? .null
+        let connection: RepoConnection
+        switch scope {
+        case .all, .owned:
+            let affiliations: [String] = scope == .owned ? ["OWNER"] : ["OWNER", "COLLABORATOR", "ORGANIZATION_MEMBER"]
+            connection = try await http.graphQL(ViewerRepos.self, url: host.graphQLURL, query: Self.viewerRepositoriesQuery,
+                                                variables: ["after": after, "affiliations": .list(affiliations.map(GraphQLValue.string))])
+                .viewer.repositories
+        case .organization(let login):
+            let data = try await http.graphQL(OwnerRepos.self, url: host.graphQLURL, query: Self.ownerRepositoriesQuery,
+                                              variables: ["login": .string(login), "after": after])
+            guard let owner = data.repositoryOwner else { throw ForgeError.validation("No GitHub account or organization named \(login).") }
+            connection = owner.repositories
+        }
+        return ForgePage(items: connection.nodes.map(\.model),
+                         nextCursor: connection.pageInfo.hasNextPage ? connection.pageInfo.endCursor : nil)
     }
 
     public func repositories(organization: String) async throws -> [ForgeRepository] {
         try await http.getAll(Repo.self, "orgs/\(organization)/repos", query: ["per_page": "100", "sort": "updated"]).map(\.model)
     }
 
-    public func searchRepositories(_ query: String) async throws -> [ForgeRepository] {
+    public func searchRepositories(_ query: String, scope: RepositoryScope) async throws -> [ForgeRepository] {
         struct Result: Decodable, Sendable { var items: [Repo] }
-        return try await http.get(Result.self, "search/repositories", query: ["q": query, "per_page": "30"]).items.map(\.model)
+        let q: String
+        switch scope {
+        case .all: q = query
+        case .owned: q = "\(query) user:\(try await currentUser().login) fork:true"
+        case .organization(let login): q = "\(query) user:\(login) fork:true"
+        }
+        return try await http.get(Result.self, "search/repositories", query: ["q": q, "per_page": "50"]).items.map(\.model)
+    }
+
+    struct SettingsData: Decodable, Sendable {
+        struct Repo: Decodable, Sendable {
+            struct Ref: Decodable, Sendable { var name: String }
+            var nameWithOwner: String
+            var defaultBranchRef: Ref?
+            var mergeCommitAllowed: Bool
+            var squashMergeAllowed: Bool
+            var rebaseMergeAllowed: Bool
+            var viewerPermission: String?
+            var isArchived: Bool
+        }
+        var repository: Repo?
+    }
+
+    public func repositorySettings(_ repository: String) async throws -> ForgeRepositorySettings {
+        let (owner, name) = try Self.split(repository)
+        let query = """
+        query($owner: String!, $name: String!) {
+          repository(owner: $owner, name: $name) {
+            nameWithOwner defaultBranchRef { name } mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerPermission isArchived
+          }
+        }
+        """
+        let data = try await http.graphQL(SettingsData.self, url: host.graphQLURL, query: query,
+                                          variables: ["owner": .string(owner), "name": .string(name)])
+        guard let r = data.repository else { throw ForgeError.notFound }
+        var methods: [MergeMethod] = []
+        if r.mergeCommitAllowed { methods.append(.merge) }
+        if r.squashMergeAllowed { methods.append(.squash) }
+        if r.rebaseMergeAllowed { methods.append(.rebase) }
+        return ForgeRepositorySettings(fullName: r.nameWithOwner, defaultBranch: r.defaultBranchRef?.name, allowedMergeMethods: methods,
+                                       permission: Self.permission(r.viewerPermission), isArchived: r.isArchived)
+    }
+
+    static func permission(_ value: String?) -> ForgePermission {
+        switch value {
+        case "ADMIN": return .admin
+        case "MAINTAIN": return .maintain
+        case "WRITE": return .write
+        case "TRIAGE": return .triage
+        case "READ": return .read
+        default: return .none
+        }
+    }
+
+    static func split(_ repository: String) throws -> (String, String) {
+        let parts = repository.split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2, !parts[0].isEmpty, !parts[1].isEmpty else {
+            throw ForgeError.validation("\(repository) is not an owner/name repository.")
+        }
+        return (parts[0], parts[1])
     }
 
     public func repository(_ fullName: String) async throws -> ForgeRepository {
@@ -296,10 +395,22 @@ public struct GitHubClient: ForgeClient {
             let pulls = try await http.getAll(Pull.self, "repos/\(repo)/pulls", query: ["state": s, "per_page": "50"], maxPages: 2)
             let mapped = pulls.map { $0.model(repository: repo) }
             return state == .merged ? mapped.filter { $0.state == .merged } : mapped
+        case .repositoryAuthoredByMe(let repo, let state):
+            return try await searchPulls("is:pr repo:\(repo) author:@me \(Self.searchState(state))")
+        case .repositoryReviewRequested(let repo):
+            return try await searchPulls("is:pr repo:\(repo) is:open review-requested:@me")
         case .authoredByMe:
             return try await searchPulls("is:pr is:open author:@me archived:false")
         case .reviewRequested:
             return try await searchPulls("is:pr is:open review-requested:@me archived:false")
+        }
+    }
+
+    static func searchState(_ state: PullRequestState) -> String {
+        switch state {
+        case .open: return "is:open"
+        case .closed: return "is:closed is:unmerged"
+        case .merged: return "is:merged"
         }
     }
 
@@ -308,7 +419,8 @@ public struct GitHubClient: ForgeClient {
         return result.items.map { item in
             let repo = item.repositoryUrl.components(separatedBy: "/repos/").last ?? ""
             return PullRequest(number: item.number, title: item.title, body: item.body ?? "",
-                               state: item.state == "open" ? .open : .closed, isDraft: item.draft ?? false,
+                               state: item.pullRequest?.mergedAt != nil ? .merged : (item.state == "open" ? .open : .closed),
+                               isDraft: item.draft ?? false,
                                author: item.user?.model, repository: repo, sourceBranch: "", targetBranch: "",
                                webURL: item.htmlUrl, createdAt: item.createdAt, updatedAt: item.updatedAt,
                                labels: item.labels?.map(\.name) ?? [], commentCount: item.comments)
@@ -330,6 +442,25 @@ public struct GitHubClient: ForgeClient {
             }
             return PullRequestFile(path: f.filename, previousPath: f.previousFilename, status: status,
                                    additions: f.additions, deletions: f.deletions, patch: f.patch)
+        }
+    }
+
+    struct PullCommit: Decodable, Sendable {
+        struct Inner: Decodable, Sendable {
+            struct Person: Decodable, Sendable { var name: String?; var date: Date? }
+            var message: String
+            var author: Person?
+        }
+        struct Login: Decodable, Sendable { var login: String }
+        var sha: String
+        var commit: Inner
+        var author: Login?
+    }
+
+    public func pullRequestCommits(_ repository: String, number: Int) async throws -> [ForgeCommit] {
+        try await http.getAll(PullCommit.self, "repos/\(repository)/pulls/\(number)/commits", query: ["per_page": "100"], maxPages: 3).map { c in
+            ForgeCommit(sha: c.sha, message: c.commit.message, authorName: c.commit.author?.name ?? c.author?.login ?? "",
+                        authorLogin: c.author?.login, date: c.commit.author?.date)
         }
     }
 
@@ -384,9 +515,36 @@ public struct GitHubClient: ForgeClient {
             var base: String
             var draft: Bool
         }
-        return try await http.post(Pull.self, "repos/\(repository)/pulls",
-                                   body: Body(title: draft.title, body: draft.body, head: draft.sourceBranch,
-                                              base: draft.targetBranch, draft: draft.isDraft)).model(repository: repository)
+        var head = draft.sourceBranch
+        if let source = draft.sourceRepository, source.caseInsensitiveCompare(repository) != .orderedSame {
+            head = "\(try Self.split(source).0):\(draft.sourceBranch)"
+        }
+        let created = try await http.post(Pull.self, "repos/\(repository)/pulls",
+                                          body: Body(title: draft.title, body: draft.body, head: head,
+                                                     base: draft.targetBranch, draft: draft.isDraft)).model(repository: repository)
+        var failures: [String] = []
+        var result = created
+        if !draft.reviewers.isEmpty {
+            struct Reviewers: Encodable, Sendable { var reviewers: [String] }
+            do {
+                result = try await http.post(Pull.self, "repos/\(repository)/pulls/\(created.number)/requested_reviewers",
+                                             body: Reviewers(reviewers: draft.reviewers)).model(repository: repository)
+            } catch {
+                failures.append("requesting reviews from \(draft.reviewers.joined(separator: ", ")) failed: \(error)")
+            }
+        }
+        if !draft.labels.isEmpty {
+            struct Labels: Encodable, Sendable { var labels: [String] }
+            struct Label: Decodable, Sendable { var name: String }
+            do {
+                result.labels = try await http.post([Label].self, "repos/\(repository)/issues/\(created.number)/labels",
+                                                    body: Labels(labels: draft.labels)).map(\.name)
+            } catch {
+                failures.append("adding labels \(draft.labels.joined(separator: ", ")) failed: \(error)")
+            }
+        }
+        if !failures.isEmpty { throw PartialPullRequestError(pullRequest: result, failures: failures) }
+        return result
     }
 
     public func review(_ repository: String, number: Int, event: ReviewEvent, body: String) async throws {
@@ -404,6 +562,13 @@ public struct GitHubClient: ForgeClient {
         struct Body: Encodable, Sendable { var mergeMethod: String; var commitMessage: String? }
         try await http.send("PUT", "repos/\(repository)/pulls/\(number)/merge",
                             body: Body(mergeMethod: method.rawValue, commitMessage: commitMessage))
+    }
+
+    @discardableResult
+    public func setPullRequestState(_ repository: String, number: Int, open: Bool) async throws -> PullRequest {
+        struct Body: Encodable, Sendable { var state: String }
+        return try await http.patch(Pull.self, "repos/\(repository)/pulls/\(number)", body: Body(state: open ? "open" : "closed"))
+            .model(repository: repository)
     }
 
     // MARK: CI
@@ -486,13 +651,7 @@ public struct GitHubClient: ForgeClient {
 
     // MARK: GraphQL review threads
 
-    public struct ReviewThread: Sendable, Hashable, Identifiable {
-        public var id: String
-        public var path: String
-        public var line: Int?
-        public var isResolved: Bool
-        public var comments: [PullRequestComment]
-    }
+    public typealias ReviewThread = Forge.ReviewThread
 
     struct ThreadsData: Decodable, Sendable {
         struct Repo: Decodable, Sendable { var pullRequest: PR }
@@ -518,8 +677,7 @@ public struct GitHubClient: ForgeClient {
 
     /// Review threads with their resolved state (GraphQL only).
     public func reviewThreads(_ repository: String, number: Int) async throws -> [ReviewThread] {
-        let parts = repository.split(separator: "/", maxSplits: 1).map(String.init)
-        guard parts.count == 2 else { throw ForgeError.notFound }
+        let (owner, name) = try Self.split(repository)
         let query = """
         query($owner: String!, $name: String!, $number: Int!) {
           repository(owner: $owner, name: $name) {
@@ -532,7 +690,7 @@ public struct GitHubClient: ForgeClient {
         }
         """
         let data = try await http.graphQL(ThreadsData.self, url: host.graphQLURL, query: query,
-                                          variables: ["owner": .string(parts[0]), "name": .string(parts[1]), "number": .int(number)])
+                                          variables: ["owner": .string(owner), "name": .string(name), "number": .int(number)])
         return data.repository.pullRequest.reviewThreads.nodes.map { t in
             ReviewThread(id: t.id, path: t.path, line: t.line, isResolved: t.isResolved, comments: t.comments.nodes.map { c in
                 PullRequestComment(id: c.id, author: c.author.map { ForgeUser(id: $0.login, login: $0.login, avatarURL: $0.avatarUrl) },

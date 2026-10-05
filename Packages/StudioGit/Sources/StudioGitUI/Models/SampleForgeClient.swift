@@ -9,8 +9,17 @@ public final class SampleForgeClient: ForgeClient, @unchecked Sendable {
     private var postedComments: [PullRequestComment] = []
     public private(set) var reviews: [ReviewEvent] = []
     public private(set) var merged: [Int] = []
+    public private(set) var closed: [Int] = []
+    public private(set) var createdDrafts: [PullRequestDraft] = []
 
-    public init(host: ForgeHost = .github) { self.host = host }
+    /// Repositories per page (nil: one page), to exercise paging.
+    public let pageSize: Int?
+    public private(set) var requestedScopes: [RepositoryScope] = []
+
+    public init(host: ForgeHost = .github, pageSize: Int? = nil) {
+        self.host = host
+        self.pageSize = pageSize
+    }
 
     /// An account to pair with the sample client.
     public static let sampleAccount = ForgeAccount(host: .github, user: alice, method: .oauthDevice,
@@ -35,10 +44,19 @@ public final class SampleForgeClient: ForgeClient, @unchecked Sendable {
                         description: "Design notes", isPrivate: true, defaultBranch: "main",
                         httpsCloneURL: "https://github.com/alice/lemonseed-notes.git", stars: 3, language: "Markdown",
                         updatedAt: date.addingTimeInterval(-3 * 86_400)),
-        ForgeRepository(id: "R4", fullName: "Geramy/LSE", owner: "Geramy", name: "LSE",
-                        description: "LemonSeed Engine: LLM inference on AMD GPUs", defaultBranch: "main",
-                        httpsCloneURL: "https://github.com/Geramy/LSE.git", stars: 57, language: "C++",
+        ForgeRepository(id: "R4", fullName: "alice/LSE", owner: "alice", name: "LSE",
+                        description: "Fork: LemonSeed Engine, LLM inference on AMD GPUs", isFork: true, defaultBranch: "main",
+                        httpsCloneURL: "https://github.com/alice/LSE.git", stars: 2, language: "C++",
                         updatedAt: date.addingTimeInterval(-6 * 86_400), sizeKB: 54_000),
+        ForgeRepository(id: "R5", fullName: "lemonade-sdk/lemonseed-site", owner: "lemonade-sdk", name: "lemonseed-site",
+                        description: "The project website", isPrivate: true, defaultBranch: "main",
+                        httpsCloneURL: "https://github.com/lemonade-sdk/lemonseed-site.git",
+                        sshCloneURL: "git@github.com:lemonade-sdk/lemonseed-site.git", stars: 9, language: "TypeScript",
+                        updatedAt: date.addingTimeInterval(-9 * 86_400), sizeKB: 8_100),
+        ForgeRepository(id: "R6", fullName: "alice/gpu-notes-2024", owner: "alice", name: "gpu-notes-2024",
+                        description: "Last year's experiments", isArchived: true, defaultBranch: "main",
+                        httpsCloneURL: "https://github.com/alice/gpu-notes-2024.git", stars: 1, language: "Python",
+                        updatedAt: date.addingTimeInterval(-300 * 86_400), sizeKB: 900),
     ]
 
     public static let samplePulls: [PullRequest] = [
@@ -81,14 +99,29 @@ public final class SampleForgeClient: ForgeClient, @unchecked Sendable {
     public func organizations() async throws -> [ForgeOrganization] {
         [ForgeOrganization(id: "O1", login: "lemonade-sdk", name: "Lemonade SDK", avatarURL: nil)]
     }
-    public func repositories(cursor: String?) async throws -> ForgePage<ForgeRepository> {
-        ForgePage(items: Self.sampleRepositories, nextCursor: nil)
+    public func repositories(_ scope: RepositoryScope, cursor: String?) async throws -> ForgePage<ForgeRepository> {
+        lock.withLock { requestedScopes.append(scope) }
+        let all = Self.repositories(in: scope)
+        guard let pageSize else { return ForgePage(items: all, nextCursor: nil) }
+        let start = Int(cursor ?? "0") ?? 0
+        let end = min(start + pageSize, all.count)
+        return ForgePage(items: Array(all[start..<end]), nextCursor: end < all.count ? String(end) : nil)
+    }
+    static func repositories(in scope: RepositoryScope) -> [ForgeRepository] {
+        switch scope {
+        case .all: return sampleRepositories
+        case .owned: return sampleRepositories.filter { $0.owner == "alice" }
+        case .organization(let login): return sampleRepositories.filter { $0.owner == login }
+        }
     }
     public func repositories(organization: String) async throws -> [ForgeRepository] {
         Self.sampleRepositories.filter { $0.owner == organization }
     }
-    public func searchRepositories(_ query: String) async throws -> [ForgeRepository] {
-        Self.sampleRepositories.filter { $0.fullName.localizedCaseInsensitiveContains(query) }
+    public func searchRepositories(_ query: String, scope: RepositoryScope) async throws -> [ForgeRepository] {
+        Self.repositories(in: scope).filter { $0.fullName.localizedCaseInsensitiveContains(query) }
+    }
+    public func repositorySettings(_ repository: String) async throws -> ForgeRepositorySettings {
+        ForgeRepositorySettings(fullName: repository, defaultBranch: "main", allowedMergeMethods: [.merge, .squash], permission: .write)
     }
     public func repository(_ fullName: String) async throws -> ForgeRepository {
         guard let r = Self.sampleRepositories.first(where: { $0.fullName == fullName }) else { throw ForgeError.notFound }
@@ -103,7 +136,10 @@ public final class SampleForgeClient: ForgeClient, @unchecked Sendable {
 
     public func pullRequests(_ filter: PullRequestFilter) async throws -> [PullRequest] {
         switch filter {
-        case .repository(let repo, _): return Self.samplePulls.filter { $0.repository == repo }
+        case .repository(let repo, let state): return Self.samplePulls.filter { $0.repository == repo && $0.state == state }
+        case .repositoryAuthoredByMe(let repo, let state):
+            return Self.samplePulls.filter { $0.repository == repo && $0.state == state && $0.author?.login == "alice" }
+        case .repositoryReviewRequested(let repo): return Self.samplePulls.filter { $0.repository == repo && $0.reviewers.contains("alice") }
         case .authoredByMe: return Self.samplePulls.filter { $0.author?.login == "alice" }
         case .reviewRequested: return Self.samplePulls.filter { $0.reviewers.contains("alice") }
         }
@@ -120,6 +156,25 @@ public final class SampleForgeClient: ForgeClient, @unchecked Sendable {
                          patch: "@@ -0,0 +1,6 @@\n+import SwiftUI\n+\n+/// A tiny line chart of recent samples.\n+struct Sparkline: View {\n+    var samples: [Double]\n+    var body: some View { Canvas { _, _ in } }")]
     }
     public func pullRequestDiff(_ repository: String, number: Int) async throws -> String { Self.samplePatch }
+    public func pullRequestCommits(_ repository: String, number: Int) async throws -> [ForgeCommit] {
+        [ForgeCommit(sha: "9f3c2a1b7e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b", message: "Add Sparkline view", authorName: "Alice Moreau",
+                     authorLogin: "alice", date: Self.date.addingTimeInterval(-9000)),
+         ForgeCommit(sha: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", message: "QueueRow: show occupancy history\n\nSamples at 10 Hz.",
+                     authorName: "Alice Moreau", authorLogin: "alice", date: Self.date.addingTimeInterval(-7400))]
+    }
+    public func reviewThreads(_ repository: String, number: Int) async throws -> [ReviewThread] {
+        let comments = try await self.comments(repository, number: number).filter { $0.threadID != nil }
+        return Dictionary(grouping: comments, by: { $0.threadID! }).map { id, items in
+            ReviewThread(id: id, path: items[0].path ?? "", line: items[0].line, isResolved: false, comments: items)
+        }
+    }
+    @discardableResult
+    public func setPullRequestState(_ repository: String, number: Int, open: Bool) async throws -> PullRequest {
+        var pr = try await pullRequest(repository, number: number)
+        pr.state = open ? .open : .closed
+        if !open { lock.withLock { closed.append(number) } }
+        return pr
+    }
     public func comments(_ repository: String, number: Int) async throws -> [PullRequestComment] {
         let base = [
             PullRequestComment(id: "c1", author: Self.bob, body: "Nice! Does the sparkline pause when the screen is hidden?",
@@ -145,7 +200,8 @@ public final class SampleForgeClient: ForgeClient, @unchecked Sendable {
         return c
     }
     public func createPullRequest(_ repository: String, _ draft: PullRequestDraft) async throws -> PullRequest {
-        PullRequest(number: 43, title: draft.title, body: draft.body, author: Self.alice, repository: repository,
+        lock.withLock { createdDrafts.append(draft) }
+        return PullRequest(number: 43, title: draft.title, body: draft.body, author: Self.alice, repository: repository,
                     sourceBranch: draft.sourceBranch, targetBranch: draft.targetBranch)
     }
     public func review(_ repository: String, number: Int, event: ReviewEvent, body: String) async throws {

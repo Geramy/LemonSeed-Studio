@@ -51,12 +51,16 @@ public struct PushOptions: Sendable {
     public var extraRefspecs: [String] = []
     /// Upload Git LFS objects referenced by the pushed branch first.
     public var lfs = true
-    public init(remote: String = "origin", force: Bool = false, setUpstream: Bool = false, extraRefspecs: [String] = [], lfs: Bool = true) {
+    /// The branch name on the remote; nil pushes to the same name.
+    public var remoteBranch: String?
+    public init(remote: String = "origin", force: Bool = false, setUpstream: Bool = false, extraRefspecs: [String] = [], lfs: Bool = true,
+                remoteBranch: String? = nil) {
         self.remote = remote
         self.force = force
         self.setUpstream = setUpstream
         self.extraRefspecs = extraRefspecs
         self.lfs = lfs
+        self.remoteBranch = remoteBranch
     }
 }
 
@@ -178,7 +182,7 @@ extension GitRepository {
         }
         var refspecs = options.extraRefspecs
         if let branchName {
-            refspecs.insert("\(options.force ? "+" : "")refs/heads/\(branchName):refs/heads/\(branchName)", at: 0)
+            refspecs.insert("\(options.force ? "+" : "")refs/heads/\(branchName):refs/heads/\(options.remoteBranch ?? branchName)", at: 0)
         }
         guard !refspecs.isEmpty else { throw GitError.invalid("nothing to push (detached HEAD)", "push") }
         if options.lfs, let branchName, try await !lfsFiles(at: "refs/heads/\(branchName)").isEmpty {
@@ -210,7 +214,7 @@ extension GitRepository {
         context.report(force: true) { $0.phase = .done }
         await reopen()
         if options.setUpstream, let branchName {
-            try await setUpstream(of: branchName, to: "\(remoteName)/\(branchName)")
+            try await setUpstream(of: branchName, to: "\(remoteName)/\(options.remoteBranch ?? branchName)")
         }
     }
 

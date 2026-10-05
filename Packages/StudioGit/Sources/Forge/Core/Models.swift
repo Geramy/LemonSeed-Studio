@@ -116,6 +116,11 @@ public struct PullRequest: Codable, Sendable, Hashable, Identifiable {
     public var author: ForgeUser?
     /// `owner/name` of the repository the request targets.
     public var repository: String
+    /// `owner/name` of the repository the source branch lives in, when the
+    /// forge reports it (nil for a deleted fork or an unnamed GitLab fork).
+    public var sourceRepository: String?
+    /// Whether the source branch lives in another repository (a fork).
+    public var isCrossRepository: Bool
     public var sourceBranch: String
     public var targetBranch: String
     public var headSHA: String?
@@ -134,7 +139,8 @@ public struct PullRequest: Codable, Sendable, Hashable, Identifiable {
     public var id: String { "\(repository)#\(number)" }
 
     public init(number: Int, title: String, body: String = "", state: PullRequestState = .open, isDraft: Bool = false,
-                author: ForgeUser? = nil, repository: String, sourceBranch: String, targetBranch: String, headSHA: String? = nil,
+                author: ForgeUser? = nil, repository: String, sourceRepository: String? = nil, isCrossRepository: Bool = false,
+                sourceBranch: String, targetBranch: String, headSHA: String? = nil,
                 webURL: URL? = nil, createdAt: Date? = nil, updatedAt: Date? = nil, labels: [String] = [], reviewers: [String] = [],
                 isMergeable: Bool? = nil, additions: Int? = nil, deletions: Int? = nil, changedFiles: Int? = nil, commentCount: Int? = nil) {
         self.number = number
@@ -144,6 +150,8 @@ public struct PullRequest: Codable, Sendable, Hashable, Identifiable {
         self.isDraft = isDraft
         self.author = author
         self.repository = repository
+        self.sourceRepository = sourceRepository
+        self.isCrossRepository = isCrossRepository
         self.sourceBranch = sourceBranch
         self.targetBranch = targetBranch
         self.headSHA = headSHA
@@ -161,11 +169,15 @@ public struct PullRequest: Codable, Sendable, Hashable, Identifiable {
 }
 
 public enum PullRequestFilter: Sendable, Hashable {
-    /// Open requests in one repository.
+    /// Requests in one repository (open by default).
     case repository(String, state: PullRequestState = .open)
-    /// Open requests the signed-in user authored.
+    /// Requests in one repository that the signed-in user authored.
+    case repositoryAuthoredByMe(String, state: PullRequestState = .open)
+    /// Open requests in one repository waiting for the signed-in user's review.
+    case repositoryReviewRequested(String)
+    /// Open requests the signed-in user authored, in every repository.
     case authoredByMe
-    /// Open requests waiting for the signed-in user's review.
+    /// Open requests waiting for the signed-in user's review, in every repository.
     case reviewRequested
 }
 
@@ -230,12 +242,138 @@ public struct PullRequestDraft: Sendable, Hashable {
     public var sourceBranch: String
     public var targetBranch: String
     public var isDraft: Bool
-    public init(title: String, body: String = "", sourceBranch: String, targetBranch: String, isDraft: Bool = false) {
+    /// Logins (GitHub) or usernames (GitLab) to request reviews from.
+    public var reviewers: [String]
+    public var labels: [String]
+    /// `owner/name` of the repository holding `sourceBranch` when it is not
+    /// the target repository (a fork); nil for a branch in the target.
+    public var sourceRepository: String?
+    public init(title: String, body: String = "", sourceBranch: String, targetBranch: String, isDraft: Bool = false,
+                reviewers: [String] = [], labels: [String] = [], sourceRepository: String? = nil) {
         self.title = title
         self.body = body
         self.sourceBranch = sourceBranch
         self.targetBranch = targetBranch
         self.isDraft = isDraft
+        self.reviewers = reviewers
+        self.labels = labels
+        self.sourceRepository = sourceRepository
+    }
+}
+
+/// A request was created, but a follow-up step (reviewers, labels) failed.
+/// The request exists on the forge; `failures` says what is missing.
+public struct PartialPullRequestError: Error, Sendable, LocalizedError, CustomStringConvertible {
+    public var pullRequest: PullRequest
+    public var failures: [String]
+    public init(pullRequest: PullRequest, failures: [String]) {
+        self.pullRequest = pullRequest
+        self.failures = failures
+    }
+    public var description: String {
+        "Opened #\(pullRequest.number), but: " + failures.joined(separator: "; ")
+    }
+    public var errorDescription: String? { description }
+}
+
+/// Which repositories to list.
+public enum RepositoryScope: Sendable, Hashable {
+    /// Everything the user can reach: their own, collaborations, and the
+    /// repositories of their organizations or groups.
+    case all
+    /// Repositories the signed-in user owns.
+    case owned
+    /// One GitHub organization (or user) or GitLab group, with subgroups.
+    case organization(String)
+}
+
+/// The signed-in user's role in a repository, lowest to highest.
+public enum ForgePermission: Int, Sendable, Hashable, Comparable, Codable {
+    /// No access the forge reports (public repository, not a member).
+    case none
+    /// Read and comment (GitHub read, GitLab guest).
+    case read
+    /// Manage issues and requests without pushing (GitHub triage, GitLab reporter).
+    case triage
+    /// Push branches and merge unprotected ones (GitHub write, GitLab developer).
+    case write
+    /// GitHub maintain, GitLab maintainer.
+    case maintain
+    /// GitHub admin, GitLab owner.
+    case admin
+
+    public static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .none: return "No access"
+        case .read: return "Read"
+        case .triage: return "Triage"
+        case .write: return "Write"
+        case .maintain: return "Maintain"
+        case .admin: return "Admin"
+        }
+    }
+}
+
+/// What the signed-in user may do in a repository and how requests merge.
+public struct ForgeRepositorySettings: Sendable, Hashable {
+    public var fullName: String
+    public var defaultBranch: String?
+    /// The merge methods the repository allows, in the forge's order.
+    public var allowedMergeMethods: [MergeMethod]
+    public var permission: ForgePermission
+    public var isArchived: Bool
+
+    public init(fullName: String, defaultBranch: String? = nil, allowedMergeMethods: [MergeMethod], permission: ForgePermission,
+                isArchived: Bool = false) {
+        self.fullName = fullName
+        self.defaultBranch = defaultBranch
+        self.allowedMergeMethods = allowedMergeMethods
+        self.permission = permission
+        self.isArchived = isArchived
+    }
+
+    /// Push branches (and so merge, close and reopen requests).
+    public var canPush: Bool { permission >= .write && !isArchived }
+    /// Close or reopen other people's requests.
+    public var canTriage: Bool { permission >= .triage && !isArchived }
+}
+
+/// A commit as a forge reports it (pull request commit lists).
+public struct ForgeCommit: Codable, Sendable, Hashable, Identifiable {
+    public var sha: String
+    public var message: String
+    public var authorName: String
+    public var authorLogin: String?
+    public var date: Date?
+    public var id: String { sha }
+    public var summary: String { String(message.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first ?? "") }
+    public var shortSHA: String { String(sha.prefix(7)) }
+
+    public init(sha: String, message: String, authorName: String, authorLogin: String? = nil, date: Date? = nil) {
+        self.sha = sha
+        self.message = message
+        self.authorName = authorName
+        self.authorLogin = authorLogin
+        self.date = date
+    }
+}
+
+/// A review thread on a pull/merge request diff, with its resolved state.
+public struct ReviewThread: Sendable, Hashable, Identifiable {
+    public var id: String
+    public var path: String
+    public var line: Int?
+    public var isResolved: Bool
+    public var comments: [PullRequestComment]
+
+    public init(id: String, path: String, line: Int?, isResolved: Bool, comments: [PullRequestComment]) {
+        self.id = id
+        self.path = path
+        self.line = line
+        self.isResolved = isResolved
+        self.comments = comments
     }
 }
 

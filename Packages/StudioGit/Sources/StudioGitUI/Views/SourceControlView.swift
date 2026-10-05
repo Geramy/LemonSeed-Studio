@@ -6,20 +6,38 @@ import GitKit
 /// its diff (or merge editor) in `SourceControlDetailView`.
 public struct SourceControlView: View {
     @Bindable var model: SourceControlModel
+    /// When set (a narrow sidebar with no room for the diff), selecting a
+    /// file calls this with its path and whether it is staged instead of
+    /// showing the diff beside the list.
+    var onOpenChange: ((String, Bool) -> Void)?
+    /// Opens the pull request composer for the current branch.
+    var onCreatePullRequest: (() -> Void)?
     @Environment(\.gitTheme) private var theme
     @State private var confirmDiscard: [StatusEntry]?
 
-    public init(model: SourceControlModel) {
+    public init(model: SourceControlModel, onOpenChange: ((String, Bool) -> Void)? = nil, onCreatePullRequest: (() -> Void)? = nil) {
         self.model = model
+        self.onOpenChange = onOpenChange
+        self.onCreatePullRequest = onCreatePullRequest
     }
 
     public var body: some View {
         List(selection: selectionBinding) {
             Section {
                 VStack(alignment: .leading, spacing: 10) {
-                    BranchBar(model: model)
-                    OperationBanner(model: model)
+                    BranchBar(model: model, onCreatePullRequest: onCreatePullRequest)
+                    OperationBanner(model: model, onResolve: onOpenChange.map { open in
+                        { if let first = model.conflicted.first { open(first.path, false) } }
+                    })
                     CommitBox(model: model)
+                    if let notice = model.notice {
+                        HStack(alignment: .top) {
+                            Label(notice, systemImage: "checkmark.circle.fill").font(.caption).foregroundStyle(theme.added)
+                            Spacer(minLength: 0)
+                            Button { model.notice = nil } label: { Image(systemName: "xmark").font(.caption2) }
+                                .buttonStyle(.plain).accessibilityLabel("Dismiss")
+                        }
+                    }
                     ErrorBanner(message: $model.errorMessage)
                 }
                 .listRowSeparator(.hidden)
@@ -87,8 +105,12 @@ public struct SourceControlView: View {
     }
 
     private var selectionBinding: Binding<SourceControlModel.Selection?> {
-        Binding(get: { model.selection }, set: { newValue in
+        Binding(get: { onOpenChange == nil ? model.selection : nil }, set: { newValue in
             guard let newValue else { model.selection = nil; return }
+            if let onOpenChange {
+                onOpenChange(newValue.path, newValue.staged)
+                return
+            }
             let entry = (newValue.staged ? model.staged : model.unstaged + model.conflicted).first { $0.path == newValue.path }
             if let entry { Task { await model.select(entry, staged: newValue.staged) } }
         })
@@ -147,6 +169,7 @@ public struct SourceControlView: View {
 /// Branch picker, sync button with ahead/behind, fetch and stash.
 struct BranchBar: View {
     @Bindable var model: SourceControlModel
+    var onCreatePullRequest: (() -> Void)?
     @State private var showBranches = false
 
     var body: some View {
@@ -159,9 +182,10 @@ struct BranchBar: View {
                     .font(.callout.weight(.semibold))
             }
             .buttonStyle(.bordered)
+            .accessibilityIdentifier("git.branchButton")
             .popover(isPresented: $showBranches) {
-                BranchPickerView(model: model) { showBranches = false }
-                    .frame(minWidth: 320, minHeight: 420)
+                BranchPickerView(model: model, dismiss: { showBranches = false }, onCreatePullRequest: onCreatePullRequest)
+                    .frame(minWidth: 360, minHeight: 480)
             }
             Spacer(minLength: 0)
             if case .running(let progress) = model.sync {
@@ -203,6 +227,8 @@ struct BranchBar: View {
 /// Shown while a merge, rebase, cherry-pick or revert waits for the user.
 struct OperationBanner: View {
     @Bindable var model: SourceControlModel
+    /// Opens the merge editor (when the diff is not shown beside the list).
+    var onResolve: (() -> Void)?
     @Environment(\.gitTheme) private var theme
 
     var body: some View {
@@ -216,6 +242,11 @@ struct OperationBanner: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 HStack {
+                    if let onResolve, !model.conflicted.isEmpty {
+                        Button("Resolve Conflicts…", action: onResolve)
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("git.resolveConflicts")
+                    }
                     if isRebase {
                         Button("Continue") { Task { await model.continueRebase() } }
                             .buttonStyle(.borderedProminent)

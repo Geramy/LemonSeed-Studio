@@ -177,6 +177,10 @@ public actor ForgeHTTP {
         try decode(type, try await send("PUT", path, body: body).data)
     }
 
+    public func patch<T: Decodable & Sendable>(_ type: T.Type, _ path: String, body: (any Encodable & Sendable)?) async throws -> T {
+        try decode(type, try await send("PATCH", path, body: body).data)
+    }
+
     /// GraphQL query with variables; returns the `data` member.
     public func graphQL<T: Decodable & Sendable>(_ type: T.Type, url: URL, query: String, variables: [String: GraphQLValue] = [:]) async throws -> T {
         let response = try await send("POST", url.absoluteString, body: GraphQLBody(query: query, variables: variables), useCache: false)
@@ -212,18 +216,63 @@ public actor ForgeHTTP {
         let parsed = try? decoder.decode(Message.self, from: data)
         // GitLab sends {"message": {"field": ["error"]}} for validation errors.
         let rawText = String(decoding: data.prefix(500), as: UTF8.self)
-        let message = parsed?.message ?? parsed?.errorDescription ?? parsed?.error ?? rawText
+        var message = parsed?.message ?? parsed?.errorDescription ?? parsed?.error ?? Self.gitLabMessage(data) ?? rawText
+        if let errors = Self.gitHubValidationErrors(data) { message += " (\(errors))" }
         switch status {
         case 401: return .unauthorized
         case 403, 429:
             if headers["x-ratelimit-remaining"] == "0" || headers["ratelimit-remaining"] == "0" || status == 429 {
                 return .rateLimited(resetAt: rateLimit.resetAt)
             }
+            if let missing = Self.missingScopes(headers) { message += " The token lacks the \(missing) scope." }
             return .forbidden(message)
-        case 404: return .notFound
-        case 409, 422: return .validation(message)
+        case 404:
+            // GitHub answers 404 for private repositories the token cannot see.
+            if let missing = Self.missingScopes(headers) {
+                return .forbidden("Not found with this token: it lacks the \(missing) scope.")
+            }
+            return .notFound
+        case 405, 409, 422: return .validation(message)
         default: return .http(status: status, message: message)
         }
+    }
+
+    /// Scopes the endpoint accepts that the token does not have (GitHub
+    /// classic tokens report both lists in headers).
+    static func missingScopes(_ headers: [String: String]) -> String? {
+        guard let accepted = headers["x-accepted-oauth-scopes"], let granted = headers["x-oauth-scopes"] else { return nil }
+        func list(_ s: String) -> [String] { s.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } }
+        let have = Set(list(granted))
+        let want = list(accepted)
+        guard !want.isEmpty, !want.contains(where: have.contains) else { return nil }
+        return want.joined(separator: " or ")
+    }
+
+    /// GitHub's 422 bodies: {"message":"Validation Failed","errors":[{"message":"..."} or {"field":..,"code":..}]}.
+    static func gitHubValidationErrors(_ data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let errors = object["errors"] as? [[String: Any]], !errors.isEmpty else { return nil }
+        let parts = errors.compactMap { e -> String? in
+            if let m = e["message"] as? String { return m }
+            let field = e["field"] as? String
+            let code = e["code"] as? String
+            return [field, code].compactMap { $0 }.joined(separator: " ").nilIfEmpty
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "; ")
+    }
+
+    /// GitLab sends {"message": {"field": ["error"]}} or {"message": ["error"]} for validation errors.
+    static func gitLabMessage(_ data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any], let m = object["message"] else { return nil }
+        if let list = m as? [String] { return list.joined(separator: "; ") }
+        if let fields = m as? [String: Any] {
+            return fields.keys.sorted().map { key in
+                let value = fields[key]
+                let text = (value as? [String])?.joined(separator: ", ") ?? (value.map { "\($0)" } ?? "")
+                return "\(key) \(text)"
+            }.joined(separator: "; ")
+        }
+        return nil
     }
 
     static func nextLink(_ header: String?) -> URL? {
@@ -255,6 +304,7 @@ public enum GraphQLValue: Encodable, Sendable, Hashable {
     case int(Int)
     case bool(Bool)
     case null
+    indirect case list([GraphQLValue])
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.singleValueContainer()
@@ -263,6 +313,7 @@ public enum GraphQLValue: Encodable, Sendable, Hashable {
         case .int(let i): try c.encode(i)
         case .bool(let b): try c.encode(b)
         case .null: try c.encodeNil()
+        case .list(let values): try c.encode(values)
         }
     }
 }
@@ -270,4 +321,8 @@ public enum GraphQLValue: Encodable, Sendable, Hashable {
 /// Decodes and ignores any JSON body.
 public struct EmptyResponse: Decodable, Sendable {
     public init(from decoder: any Decoder) throws {}
+}
+
+extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

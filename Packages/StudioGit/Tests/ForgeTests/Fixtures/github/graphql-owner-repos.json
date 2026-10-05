@@ -1,0 +1,28 @@
+{
+  "data": {
+    "repositoryOwner": {
+      "repositories": {
+        "pageInfo": { "hasNextPage": false, "endCursor": null },
+        "nodes": [
+          {
+            "id": "R_kgDOJ1a2b3",
+            "name": "amdgpu_mtopg",
+            "nameWithOwner": "lemonade-sdk/amdgpu_mtopg",
+            "owner": { "login": "lemonade-sdk" },
+            "description": "Live AMD GPU telemetry, top-style",
+            "isPrivate": false,
+            "isFork": false,
+            "isArchived": false,
+            "defaultBranchRef": { "name": "main" },
+            "url": "https://github.com/lemonade-sdk/amdgpu_mtopg",
+            "sshUrl": "git@github.com:lemonade-sdk/amdgpu_mtopg.git",
+            "stargazerCount": 128,
+            "primaryLanguage": { "name": "Swift" },
+            "updatedAt": "2026-09-30T12:00:00Z",
+            "diskUsage": 2400
+          }
+        ]
+      }
+    }
+  }
+}

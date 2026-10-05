@@ -46,6 +46,15 @@ public struct CheckoutOptions: Sendable {
 }
 
 extension GitRepository {
+    /// Whether `name` is a valid branch name (`git check-ref-format --branch`).
+    public nonisolated static func isValidBranchName(_ name: String) -> Bool {
+        GitRuntime.ensureInitialized()
+        guard !name.isEmpty else { return false }
+        var valid: Int32 = 0
+        guard git_branch_name_is_valid(&valid, name) == 0 else { git_error_clear(); return false }
+        return valid == 1
+    }
+
     public func branches(_ kind: BranchKind = .local) throws -> [Branch] {
         let type: git_branch_t
         switch kind {

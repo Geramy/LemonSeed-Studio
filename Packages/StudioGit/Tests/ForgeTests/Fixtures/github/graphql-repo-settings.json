@@ -1,0 +1,13 @@
+{
+  "data": {
+    "repository": {
+      "nameWithOwner": "lemonade-sdk/amdgpu_mtopg",
+      "defaultBranchRef": { "name": "main" },
+      "mergeCommitAllowed": false,
+      "squashMergeAllowed": true,
+      "rebaseMergeAllowed": true,
+      "viewerPermission": "MAINTAIN",
+      "isArchived": false
+    }
+  }
+}

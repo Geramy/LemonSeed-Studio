@@ -18,11 +18,16 @@ public protocol ForgeClient: Sendable {
 
     func currentUser() async throws -> ForgeUser
     func organizations() async throws -> [ForgeOrganization]
-    /// The signed-in user's repositories, most recently updated first.
-    func repositories(cursor: String?) async throws -> ForgePage<ForgeRepository>
+    /// One page of repositories in `scope`, most recently updated first.
+    func repositories(_ scope: RepositoryScope, cursor: String?) async throws -> ForgePage<ForgeRepository>
     func repositories(organization: String) async throws -> [ForgeRepository]
-    func searchRepositories(_ query: String) async throws -> [ForgeRepository]
+    /// Searches repositories. `.all` searches the whole forge with the
+    /// query as given (forge search syntax allowed); `.owned` and
+    /// `.organization` search within that owner, forks included.
+    func searchRepositories(_ query: String, scope: RepositoryScope) async throws -> [ForgeRepository]
     func repository(_ fullName: String) async throws -> ForgeRepository
+    /// The signed-in user's permission and the allowed merge methods.
+    func repositorySettings(_ repository: String) async throws -> ForgeRepositorySettings
     func branches(_ repository: String) async throws -> [ForgeBranch]
     func tags(_ repository: String) async throws -> [ForgeTag]
     /// The README's Markdown, if any.
@@ -31,9 +36,13 @@ public protocol ForgeClient: Sendable {
     func pullRequests(_ filter: PullRequestFilter) async throws -> [PullRequest]
     func pullRequest(_ repository: String, number: Int) async throws -> PullRequest
     func pullRequestFiles(_ repository: String, number: Int) async throws -> [PullRequestFile]
+    func pullRequestCommits(_ repository: String, number: Int) async throws -> [ForgeCommit]
     /// The whole request as one unified diff.
     func pullRequestDiff(_ repository: String, number: Int) async throws -> String
+    /// The conversation and every line comment, oldest first.
     func comments(_ repository: String, number: Int) async throws -> [PullRequestComment]
+    /// Line comments grouped into review threads, with their resolved state.
+    func reviewThreads(_ repository: String, number: Int) async throws -> [ReviewThread]
     @discardableResult
     func addComment(_ repository: String, number: Int, body: String) async throws -> PullRequestComment
     @discardableResult
@@ -41,6 +50,9 @@ public protocol ForgeClient: Sendable {
     func createPullRequest(_ repository: String, _ draft: PullRequestDraft) async throws -> PullRequest
     func review(_ repository: String, number: Int, event: ReviewEvent, body: String) async throws
     func merge(_ repository: String, number: Int, method: MergeMethod, commitMessage: String?) async throws
+    /// Closes (`open: false`) or reopens a request.
+    @discardableResult
+    func setPullRequestState(_ repository: String, number: Int, open: Bool) async throws -> PullRequest
 
     /// CI for a branch name or commit SHA.
     func ciStatus(_ repository: String, ref: String) async throws -> CIStatus
@@ -53,6 +65,16 @@ public protocol ForgeClient: Sendable {
 }
 
 extension ForgeClient {
+    /// One page of everything the user can reach.
+    public func repositories(cursor: String?) async throws -> ForgePage<ForgeRepository> {
+        try await repositories(.all, cursor: cursor)
+    }
+
+    /// Searches the whole forge.
+    public func searchRepositories(_ query: String) async throws -> [ForgeRepository] {
+        try await searchRepositories(query, scope: .all)
+    }
+
     /// Every page of the user's repositories (up to `maxPages`).
     public func allRepositories(maxPages: Int = 10) async throws -> [ForgeRepository] {
         var all: [ForgeRepository] = []

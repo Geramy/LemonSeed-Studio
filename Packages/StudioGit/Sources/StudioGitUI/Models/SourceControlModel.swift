@@ -28,6 +28,7 @@ public final class SourceControlModel {
     public private(set) var state: RepositoryState = .none
     public private(set) var rebase: RebaseProgress?
     public private(set) var stashes: [StashEntry] = []
+    public private(set) var remotes: [Remote] = []
     public var selection: Selection?
     public private(set) var selectedDiff: FileDiff?
     public var selectedLines: Set<LineSelection> = []
@@ -36,6 +37,17 @@ public final class SourceControlModel {
     public private(set) var sync: SyncState = .idle
     public var errorMessage: String?
     public private(set) var lastRefresh: Date?
+    /// The last finished action, for a short confirmation line.
+    public var notice: String?
+
+    /// How to switch branches with uncommitted changes.
+    public enum SwitchStrategy: Sendable, Equatable {
+        /// Keep the changes in the working tree (Git's default; refused when
+        /// a changed file differs between the branches).
+        case carry
+        /// Stash every change (untracked files too), then switch.
+        case stash
+    }
 
     public init(repository: GitRepository, services: GitServices) {
         self.repository = repository
@@ -64,6 +76,7 @@ public final class SourceControlModel {
             state = await repository.state()
             rebase = try await repository.rebaseProgress()
             stashes = try await repository.stashes()
+            remotes = try await repository.remotes()
             if state.isInProgress, commitMessage.isEmpty, let prepared = await repository.preparedMessage() {
                 commitMessage = prepared.split(separator: "\n").filter { !$0.hasPrefix("#") }.joined(separator: "\n")
             }
@@ -163,18 +176,162 @@ public final class SourceControlModel {
 
     // MARK: Branches
 
-    public func checkout(_ branch: Branch) async {
-        await mutate { try await repository.checkout(branch: branch.name) }
+    public var localBranches: [Branch] { branches.filter { !$0.isRemote } }
+    public var remoteBranches: [Branch] { branches.filter(\.isRemote) }
+
+    /// Switches to `branch` (local, or remote-tracking: a local branch
+    /// tracking it is created). With uncommitted changes, `strategy` says
+    /// whether they come along or are stashed first.
+    public func checkout(_ branch: Branch, strategy: SwitchStrategy = .carry) async {
+        await mutate {
+            switch strategy {
+            case .carry:
+                do {
+                    try await repository.checkout(branch: branch.name)
+                } catch let error as GitError where error.code == .conflict {
+                    throw GitError(code: .conflict, message: "Switching to \(branch.name) would overwrite uncommitted changes (\(error.message)). "
+                                   + "Stash them or commit them first.", operation: "checkout")
+                }
+            case .stash:
+                let message = "Stashed before switching to \(branch.name)"
+                guard try await repository.stash(StashOptions(message: message, includeUntracked: true)) != nil else {
+                    try await repository.checkout(branch: branch.name)
+                    return
+                }
+                do {
+                    try await repository.checkout(branch: branch.name)
+                } catch {
+                    // Put the changes back where they were before reporting.
+                    _ = try await repository.popStash(0)
+                    throw error
+                }
+                notice = "Your changes are in the stash \"\(message)\"."
+            }
+        }
+    }
+
+    /// Creates a branch at `startPoint` (HEAD, a branch name or a commit)
+    /// and optionally switches to it. Returns whether it was created.
+    @discardableResult
+    public func createBranch(_ name: String, from startPoint: String = "HEAD", checkout: Bool = true) async -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard GitRepository.isValidBranchName(trimmed) else {
+            errorMessage = "\"\(trimmed)\" is not a valid branch name."
+            return false
+        }
+        var created = false
+        await mutate {
+            try await repository.createBranch(trimmed, at: startPoint.isEmpty ? "HEAD" : startPoint, checkout: checkout)
+            created = true
+        }
+        return created
     }
 
     public func createBranch(_ name: String) async {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        await mutate { try await repository.createBranch(trimmed, checkout: true) }
+        await createBranch(name, from: "HEAD", checkout: true)
+    }
+
+    public func renameBranch(_ branch: Branch, to newName: String) async {
+        let trimmed = newName.trimmingCharacters(in: .whitespaces)
+        guard GitRepository.isValidBranchName(trimmed) else {
+            errorMessage = "\"\(trimmed)\" is not a valid branch name."
+            return
+        }
+        await mutate {
+            try await repository.renameBranch(branch.name, to: trimmed)
+            notice = "Renamed \(branch.name) to \(trimmed)."
+        }
     }
 
     public func deleteBranch(_ branch: Branch, force: Bool = false) async {
-        await mutate { try await repository.deleteBranch(branch.name, force: force) }
+        await mutate {
+            if branch.isRemote {
+                try await repository.deleteRemoteTrackingBranch(branch.name)
+            } else {
+                try await repository.deleteBranch(branch.name, force: force)
+            }
+        }
+    }
+
+    /// Deletes the branch on its remote: a remote-tracking branch's own
+    /// remote, or a local branch's upstream.
+    public func deleteRemoteBranch(_ branch: Branch) async {
+        let remote: String
+        let name: String
+        if branch.isRemote, let r = branch.remoteName {
+            remote = r
+            name = branch.nameWithoutRemote
+        } else if let (r, n) = Self.split(upstream: branch.upstream) {
+            remote = r
+            name = n
+        } else {
+            errorMessage = "\(branch.name) has no remote branch."
+            return
+        }
+        await runNetwork { network in
+            try await repository.deleteRemoteBranch(name, remote: remote, network: network)
+            if (try? await repository.branch(named: "\(remote)/\(name)", remote: true)) != nil {
+                try await repository.deleteRemoteTrackingBranch("\(remote)/\(name)")
+            }
+            notice = "Deleted \(name) on \(remote)."
+        }
+    }
+
+    /// Sets (or with nil clears) a local branch's upstream, e.g. `origin/main`.
+    public func setUpstream(_ branch: Branch, to upstream: String?) async {
+        await mutate {
+            try await repository.setUpstream(of: branch.name, to: upstream)
+            notice = upstream.map { "\(branch.name) now tracks \($0)." } ?? "\(branch.name) no longer tracks a remote branch."
+        }
+    }
+
+    /// Pushes a local branch to `remote` and makes it the upstream (`push -u`).
+    public func publish(_ branch: Branch, to remote: String) async {
+        await runNetwork { network in
+            try await repository.push(branch: branch.name, options: PushOptions(remote: remote, setUpstream: true), network: network)
+            notice = "Published \(branch.name) to \(remote)."
+        }
+    }
+
+    /// Pushes a local branch to its upstream (which may have another name).
+    public func push(_ branch: Branch) async {
+        guard let (remote, name) = Self.split(upstream: branch.upstream) else {
+            errorMessage = "\(branch.name) has no upstream. Publish it first."
+            return
+        }
+        await runNetwork { network in
+            try await repository.push(branch: branch.name, options: PushOptions(remote: remote, remoteBranch: name), network: network)
+            notice = "Pushed \(branch.name) to \(remote)/\(name)."
+        }
+    }
+
+    /// `origin/feature/x` → ("origin", "feature/x").
+    static func split(upstream: String?) -> (String, String)? {
+        guard let upstream, let slash = upstream.firstIndex(of: "/") else { return nil }
+        return (String(upstream[..<slash]), String(upstream[upstream.index(after: slash)...]))
+    }
+
+    /// Pushes the current branch (publishing it first when it has no upstream).
+    /// Returns whether the branch is on the remote afterwards.
+    @discardableResult
+    public func pushCurrentBranch(remote preferred: String? = nil) async -> Bool {
+        guard let branch = currentBranch else {
+            errorMessage = "Check out a branch first (HEAD is detached)."
+            return false
+        }
+        var pushed = false
+        await runNetwork { network in
+            if let (remote, name) = Self.split(upstream: branch.upstream) {
+                try await repository.push(branch: branch.name, options: PushOptions(remote: remote, remoteBranch: name), network: network)
+            } else {
+                guard let remote = preferred ?? remotes.first(where: { $0.name == "origin" })?.name ?? remotes.first?.name else {
+                    throw GitError(code: .notFound, message: "This repository has no remote to push to.", operation: "push")
+                }
+                try await repository.push(branch: branch.name, options: PushOptions(remote: remote, setUpstream: true), network: network)
+            }
+            pushed = true
+        }
+        return pushed
     }
 
     public func merge(_ branch: Branch) async {
@@ -220,20 +377,23 @@ public final class SourceControlModel {
     public func synchronize() async {
         guard sync == .idle else { return }
         await runNetwork { network in
-            if currentBranch?.upstream != nil {
+            if let branch = currentBranch, let (remote, name) = Self.split(upstream: branch.upstream) {
                 switch try await repository.pull(strategy: .merge, network: network) {
                 case .conflicts(let paths):
-                    errorMessage = "Pull stopped with conflicts in \(paths.count) file\(paths.count == 1 ? "" : "s")."
+                    errorMessage = "Pull stopped with conflicts in \(paths.count) file\(paths.count == 1 ? "" : "s"). Resolve them, then commit."
                     return
                 default: break
                 }
                 let aheadNow = try await repository.currentBranch()?.ahead ?? 0
                 if aheadNow > 0 {
-                    try await repository.push(network: network)
+                    try await repository.push(branch: branch.name, options: PushOptions(remote: remote, remoteBranch: name), network: network)
                 }
-            } else if currentBranch != nil {
+            } else if let branch = currentBranch {
                 // Publish the branch.
-                try await repository.push(options: PushOptions(setUpstream: true), network: network)
+                guard let remote = remotes.first(where: { $0.name == "origin" })?.name ?? remotes.first?.name else {
+                    throw GitError(code: .notFound, message: "This repository has no remote to publish to.", operation: "push")
+                }
+                try await repository.push(branch: branch.name, options: PushOptions(remote: remote, setUpstream: true), network: network)
             }
         }
     }

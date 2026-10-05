@@ -64,6 +64,7 @@ let package = Package(
             name: "ForgeTests",
             dependencies: ["Forge", "GitKit"],
             path: "Tests/ForgeTests",
+            resources: [.copy("Fixtures")],
             swiftSettings: swiftSettings
         ),
         .testTarget(

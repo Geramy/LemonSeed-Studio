@@ -1,0 +1,12 @@
+[
+  {
+    "id": "4f2a9c1e0b8d7a6f5e4d3c2b1a09f8e7d6c5b4a3",
+    "short_id": "4f2a9c1e",
+    "title": "QueueRow: show occupancy history",
+    "message": "QueueRow: show occupancy history\n\nSamples at 10 Hz.\n",
+    "author_name": "Octo Dev",
+    "author_email": "octo@example.com",
+    "authored_date": "2026-10-01T08:40:00.000+00:00",
+    "created_at": "2026-10-01T08:40:00.000+00:00"
+  }
+]

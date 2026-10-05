@@ -103,6 +103,8 @@ public struct GitLabClient: ForgeClient {
         var changesCount: String?
         var references: References?
         var diffRefs: DiffRefs?
+        var sourceProjectId: Int?
+        var targetProjectId: Int?
 
         func model(repository: String) -> PullRequest {
             let repo = references?.full.map { String($0.split(separator: "!").first ?? "") } ?? repository
@@ -116,6 +118,8 @@ public struct GitLabClient: ForgeClient {
                                state: state == "merged" ? .merged : (state == "opened" ? .open : .closed),
                                isDraft: draft ?? workInProgress ?? false, author: author?.model,
                                repository: repo.isEmpty ? repository : repo,
+                               sourceRepository: sourceProjectId == targetProjectId ? (repo.isEmpty ? repository : repo) : nil,
+                               isCrossRepository: sourceProjectId != nil && sourceProjectId != targetProjectId,
                                sourceBranch: sourceBranch, targetBranch: targetBranch, headSHA: sha, webURL: webUrl,
                                createdAt: createdAt, updatedAt: updatedAt, labels: labels ?? [],
                                reviewers: reviewers?.map(\.username) ?? [], isMergeable: mergeable,
@@ -185,11 +189,22 @@ public struct GitLabClient: ForgeClient {
         }
     }
 
-    public func repositories(cursor: String?) async throws -> ForgePage<ForgeRepository> {
+    public func repositories(_ scope: RepositoryScope, cursor: String?) async throws -> ForgePage<ForgeRepository> {
         let page = Int(cursor ?? "1") ?? 1
-        let response = try await http.send("GET", "projects", query: [
-            "membership": "true", "order_by": "last_activity_at", "per_page": "50", "page": String(page), "statistics": "true",
-        ])
+        var query: [String: String?] = ["order_by": "last_activity_at", "per_page": "50", "page": String(page), "statistics": "true"]
+        let path: String
+        switch scope {
+        case .all:
+            path = "projects"
+            query["membership"] = "true"
+        case .owned:
+            path = "projects"
+            query["owned"] = "true"
+        case .organization(let group):
+            path = "groups/\(Self.projectID(group))/projects"
+            query["include_subgroups"] = "true"
+        }
+        let response = try await http.send("GET", path, query: query)
         let projects = try await http.decode([Project].self, response.data)
         let next = response.headers["x-next-page"].flatMap { $0.isEmpty ? nil : $0 } ?? (response.nextURL != nil ? String(page + 1) : nil)
         return ForgePage(items: projects.map(\.model), nextCursor: next)
@@ -200,8 +215,56 @@ public struct GitLabClient: ForgeClient {
                               query: ["include_subgroups": "true", "per_page": "100", "order_by": "last_activity_at"]).map(\.model)
     }
 
-    public func searchRepositories(_ query: String) async throws -> [ForgeRepository] {
-        try await http.get([Project].self, "projects", query: ["search": query, "per_page": "30", "order_by": "last_activity_at"]).map(\.model)
+    public func searchRepositories(_ query: String, scope: RepositoryScope) async throws -> [ForgeRepository] {
+        var parameters: [String: String?] = ["search": query, "per_page": "50", "order_by": "last_activity_at"]
+        let path: String
+        switch scope {
+        case .all:
+            path = "projects"
+        case .owned:
+            path = "projects"
+            parameters["owned"] = "true"
+        case .organization(let group):
+            path = "groups/\(Self.projectID(group))/projects"
+            parameters["include_subgroups"] = "true"
+        }
+        return try await http.get([Project].self, path, query: parameters).map(\.model)
+    }
+
+    struct ProjectSettings: Decodable, Sendable {
+        struct Access: Decodable, Sendable { var accessLevel: Int }
+        struct Permissions: Decodable, Sendable { var projectAccess: Access?; var groupAccess: Access? }
+        var pathWithNamespace: String
+        var defaultBranch: String?
+        var mergeMethod: String?
+        var squashOption: String?
+        var archived: Bool?
+        var permissions: Permissions?
+    }
+
+    /// GitLab merges with the project's method (merge commit, merge commit
+    /// with semi-linear history, or fast-forward); squash follows the
+    /// project's squash option, and "rebase" is offered when the method
+    /// needs the source branch rebased first.
+    public func repositorySettings(_ repository: String) async throws -> ForgeRepositorySettings {
+        let p = try await http.get(ProjectSettings.self, project(repository))
+        var methods: [MergeMethod] = [.merge]
+        if p.squashOption != "never" { methods.append(.squash) }
+        if let method = p.mergeMethod, method != "merge" { methods.append(.rebase) }
+        let level = max(p.permissions?.projectAccess?.accessLevel ?? 0, p.permissions?.groupAccess?.accessLevel ?? 0)
+        return ForgeRepositorySettings(fullName: p.pathWithNamespace, defaultBranch: p.defaultBranch, allowedMergeMethods: methods,
+                                       permission: Self.permission(level), isArchived: p.archived ?? false)
+    }
+
+    static func permission(_ accessLevel: Int) -> ForgePermission {
+        switch accessLevel {
+        case 50...: return .admin
+        case 40..<50: return .maintain
+        case 30..<40: return .write
+        case 20..<30: return .triage
+        case 1..<20: return .read
+        default: return .none
+        }
     }
 
     public func repository(_ fullName: String) async throws -> ForgeRepository {
@@ -239,14 +302,17 @@ public struct GitLabClient: ForgeClient {
     public func pullRequests(_ filter: PullRequestFilter) async throws -> [PullRequest] {
         switch filter {
         case .repository(let repo, let state):
-            let s: String
-            switch state {
-            case .open: s = "opened"
-            case .closed: s = "closed"
-            case .merged: s = "merged"
-            }
             return try await http.get([MergeRequest].self, "\(project(repo))/merge_requests",
-                                      query: ["state": s, "per_page": "50", "order_by": "updated_at"]).map { $0.model(repository: repo) }
+                                      query: ["state": Self.state(state), "per_page": "50", "order_by": "updated_at"]).map { $0.model(repository: repo) }
+        case .repositoryAuthoredByMe(let repo, let state):
+            return try await http.get([MergeRequest].self, "\(project(repo))/merge_requests",
+                                      query: ["scope": "created_by_me", "state": Self.state(state), "per_page": "50", "order_by": "updated_at"])
+                .map { $0.model(repository: repo) }
+        case .repositoryReviewRequested(let repo):
+            let me = try await currentUser()
+            return try await http.get([MergeRequest].self, "\(project(repo))/merge_requests",
+                                      query: ["reviewer_username": me.login, "state": "opened", "per_page": "50", "order_by": "updated_at"])
+                .map { $0.model(repository: repo) }
         case .authoredByMe:
             return try await http.get([MergeRequest].self, "merge_requests",
                                       query: ["scope": "created_by_me", "state": "opened", "per_page": "50"]).map { $0.model(repository: "") }
@@ -257,8 +323,31 @@ public struct GitLabClient: ForgeClient {
         }
     }
 
+    static func state(_ state: PullRequestState) -> String {
+        switch state {
+        case .open: return "opened"
+        case .closed: return "closed"
+        case .merged: return "merged"
+        }
+    }
+
     public func pullRequest(_ repository: String, number: Int) async throws -> PullRequest {
         try await mergeRequest(repository, number).model(repository: repository)
+    }
+
+    struct MRCommit: Decodable, Sendable {
+        var id: String
+        var message: String?
+        var title: String?
+        var authorName: String?
+        var authoredDate: Date?
+        var createdAt: Date?
+    }
+
+    public func pullRequestCommits(_ repository: String, number: Int) async throws -> [ForgeCommit] {
+        try await http.getAll(MRCommit.self, "\(project(repository))/merge_requests/\(number)/commits", query: ["per_page": "100"], maxPages: 3).map { c in
+            ForgeCommit(sha: c.id, message: c.message ?? c.title ?? "", authorName: c.authorName ?? "", date: c.authoredDate ?? c.createdAt)
+        }
     }
 
     func mergeRequest(_ repository: String, _ iid: Int) async throws -> MergeRequest {
@@ -297,6 +386,23 @@ public struct GitLabClient: ForgeClient {
         }.sorted { ($0.createdAt ?? .distantPast) < ($1.createdAt ?? .distantPast) }
     }
 
+    /// Diff discussions (notes with a position) as review threads.
+    public func reviewThreads(_ repository: String, number: Int) async throws -> [ReviewThread] {
+        let discussions = try await http.getAll(Discussion.self, "\(project(repository))/merge_requests/\(number)/discussions",
+                                                query: ["per_page": "100"])
+        return discussions.compactMap { d in
+            let notes = d.notes.filter { $0.system != true }
+            guard let first = notes.first, let position = first.position,
+                  let path = position.newPath ?? position.oldPath else { return nil }
+            let line = position.newLine ?? position.oldLine
+            let resolved = notes.allSatisfy { $0.resolved == true }
+            return ReviewThread(id: d.id, path: path, line: line, isResolved: resolved, comments: notes.map { n in
+                PullRequestComment(id: String(n.id), author: n.author?.model, body: n.body, createdAt: n.createdAt,
+                                   path: path, line: line, threadID: d.id, isResolved: resolved)
+            })
+        }
+    }
+
     @discardableResult
     public func addComment(_ repository: String, number: Int, body: String) async throws -> PullRequestComment {
         struct Body: Encodable, Sendable { var body: String }
@@ -330,17 +436,49 @@ public struct GitLabClient: ForgeClient {
                                   path: draft.path, line: draft.line, threadID: d.id)
     }
 
+    struct UserID: Decodable, Sendable { var id: Int; var username: String }
+
+    /// Creates a merge request. Reviewers are resolved to user ids first
+    /// (an unknown username fails before anything is created). For a
+    /// source branch in a fork, the request is created in the fork with
+    /// the target project's id, as GitLab requires.
     public func createPullRequest(_ repository: String, _ draft: PullRequestDraft) async throws -> PullRequest {
         struct Body: Encodable, Sendable {
             var sourceBranch: String
             var targetBranch: String
             var title: String
             var description: String
+            var reviewerIds: [Int]?
+            var labels: String?
+            var targetProjectId: Int?
+        }
+        var reviewerIDs: [Int] = []
+        for name in draft.reviewers {
+            let matches = try await http.get([UserID].self, "users", query: ["username": name])
+            guard let user = matches.first(where: { $0.username.caseInsensitiveCompare(name) == .orderedSame }) else {
+                throw ForgeError.validation("No GitLab user named \(name).")
+            }
+            reviewerIDs.append(user.id)
+        }
+        var createIn = repository
+        var targetProjectID: Int?
+        if let source = draft.sourceRepository, source.caseInsensitiveCompare(repository) != .orderedSame {
+            createIn = source
+            targetProjectID = Int(try await self.repository(repository).id)
         }
         let title = draft.isDraft && !draft.title.hasPrefix("Draft:") ? "Draft: \(draft.title)" : draft.title
-        return try await http.post(MergeRequest.self, "\(project(repository))/merge_requests",
-                                   body: Body(sourceBranch: draft.sourceBranch, targetBranch: draft.targetBranch,
-                                              title: title, description: draft.body)).model(repository: repository)
+        let body = Body(sourceBranch: draft.sourceBranch, targetBranch: draft.targetBranch, title: title, description: draft.body,
+                        reviewerIds: reviewerIDs.isEmpty ? nil : reviewerIDs,
+                        labels: draft.labels.isEmpty ? nil : draft.labels.joined(separator: ","),
+                        targetProjectId: targetProjectID)
+        return try await http.post(MergeRequest.self, "\(project(createIn))/merge_requests", body: body).model(repository: repository)
+    }
+
+    @discardableResult
+    public func setPullRequestState(_ repository: String, number: Int, open: Bool) async throws -> PullRequest {
+        struct Body: Encodable, Sendable { var stateEvent: String }
+        return try await http.put(MergeRequest.self, "\(project(repository))/merge_requests/\(number)",
+                                  body: Body(stateEvent: open ? "reopen" : "close")).model(repository: repository)
     }
 
     /// Approve uses the approvals API; "request changes" removes the

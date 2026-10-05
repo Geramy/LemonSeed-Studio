@@ -144,6 +144,9 @@ public struct ChatRequest: Sendable, Hashable {
     public var parallelToolCalls: Bool
     public var maxTokens: Int
     public var temperature: Double?
+    /// Nil leaves them to the model's generation config (LSE's defaults).
+    public var topP: Double?
+    public var topK: Int?
     public var thinking: ThinkingLevel?
     public var stop: [String]
     /// Conversation identity for engines that keep one KV cache per
@@ -153,7 +156,7 @@ public struct ChatRequest: Sendable, Hashable {
 
     public init(model: String, messages: [ChatMessage], tools: [ToolDefinition] = [],
                 toolChoice: ToolChoice = .auto, parallelToolCalls: Bool = true,
-                maxTokens: Int = 2048, temperature: Double? = nil,
+                maxTokens: Int = 2048, temperature: Double? = nil, topP: Double? = nil, topK: Int? = nil,
                 thinking: ThinkingLevel? = nil, stop: [String] = [], sessionID: String? = nil) {
         self.model = model
         self.messages = messages
@@ -162,6 +165,8 @@ public struct ChatRequest: Sendable, Hashable {
         self.parallelToolCalls = parallelToolCalls
         self.maxTokens = maxTokens
         self.temperature = temperature
+        self.topP = topP
+        self.topK = topK
         self.thinking = thinking
         self.stop = stop
         self.sessionID = sessionID
@@ -182,6 +187,8 @@ public struct ChatRequest: Sendable, Hashable {
             o["parallel_tool_calls"] = .bool(parallelToolCalls)
         }
         if let temperature { o["temperature"] = .number(temperature) }
+        if let topP { o["top_p"] = .number(topP) }
+        if let topK { o["top_k"] = .int(topK) }
         if let effort = thinking?.reasoningEffort { o["reasoning_effort"] = .string(effort) }
         if !stop.isEmpty { o["stop"] = .array(stop.map(JSONValue.string)) }
         if let sessionID { o["session_id"] = .string(sessionID) }

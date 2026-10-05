@@ -14,6 +14,7 @@
 //   maxTokens       max_tokens       --max-tokens N (nil: the KV length, so a
 //                                    reply runs until the context is full)
 //   topP            (none)           sent per request as "top_p"
+//   topK            (none)           sent per request as "top_k"
 //
 // LSE runs DFlash2 or MTP, never both: with DFlash2 on it ignores any MTP
 // module. The defaults reproduce LSELaunchPreset.standard exactly.
@@ -69,6 +70,8 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
     public var temperature: Double
     /// Nil leaves top-p to the model's generation config.
     public var topP: Double?
+    /// Nil leaves top-k to the model's generation config.
+    public var topK: Int?
     /// The most tokens one reply may generate, reasoning included. Nil (the
     /// default) sets no limit of its own: a reply runs until the context is
     /// full.
@@ -82,13 +85,15 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
     public static let defaultMTPDepth = 3
     public static let mtpDepthRange = 1...7
     public static let temperatureRange = 0.0...2.0
+    /// The top-k the control offers (LSE accepts any nonnegative int32).
+    public static let topKRange = 1...200
     /// The prefill sizes LSE accepts (runtime::PrefillBatch::valid_size).
     public static let batchSizeChoices = [128, 256, 512, 1024, 2048, 4096]
 
     public init(kvCacheDType: KVCacheDType = .bf16, kvLength: Int = ModelLoadSettings.defaultKVLength,
                 batchSize: Int = 1024, ubatchSize: Int = 1024, dflash2Enabled: Bool = true,
                 draftID: String? = nil, mtpEnabled: Bool = false, mtpDepth: Int = ModelLoadSettings.defaultMTPDepth,
-                temperature: Double = 0.6, topP: Double? = nil, maxTokens: Int? = nil) {
+                temperature: Double = 0.6, topP: Double? = nil, topK: Int? = nil, maxTokens: Int? = nil) {
         self.kvCacheDType = kvCacheDType
         self.kvLength = kvLength
         self.batchSize = batchSize
@@ -99,6 +104,7 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
         self.mtpDepth = mtpDepth
         self.temperature = temperature
         self.topP = topP
+        self.topK = topK
         self.maxTokens = maxTokens
     }
 
@@ -127,7 +133,7 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case kvCacheDType, kvLength, batchSize, ubatchSize, dflash2Enabled, draftID, mtpEnabled, mtpDepth,
-             temperature, topP
+             temperature, topP, topK
         /// Written only when a limit is set.
         case maxTokens = "maxReplyTokens"
     }
@@ -152,6 +158,7 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
         if let v = try? c.decodeIfPresent(Int.self, forKey: .mtpDepth) { mtpDepth = v }
         if let v = try? c.decodeIfPresent(Double.self, forKey: .temperature) { temperature = v }
         topP = (try? c.decodeIfPresent(Double.self, forKey: .topP)) ?? nil
+        topK = (try? c.decodeIfPresent(Int.self, forKey: .topK)) ?? nil
         if let v = try? c.decodeIfPresent(Int.self, forKey: .maxTokens) {
             maxTokens = v
         } else if let legacy = try? decoder.container(keyedBy: LegacyKeys.self),
@@ -179,6 +186,7 @@ public struct ModelLoadSettings: Codable, Sendable, Hashable {
         s.temperature = s.temperature.isFinite
             ? min(max(s.temperature, Self.temperatureRange.lowerBound), Self.temperatureRange.upperBound) : 0.6
         if let p = s.topP { s.topP = p.isFinite ? min(max(p, 0), 1) : nil }
+        if let k = s.topK { s.topK = max(0, k) }
         if let limit = s.maxTokens { s.maxTokens = max(1, limit) }
         return s
     }
@@ -243,6 +251,8 @@ public struct LSELaunchConfiguration: Sendable, Hashable {
     public var maxTokens: Int
     /// Not an lse_config field: send it as "top_p" in each request.
     public var topP: Double?
+    /// Not an lse_config field: send it as "top_k" in each request.
+    public var topK: Int?
     /// lse_config.pool and dialect.
     public var pool: String
     public var dialect: String
@@ -266,6 +276,7 @@ public struct LSELaunchConfiguration: Sendable, Hashable {
         temperature = settings.temperature
         maxTokens = settings.maxTokens ?? settings.kvLength
         topP = settings.topP
+        topK = settings.topK
         self.pool = pool
         self.dialect = dialect
     }

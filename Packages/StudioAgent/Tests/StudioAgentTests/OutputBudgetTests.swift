@@ -73,3 +73,28 @@ struct OutputBudgetTests {
         #expect(events.contains { $0 == .replyStopped(.contextFull(contextWindow: 600)) })
     }
 }
+
+@Suite("Sampling")
+struct SamplingTests {
+    @Test func topPAndTopKAreSentOnlyWhenSet() {
+        let plain = ChatRequest(model: "m", messages: [.user("hi")]).body()
+        guard case .object(let o) = plain else { Issue.record(); return }
+        #expect(o["top_p"] == nil && o["top_k"] == nil && o["temperature"] == nil)
+        let set = ChatRequest(model: "m", messages: [.user("hi")], temperature: 0.7, topP: 0.8, topK: 20).body()
+        guard case .object(let s) = set else { Issue.record(); return }
+        #expect(s["top_p"] == .number(0.8) && s["top_k"] == .int(20) && s["temperature"] == .number(0.7))
+    }
+
+    @Test func theAgentSendsItsSamplingAndTakesChanges() async throws {
+        let ws = try TempWorkspace([:])
+        let client = ScriptedLLMClient([.text("one"), .text("two")])
+        let cfg = AgentConfiguration(temperature: 0.7, topP: 0.8, topK: 20, checkpointStorage: .memory)
+        let agent = try Agent.start(workspace: ws.workspace, client: client, approver: DenyingApprover(), configuration: cfg)
+        _ = await collect(agent.prompt("a"))
+        await agent.setSampling(temperature: nil, topP: nil, topK: 40)
+        _ = await collect(agent.prompt("b"))
+        let (first, second) = (client.requests[0], client.requests[1])
+        #expect(first.temperature == 0.7 && first.topP == 0.8 && first.topK == 20)
+        #expect(second.temperature == nil && second.topP == nil && second.topK == 40)
+    }
+}

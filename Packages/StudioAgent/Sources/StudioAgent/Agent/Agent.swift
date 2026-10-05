@@ -8,6 +8,9 @@ public struct AgentConfiguration: Sendable, Hashable {
     public var permissionMode: PermissionMode
     public var maxTurns: Int
     public var temperature: Double?
+    /// Sent when set; nil leaves them to the model's generation config.
+    public var topP: Double?
+    public var topK: Int?
     public var compaction: CompactionPolicy
     public var checkpointStorage: Checkpoint.Storage
     /// Global instructions from app settings, placed before AGENTS.md files.
@@ -17,6 +20,7 @@ public struct AgentConfiguration: Sendable, Hashable {
 
     public init(endpoint: EndpointConfiguration = .lseDefault, thinking: ThinkingLevel = .low,
                 permissionMode: PermissionMode = .review, maxTurns: Int = 40, temperature: Double? = nil,
+                topP: Double? = nil, topK: Int? = nil,
                 compaction: CompactionPolicy? = nil, checkpointStorage: Checkpoint.Storage = .clone,
                 globalContext: String? = nil, modelOutputRetries: Int = 1) {
         self.endpoint = endpoint
@@ -24,6 +28,8 @@ public struct AgentConfiguration: Sendable, Hashable {
         self.permissionMode = permissionMode
         self.maxTurns = maxTurns
         self.temperature = temperature
+        self.topP = topP
+        self.topK = topK
         self.compaction = compaction ?? CompactionPolicy(contextWindow: endpoint.contextWindow,
                                                          maxOutputTokens: endpoint.maxOutputTokens)
         self.checkpointStorage = checkpointStorage
@@ -143,6 +149,14 @@ public actor Agent {
     }
 
     public var permissionMode: PermissionMode { policy.mode }
+
+    /// Sampling from the next request on (sent per request; nil fields are
+    /// left to the model's generation config).
+    public func setSampling(temperature: Double?, topP: Double?, topK: Int?) {
+        configuration.temperature = temperature
+        configuration.topP = topP
+        configuration.topK = topK
+    }
 
     /// Changes the thinking level from the next request on, recorded in the
     /// session. The level is part of the engine's prompt prefix, so the next
@@ -279,7 +293,8 @@ public actor Agent {
                                   limit: configuration.endpoint.maxOutputTokens)
         let request = ChatRequest(model: configuration.endpoint.model, messages: messages, tools: state.tools,
                                   maxTokens: budget.maxTokens,
-                                  temperature: configuration.temperature, thinking: configuration.thinking,
+                                  temperature: configuration.temperature, topP: configuration.topP,
+                                  topK: configuration.topK, thinking: configuration.thinking,
                                   sessionID: document.header.id)
         return (request, TokenEstimator.rawEstimate(messages, tools: state.tools), budget)
     }

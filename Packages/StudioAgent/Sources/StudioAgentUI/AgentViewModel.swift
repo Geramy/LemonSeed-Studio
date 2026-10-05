@@ -300,6 +300,16 @@ public final class AgentViewModel {
     /// then costs one full re-read of the conversation).
     public var hasHistory: Bool { agent != nil && !items.isEmpty }
 
+    /// Sampling from the next request on, in this chat and the ones it starts.
+    public func setSampling(temperature: Double?, topP: Double?, topK: Int?) {
+        guard temperature != configuration.temperature || topP != configuration.topP
+                || topK != configuration.topK else { return }
+        configuration.temperature = temperature
+        configuration.topP = topP
+        configuration.topK = topK
+        if let agent { Task { await agent.setSampling(temperature: temperature, topP: topP, topK: topK) } }
+    }
+
     /// Sets the thinking level. Before the first message it simply applies.
     /// In a session with history it applies from the next request (the
     /// engine's prompt cache resets once), or starts a new session with it.

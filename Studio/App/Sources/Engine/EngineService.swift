@@ -22,6 +22,9 @@ struct EngineLaunch: Equatable, Sendable {
     var batchSize: UInt32 = 1024
     var ubatchSize: UInt32 = 1024
     var temperature: Float? = 0.6
+    /// Sent with each request; nil leaves them to the model's generation config.
+    var topP: Double?
+    var topK: Int?
     /// The user's limit on one reply (load settings), nil for none.
     var replyLimit: Int?
     /// lse_config.max_tokens, LSE's per-request cap: the reply limit, or the

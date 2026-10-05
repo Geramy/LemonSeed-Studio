@@ -324,6 +324,17 @@ public struct ModelLoadSettingsView: View {
                     .accessibilityIdentifier("loadSettings.topP")
                 }
             }
+            Toggle("Top-k", isOn: Binding {
+                settings.topK != nil
+            } set: { settings.topK = $0 ? (settings.topK ?? 20) : nil })
+            .accessibilityIdentifier("loadSettings.topKEnabled")
+            if let topK = settings.topK {
+                Stepper(value: Binding { settings.topK ?? topK } set: { settings.topK = $0 },
+                        in: ModelLoadSettings.topKRange) {
+                    LabeledContent("Top-k", value: topK.formatted())
+                }
+                .accessibilityIdentifier("loadSettings.topK")
+            }
             Picker("Max tokens per reply", selection: $settings.maxTokens) {
                 Text("Until the context is full").tag(Int?.none)
                 // A limit from elsewhere that is not on the ladder is listed too.
@@ -336,7 +347,7 @@ public struct ModelLoadSettingsView: View {
         } header: {
             Text("Sampling defaults")
         } footer: {
-            Text("Used when a request does not set its own. Top-p off leaves it to the model's generation config. A reply, its thinking included, runs until the context is full unless you set a limit.")
+            Text("Used when a request does not set its own. Top-p and top-k off leave them to the model's generation config. A reply, its thinking included, runs until the context is full unless you set a limit.")
         }
     }
 

@@ -53,7 +53,8 @@ final class StudioAgentProvider: AgentProviding {
                                              contextWindow: engine.contextWindow, maxOutputTokens: engine.replyLimit)
         endpoint.requestTimeout = 1800
         return AgentConfiguration(endpoint: endpoint, thinking: AppModel.shared.settings.agentThinking, permissionMode: .review,
-                                  temperature: engine.launch?.temperature.map(Double.init))
+                                  temperature: engine.launch?.temperature.map(Double.init),
+                                  topP: engine.launch?.topP, topK: engine.launch?.topK)
     }
 
     func client() -> OpenAICompatibleClient {
@@ -70,7 +71,13 @@ final class StudioAgentProvider: AgentProviding {
             configurationKey = key
             models.removeAll()
         }
-        if let existing = models[root] { return existing }
+        if let existing = models[root] {
+            // The load settings' sampling may have changed since (a reload
+            // with the same model and context keeps the chat).
+            let c = configuration()
+            existing.setSampling(temperature: c.temperature, topP: c.topP, topK: c.topK)
+            return existing
+        }
         let workspace = LocalWorkspace(rootURL: root, displayName: displayName, securityScoped: true)
         let model = AgentViewModel(workspace: workspace, client: client(), configuration: configuration())
         let engine = self.engine

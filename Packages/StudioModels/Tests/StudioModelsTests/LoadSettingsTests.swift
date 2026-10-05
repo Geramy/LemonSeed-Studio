@@ -54,7 +54,9 @@ struct LoadSettingsTests {
         #expect(!launch.dflash2 && launch.usesMTP && !launch.noMTP)
         #expect(launch.arguments.joined(separator: " ") ==
                 "--model /m/qwen38-27b-q4 --pool hrx:0 --dialect loom --kv-cache-dtype fp8 --kv-len 65536 --temperature 1 --batch-size 2048 --ubatch-size 512 --mtp-depth 5 --max-tokens 8192")
-        #expect(launch.topP == 0.9)
+        #expect(launch.topP == 0.9 && launch.topK == nil)
+        #expect(LSELaunchConfiguration(model: model, settings: ModelLoadSettings(topK: 20), dflash2Draft: nil,
+                                       mtpModule: nil).topK == 20)
 
         s.mtpEnabled = false
         launch = LSELaunchConfiguration(model: model, settings: s, dflash2Draft: nil, mtpModule: mtp)
@@ -118,7 +120,7 @@ struct LoadSettingsTests {
         let odd = #"{"kvCacheDType":"int3","kvLength":"long","batchSize":512,"topP":0.8}"#
         let s = try decoder.decode(ModelLoadSettings.self, from: Data(odd.utf8))
         #expect(s.kvCacheDType == .bf16 && s.kvLength == 32768 && s.batchSize == 512 && s.topP == 0.8)
-        let custom = ModelLoadSettings(kvCacheDType: .bf8, kvLength: 8192, draftID: "d", topP: 0.5)
+        let custom = ModelLoadSettings(kvCacheDType: .bf8, kvLength: 8192, draftID: "d", topP: 0.5, topK: 40)
         #expect(try decoder.decode(ModelLoadSettings.self, from: JSONEncoder().encode(custom)) == custom)
     }
 }

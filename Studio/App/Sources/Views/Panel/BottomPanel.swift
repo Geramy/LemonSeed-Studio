@@ -81,7 +81,6 @@ struct BottomPanel: View {
         case .terminal: terminal
         case .problems: ProblemsView(controller: controller)
         case .output: OutputView(controller: controller, channel: selectedChannel)
-        case .build: BuildView(controller: controller)
         }
     }
 
@@ -248,37 +247,5 @@ struct OutputView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("output.view")
-    }
-}
-
-/// Build: detects the workspace's build system. Builds run in process once
-/// the toolchain is installed.
-struct BuildView: View {
-    @Environment(\.theme) private var theme
-    @Environment(\.typeScale) private var type
-    let controller: WorkspaceController
-
-    var body: some View {
-        let system = detected
-        StudioEmptyState(symbol: StudioSymbol.build,
-                         title: system.map { "\($0) project" } ?? "No build system found",
-                         message: system == nil
-                         ? "Add a CMakeLists.txt or Makefile to build this workspace."
-                         : "Builds run on this iPad with the in-process toolchain (clang, lld, CMake, ninja) once it is installed.") {
-            Button("Build") {}
-                .buttonStyle(.studioPrimary)
-                .disabled(true)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("build.view")
-    }
-
-    private var detected: String? {
-        let index = Set(controller.workspace.fileIndex.filter { !$0.contains("/") })
-        if index.contains("CMakeLists.txt") { return "CMake" }
-        if index.contains("Makefile") || index.contains("makefile") { return "Make" }
-        if index.contains("Package.swift") { return "Swift package" }
-        if index.contains("build.sh") { return "Script-built" }
-        return nil
     }
 }

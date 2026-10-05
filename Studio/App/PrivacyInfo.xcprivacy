@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LemonSeed Studio: no tracking, no collected data (see PRIVACY.md).
+
+  Required-reason APIs used by the app and the libraries linked into it:
+  - UserDefaults: the app's own settings (CA92.1).
+  - File timestamps: modification dates of project files the user opened or
+    granted (the editor's change detection, Git's index, libgit2's stat
+    calls) (3B52.1); of files in the app container (chat sessions) (C617.1);
+    and shown to the user (the terminal's ls -l) (DDA9.1).
+  - System boot time: mach_absolute_time, CACurrentMediaTime and
+    CLOCK_UPTIME_RAW to measure elapsed time within the app (decode speed,
+    timeouts, telemetry sampling) (35F9.1).
+  - Disk space: checking there is room before a model download (E174.1) and
+    showing the free space on the Models screen (85F4.1).
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>3B52.1</string>
+				<string>C617.1</string>
+				<string>DDA9.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+				<string>85F4.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

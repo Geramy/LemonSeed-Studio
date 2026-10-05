@@ -89,6 +89,24 @@ targets:
       - sdk: SystemExtensions.framework
       - sdk: GameController.framework
     postCompileScripts:
+      - name: Debug-only Info.plist keys
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          # The local-network keys serve the debug-only development remote
+          # control (and the simulator's loopback lse-server): other builds
+          # ship without them.
+          [ "$CONFIGURATION" = Debug ] && exit 0
+          plist="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+          for key in NSLocalNetworkUsageDescription NSBonjourServices NSAppTransportSecurity; do
+            /usr/libexec/PlistBuddy -c "Delete :$key" "$plist" 2>/dev/null || true
+          done
+          for key in NSLocalNetworkUsageDescription NSBonjourServices NSAppTransportSecurity; do
+            if /usr/libexec/PlistBuddy -c "Print :$key" "$plist" >/dev/null 2>&1; then
+              echo "error: $key is still in $plist" >&2
+              exit 1
+            fi
+          done
       - name: Collect third-party notices
         basedOnDependencyAnalysis: false
         script: |

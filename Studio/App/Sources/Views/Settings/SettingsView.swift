@@ -378,7 +378,7 @@ private struct ModelSettings: View {
             } header: {
                 Text("LemonSeed Engine (OpenAI-compatible)")
             } footer: {
-                Text("The default reaches lse-server on this machine. From the iPad simulator, 127.0.0.1 is the Mac running it. On an iPad with the GPU attached, the engine runs in the app and this endpoint is optional.")
+                Text("Test Connection checks whether an lse-server answers at this address. The AI panel does not use it: chats always run on the engine inside the app, on the attached GPU.")
             }
         }
         .onChange(of: settings.lseEndpoint) { _, _ in result = nil }

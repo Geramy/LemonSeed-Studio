@@ -45,17 +45,23 @@ enum SidebarItem: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+/// The bottom panel's tabs. There is no Build tab until Studio has a build
+/// system to run; a saved state that names one (or any tab this version does
+/// not have) opens the terminal.
 enum PanelTab: String, CaseIterable, Identifiable, Codable {
-    case terminal, problems, output, build
+    case terminal, problems, output
 
     var id: String { rawValue }
+
+    init(from decoder: any Decoder) throws {
+        self = PanelTab(rawValue: try decoder.singleValueContainer().decode(String.self)) ?? .terminal
+    }
 
     var title: String {
         switch self {
         case .terminal: "Terminal"
         case .problems: "Problems"
         case .output: "Output"
-        case .build: "Build"
         }
     }
 
@@ -64,7 +70,6 @@ enum PanelTab: String, CaseIterable, Identifiable, Codable {
         case .terminal: StudioSymbol.terminal
         case .problems: StudioSymbol.problems
         case .output: StudioSymbol.output
-        case .build: StudioSymbol.build
         }
     }
 }

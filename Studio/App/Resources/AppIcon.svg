@@ -1,77 +1,96 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Top-front view with one-point perspective (vanishing point 512,120; back plane at 0.8). -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#16213A"/>
-      <stop offset="1" stop-color="#0A0F1C"/>
+      <stop offset="0" stop-color="#1A2642"/>
+      <stop offset="1" stop-color="#090E1A"/>
     </linearGradient>
-    <radialGradient id="glow" cx="512" cy="512" r="470" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFD43B" stop-opacity="0.30"/>
-      <stop offset="0.7" stop-color="#FFD43B" stop-opacity="0.06"/>
+    <radialGradient id="glow" cx="512" cy="660" r="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD43B" stop-opacity="0.32"/>
+      <stop offset="0.65" stop-color="#FFD43B" stop-opacity="0.07"/>
       <stop offset="1" stop-color="#FFD43B" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="rind" cx="470" cy="440" r="420" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFE14D"/>
-      <stop offset="0.85" stop-color="#F5BE12"/>
-      <stop offset="1" stop-color="#D99A00"/>
-    </radialGradient>
-    <radialGradient id="flesh" cx="512" cy="512" r="310" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#FFF2A8"/>
-      <stop offset="0.55" stop-color="#FFE266"/>
-      <stop offset="1" stop-color="#FFCF2E"/>
-    </radialGradient>
-    <linearGradient id="seed" x1="0" y1="-1" x2="0" y2="1" gradientUnits="objectBoundingBox">
-      <stop offset="0" stop-color="#FFFDF4"/>
-      <stop offset="1" stop-color="#E9D7A6"/>
+    <linearGradient id="front" x1="0" y1="250" x2="0" y2="830" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFD94A"/>
+      <stop offset="1" stop-color="#ECA90B"/>
     </linearGradient>
+    <linearGradient id="roofTop" x1="0" y1="224" x2="0" y2="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFF6BF"/>
+      <stop offset="1" stop-color="#FFE57A"/>
+    </linearGradient>
+    <linearGradient id="inner" x1="0" y1="390" x2="0" y2="830" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C98A06"/>
+      <stop offset="1" stop-color="#9A6503"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" y1="680" x2="0" y2="820" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3B3622"/>
+      <stop offset="1" stop-color="#5A4E26"/>
+    </linearGradient>
+    <radialGradient id="seed" cx="0.38" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#FFFFFA"/>
+      <stop offset="0.55" stop-color="#F4E7C4"/>
+      <stop offset="1" stop-color="#C9AE72"/>
+    </radialGradient>
     <linearGradient id="leaf" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#5BD982"/>
-      <stop offset="1" stop-color="#1F9A52"/>
+      <stop offset="0" stop-color="#7AE89C"/>
+      <stop offset="1" stop-color="#1C8E4B"/>
     </linearGradient>
-    <!-- A lemon seed: pointed end up, 120 long, 68 wide, centred on the origin -->
+    <linearGradient id="leafShade" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4CCB76"/>
+      <stop offset="1" stop-color="#15753D"/>
+    </linearGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="20" stdDeviation="16" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
     <path id="seedShape" d="M0,-60 C22,-35 34,-5 34,18 C34,44 18,60 0,60 C-18,60 -34,44 -34,18 C-34,-5 -22,-35 0,-60 Z"/>
     <g id="seedG">
-      <use href="#seedShape" fill="url(#seed)" stroke="#B89A55" stroke-opacity="0.55" stroke-width="3"/>
-      <path d="M-12,-28 C-6,-40 0,-48 0,-48" fill="none" stroke="#FFFFFF" stroke-opacity="0.8" stroke-width="5" stroke-linecap="round"/>
+      <use href="#seedShape" fill="url(#seed)" stroke="#A88A4C" stroke-opacity="0.55" stroke-width="2.5"/>
+      <path d="M-13,-26 C-7,-40 -1,-48 -1,-48" fill="none" stroke="#FFFFFF" stroke-opacity="0.9" stroke-width="5" stroke-linecap="round"/>
     </g>
   </defs>
 
-  <!-- Background (full bleed; iPadOS applies the corner mask) -->
   <rect width="1024" height="1024" fill="url(#bg)"/>
-  <circle cx="512" cy="512" r="470" fill="url(#glow)"/>
+  <circle cx="512" cy="660" r="400" fill="url(#glow)"/>
+  <ellipse cx="512" cy="846" rx="360" ry="30" fill="#000000" opacity="0.5" filter="url(#soft)"/>
 
-  <!-- Lemon slice -->
-  <circle cx="512" cy="512" r="362" fill="url(#rind)"/>
-  <circle cx="512" cy="512" r="328" fill="#FFF6D2"/>
-  <circle cx="512" cy="512" r="310" fill="url(#flesh)"/>
-
-  <!-- Segment membranes -->
-  <g stroke="#FFF6D2" stroke-width="10" stroke-linecap="round" opacity="0.95">
-    <line x1="512" y1="512" x2="512" y2="204"/>
-    <line x1="512" y1="512" x2="693" y2="263"/>
-    <line x1="512" y1="512" x2="805" y2="417"/>
-    <line x1="512" y1="512" x2="805" y2="607"/>
-    <line x1="512" y1="512" x2="693" y2="761"/>
-    <line x1="512" y1="512" x2="512" y2="820"/>
-    <line x1="512" y1="512" x2="331" y2="761"/>
-    <line x1="512" y1="512" x2="219" y2="607"/>
-    <line x1="512" y1="512" x2="219" y2="417"/>
-    <line x1="512" y1="512" x2="331" y2="263"/>
+  <g filter="url(#drop)">
+    <!-- Floor -->
+    <polygon points="310,820 714,820 673.6,680 350.4,680" fill="url(#floor)"/>
+    <!-- Inner faces of the two walls -->
+    <polygon points="310,466 350.4,396.8 350.4,680 310,820" fill="url(#inner)"/>
+    <polygon points="714,466 673.6,396.8 673.6,680 714,820" fill="url(#inner)"/>
+    <!-- Wall fronts -->
+    <polygon points="250,511 310,466 310,820 250,820" fill="url(#front)"/>
+    <polygon points="714,466 774,511 774,820 714,820" fill="url(#front)"/>
+    <!-- Roof top planes, seen from above -->
+    <polygon points="180,500 512,250 512,224 246.4,424" fill="url(#roofTop)"/>
+    <polygon points="512,250 844,500 777.6,424 512,224" fill="url(#roofTop)"/>
+    <path d="M512,250 L512,224" stroke="#FFFDE8" stroke-width="5" stroke-linecap="round"/>
+    <!-- Roof front edge (thickness 64) -->
+    <polygon points="180,500 512,250 844,500 844,564 512,314 180,564" fill="url(#front)"/>
+    <path d="M180,500 L512,250 L844,500" fill="none" stroke="#FFF7CF" stroke-width="5" stroke-linejoin="round" opacity="0.85"/>
   </g>
-  <circle cx="512" cy="512" r="300" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="6"/>
 
-  <!-- Seeds spelling </> : the chevrons are pairs of seeds, the slash is a sprouting seed -->
-  <g transform="translate(0,6)">
-    <!-- < -->
-    <use href="#seedG" transform="translate(394,483) rotate(235) scale(0.78)"/>
-    <use href="#seedG" transform="translate(394,557) rotate(305) scale(0.78)"/>
-    <!-- > -->
-    <use href="#seedG" transform="translate(630,483) rotate(125) scale(0.78)"/>
-    <use href="#seedG" transform="translate(630,557) rotate(55) scale(0.78)"/>
-    <!-- / with a sprout -->
-    <path d="M538,463 C548,430 566,410 592,396" fill="none" stroke="#2BA85C" stroke-width="9" stroke-linecap="round"/>
-    <path d="M592,396 C612,360 655,350 686,360 C670,392 632,414 592,396 Z" fill="url(#leaf)"/>
-    <path d="M596,394 C622,382 648,372 674,364" fill="none" stroke="#C8F5D6" stroke-opacity="0.7" stroke-width="3" stroke-linecap="round"/>
-    <path d="M556,424 C540,398 514,390 492,396 C504,420 530,432 556,424 Z" fill="url(#leaf)" opacity="0.92"/>
-    <use href="#seedG" transform="translate(512,530) rotate(25) scale(1.05)"/>
+  <!-- Seed shadows on the floor -->
+  <g fill="#000000" opacity="0.55" filter="url(#soft)">
+    <ellipse cx="438" cy="782" rx="40" ry="10"/>
+    <ellipse cx="586" cy="782" rx="40" ry="10"/>
+    <ellipse cx="512" cy="796" rx="42" ry="11"/>
   </g>
+
+  <!-- The sprout -->
+  <path d="M512,770 C510,716 506,664 511,588" fill="none" stroke="#1F8E4B" stroke-width="16" stroke-linecap="round"/>
+  <path d="M512,770 C510,716 506,664 511,588" fill="none" stroke="#5BD684" stroke-width="6" stroke-linecap="round" opacity="0.8"/>
+  <path d="M509,628 C475,578 418,562 372,576 C394,628 451,652 509,628 Z" fill="url(#leafShade)"/>
+  <path d="M505,626 C469,608 429,592 391,582" fill="none" stroke="#C8F5D6" stroke-opacity="0.6" stroke-width="4" stroke-linecap="round"/>
+  <path d="M513,596 C547,536 609,514 659,526 C639,584 575,616 513,596 Z" fill="url(#leaf)"/>
+  <path d="M517,594 C555,572 599,550 641,534" fill="none" stroke="#E2FBEA" stroke-opacity="0.75" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Three seeds lying on the floor (foreshortened) -->
+  <use href="#seedG" transform="translate(438,760) rotate(-70) scale(0.6,0.85)"/>
+  <use href="#seedG" transform="translate(586,760) rotate(70) scale(0.6,0.85)"/>
+  <use href="#seedG" transform="translate(512,776) rotate(-90) scale(0.62,0.9)"/>
 </svg>

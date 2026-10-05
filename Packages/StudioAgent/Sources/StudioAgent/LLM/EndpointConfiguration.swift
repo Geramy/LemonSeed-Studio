@@ -19,25 +19,23 @@ public struct EndpointConfiguration: Sendable, Hashable, Codable {
     /// this struct only carries one for the duration of a request.
     public var apiKey: String?
     public var toolProtocol: ToolProtocol
-    /// Must match the engine's KV length (`--kv-len`); LSE's default is 32768.
+    /// The engine's context (`--kv-len`), for the context meter. Replies set
+    /// no output limit: they run until the model ends them or the context is
+    /// full, which the engine reports.
     public var contextWindow: Int
-    /// The user's limit on one reply, reasoning included. Nil sets none: each
-    /// request asks for what the context window has left (`OutputBudget`).
-    public var maxOutputTokens: Int?
     public var requestTimeout: TimeInterval
 
     public static let defaultBaseURL = URL(string: "http://127.0.0.1:8080/v1")!
 
     public init(baseURL: URL = EndpointConfiguration.defaultBaseURL, model: String = "qwen-q4",
                 apiKey: String? = nil, toolProtocol: ToolProtocol = .native,
-                contextWindow: Int = 32768, maxOutputTokens: Int? = nil,
+                contextWindow: Int = 32768,
                 requestTimeout: TimeInterval = 900) {
         self.baseURL = baseURL
         self.model = model
         self.apiKey = apiKey
         self.toolProtocol = toolProtocol
         self.contextWindow = contextWindow
-        self.maxOutputTokens = maxOutputTokens
         self.requestTimeout = requestTimeout
     }
 
@@ -49,28 +47,4 @@ public struct EndpointConfiguration: Sendable, Hashable, Codable {
         guard let host = baseURL.host() else { return true }
         return !(host == "127.0.0.1" || host == "localhost" || host == "::1")
     }
-}
-
-/// How many tokens one reply may generate: what the context window has left
-/// after the prompt, or the user's limit when that is smaller. Reasoning
-/// counts toward it like any other output; nothing caps it separately.
-public struct OutputBudget: Sendable, Hashable {
-    /// The `max_tokens` to request; zero or less when the context is full.
-    public var maxTokens: Int
-    /// Whether the context, not the user's limit, decided `maxTokens`: a reply
-    /// that reaches it stopped because the context is full.
-    public var boundByContext: Bool
-
-    public init(contextWindow: Int, promptTokens: Int, limit: Int?) {
-        let left = contextWindow - promptTokens
-        if let limit, limit < left {
-            maxTokens = limit
-            boundByContext = false
-        } else {
-            maxTokens = left
-            boundByContext = true
-        }
-    }
-
-    public var contextIsFull: Bool { maxTokens <= 0 }
 }

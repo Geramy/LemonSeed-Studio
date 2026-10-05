@@ -196,8 +196,8 @@ public struct ClosureChatTransport: ChatTransport {
 extension LLMError {
     /// Maps a non-2xx response, reading the OpenAI error envelope if present.
     static func fromResponse(status: Int, body: Data) -> LLMError {
-        if let json = try? JSONValue.parse(body), let message = json["error"]?["message"]?.stringValue {
-            return .http(status: status, message: message)
+        if let json = try? JSONValue.parse(body), let err = json["error"], err["message"]?.stringValue != nil {
+            return .envelope(err, status: status)
         }
         return .http(status: status, message: String(decoding: body.prefix(2000), as: UTF8.self))
     }

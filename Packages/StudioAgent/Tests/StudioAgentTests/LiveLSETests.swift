@@ -14,7 +14,7 @@ enum LiveLSE {
         let env = ProcessInfo.processInfo.environment
         return EndpointConfiguration(
             baseURL: env["LSE_BASE_URL"].flatMap(URL.init(string:)) ?? EndpointConfiguration.defaultBaseURL,
-            model: env["LSE_MODEL"] ?? "qwen-q4", maxOutputTokens: 384, requestTimeout: 600)
+            model: env["LSE_MODEL"] ?? "qwen-q4", requestTimeout: 600)
     }()
 
     static let isAvailable: Bool = {
@@ -57,7 +57,7 @@ struct LiveLSETests {
             .user("Call the read tool on the path \"secret.txt\". Do not answer before reading it."),
         ]
         let first = try await client.complete(ChatRequest(model: LiveLSE.endpoint.model, messages: messages,
-                                                          tools: tools, maxTokens: 128, thinking: .off))
+                                                          tools: tools, maxTokens: 128, thinking: ThinkingLevel.off))
         LiveLSE.report("tool turn", first.timings)
         #expect(first.finishReason == .toolCalls)
         let call = try #require(first.toolCalls.first)
@@ -69,7 +69,7 @@ struct LiveLSETests {
                                     toolCalls: [call]))
         messages.append(.tool(id: call.id, "1\tThe code word is marigold-826."))
         let second = try await client.complete(ChatRequest(model: LiveLSE.endpoint.model, messages: messages,
-                                                           tools: tools, maxTokens: 64, thinking: .off))
+                                                           tools: tools, maxTokens: 64, thinking: ThinkingLevel.off))
         LiveLSE.report("answer turn", second.timings)
         #expect(second.content.contains("marigold-826"))
         #expect(second.usage != nil)
@@ -82,7 +82,7 @@ struct LiveLSETests {
         let client = OpenAICompatibleClient(configuration: LiveLSE.endpoint)
         let agent = try Agent.start(
             workspace: ws.workspace, client: client, approver: DenyingApprover(),
-            configuration: AgentConfiguration(endpoint: LiveLSE.endpoint, thinking: .off, permissionMode: .review,
+            configuration: AgentConfiguration(endpoint: LiveLSE.endpoint, thinking: ThinkingLevel.off, permissionMode: .review,
                                               maxTurns: 4, checkpointStorage: .memory))
         let started = Date()
         let events = await collect(agent.prompt(

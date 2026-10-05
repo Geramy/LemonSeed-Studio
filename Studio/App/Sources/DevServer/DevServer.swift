@@ -463,8 +463,10 @@ final class DevServer {
             }
         }
         if let raw = body["thinking"] as? String {
-            let level = ThinkingLevel(rawValue: raw) ?? ThinkingLevel.pickerLevels.first { $0.title.lowercased() == raw.lowercased() }
-            if let level { model.setThinking(level) }
+            // A level id the model defines ("none", "xhigh", ...), its
+            // title ("Off", "Extra high"), or "default".
+            let id = model.thinkingLevels.first { $0.title.lowercased() == raw.lowercased() }?.id ?? raw
+            model.setThinking(ThinkingLevel(rawValue: id))
         }
         if let mode = (body["mode"] as? String).flatMap(PermissionMode.init(rawValue:)) { model.mode = mode }
         app.activeRouter?.controller?.show(SidebarItem.agent)

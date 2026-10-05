@@ -1,38 +1,25 @@
 import Foundation
 
-/// Context compaction, after pi's: when the context nears the window,
-/// summarize everything before a recent cut point and keep the tail verbatim.
-///
-/// LSE's window is its KV length (32768 by default). A reply may use what the
-/// window has left, so the trigger is `estimate + reserve > threshold ×
-/// window`, the reserve being the user's limit on one reply when there is
-/// one (otherwise nothing), with the threshold at 75%:
-/// compaction rewrites the prompt prefix (a full re-prefill, ~30 s at 20K
-/// tokens), so it should be rare.
+/// Context compaction, after pi's: summarize everything before a recent cut
+/// point and keep the tail verbatim. It runs only when the user asks (the
+/// Compact conversation button when the context is full, or `compactNow`):
+/// compaction rewrites the prompt prefix, a full re-prefill, and loses
+/// detail, so it is never done behind the user's back.
 public struct CompactionPolicy: Sendable, Hashable {
-    public var contextWindow: Int
-    /// The user's limit on one reply, nil for none (see `OutputBudget`).
-    public var maxOutputTokens: Int?
-    public var threshold: Double
     /// Recent context kept verbatim after compaction.
     public var keepRecentTokens: Int
 
-    public init(contextWindow: Int = 32768, maxOutputTokens: Int? = nil, threshold: Double = 0.75,
-                keepRecentTokens: Int = 6000) {
-        self.contextWindow = contextWindow
-        self.maxOutputTokens = maxOutputTokens
-        self.threshold = threshold
+    public init(keepRecentTokens: Int = 6000) {
         self.keepRecentTokens = keepRecentTokens
-    }
-
-    public func shouldCompact(estimatedTokens: Int) -> Bool {
-        Double(estimatedTokens + (maxOutputTokens ?? 0)) > threshold * Double(contextWindow)
     }
 
     /// The first entry kept after compaction: walking back from the end until
     /// `keepRecentTokens` is reached, then forward to a user message so a tool
     /// call is never separated from its result. Nil keeps nothing.
-    public func cutPoint(_ context: [(entryId: String, message: AgentMessage)]) -> String? {
+    /// `contextLength` (when known) caps what is kept at a quarter of it, so
+    /// a compaction always frees room in a small context.
+    public func cutPoint(_ context: [(entryId: String, message: AgentMessage)], contextLength: Int? = nil) -> String? {
+        let keepRecentTokens = contextLength.map { min(self.keepRecentTokens, $0 / 4) } ?? self.keepRecentTokens
         var tokens = 0
         var index = context.count
         while index > 0 {
@@ -73,14 +60,23 @@ public struct CompactionPolicy: Sendable, Hashable {
         return Int((Double(bytes) / 3.6).rounded(.up))
     }
 
+    /// `none` when the model can switch thinking off (or has no thinking
+    /// controls, which LSE also accepts); otherwise the model's default.
+    public static func thinkingOff(_ capabilities: ModelCapabilities?) -> ThinkingLevel? {
+        guard let thinking = capabilities?.thinking else { return .off }
+        return !thinking.supported || thinking.defines("none") ? .off : nil
+    }
+
     static let summarySystemPrompt = """
     You write the working summary of a coding session so it can continue with a smaller context. \
     Be specific and complete: file paths, function names, decisions, errors and their fixes. \
     Do not invent anything. Answer with the summary only.
     """
 
-    /// The one-off summarization request (thinking off).
-    public func summaryRequest(model: String, conversation: [ChatMessage]) -> ChatRequest {
+    /// The one-off summarization request: the session's sampling, thinking
+    /// off when the model can switch it off, no output limit.
+    public func summaryRequest(model: String, conversation: [ChatMessage], sampling: SamplingOverrides = .init(),
+                               capabilities: ModelCapabilities? = nil) -> ChatRequest {
         var transcript = ""
         for m in conversation where m.role != .system {
             switch m.role {
@@ -114,10 +110,8 @@ public struct CompactionPolicy: Sendable, Hashable {
         """
         let messages: [ChatMessage] = [.system(Self.summarySystemPrompt), .user(instructions)]
         // The summary, like any reply, may use what the window has left.
-        let budget = OutputBudget(contextWindow: contextWindow, promptTokens: TokenEstimator.rawEstimate(messages),
-                                  limit: maxOutputTokens)
-        return ChatRequest(model: model, messages: messages, maxTokens: budget.maxTokens, temperature: 0.2,
-                           thinking: .off)
+        return ChatRequest(model: model, messages: messages, sampling: sampling,
+                           thinking: Self.thinkingOff(capabilities))
     }
 
     /// Paths the tool calls in `context` read and modified (pi's `details`).

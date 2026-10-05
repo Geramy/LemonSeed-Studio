@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import os
 import StudioModels
+import StudioAgent
 
 private let gpuLog = Logger(subsystem: "com.geramyloveless.LemonSeedStudio", category: "gpu")
 
@@ -148,10 +149,9 @@ extension EngineLaunch {
         kvLength = Int32(settings.kvLength)
         batchSize = UInt32(settings.batchSize)
         ubatchSize = UInt32(settings.ubatchSize)
-        temperature = Float(settings.temperature)
-        topP = settings.topP
-        topK = settings.topK
-        replyLimit = settings.maxTokens
+        sampling = SamplingOverrides(temperature: settings.temperature, topK: settings.topK, topP: settings.topP,
+                                     minP: settings.minP, presencePenalty: settings.presencePenalty,
+                                     repetitionPenalty: settings.repetitionPenalty)
         mtpEnabled = settings.mtpEnabled
         mtpDepth = UInt32(settings.mtpDepth)
     }

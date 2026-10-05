@@ -11,10 +11,27 @@ public struct TranscriptItem: Identifiable, Sendable {
         case notice(String, isError: Bool)
         case compaction(summary: String)
         case changes(ChangeSet)
+        /// The context is full; the card offers to compact the conversation.
+        case contextFull(ContextFullCard)
     }
 
     public var id: String
     public var kind: Kind
+}
+
+/// The context-full card: compaction happens only if the user asks for it.
+public struct ContextFullCard: Sendable, Equatable {
+    public enum State: Sendable, Equatable {
+        /// Waiting for the user: Compact conversation, or leave it.
+        case offered
+        case compacting
+        case compacted
+        /// The user chose not to compact; nothing changed.
+        case declined
+        case failed(String)
+    }
+    public var usage: ContextUsage?
+    public var state: State = .offered
 }
 
 /// A streaming or finished assistant message.
@@ -212,9 +229,10 @@ public final class AgentViewModel {
         guard !isScripted else { engine = .scripted; return }
         guard let http = client as? OpenAICompatibleClient else { engine = .online(model: configuration.endpoint.model, detail: nil); return }
         if let health = await http.health(), health.ok {
-            let models = (try? await http.models()) ?? []
-            let model = models.contains(configuration.endpoint.model) ? configuration.endpoint.model : (models.first ?? configuration.endpoint.model)
-            engine = .online(model: model, detail: health.speculation)
+            let models = (try? await http.modelCapabilities()) ?? []
+            let served = models.first { $0.id == configuration.endpoint.model } ?? models.first
+            engine = .online(model: served?.id ?? configuration.endpoint.model, detail: health.speculation)
+            setCapabilities(served)
         } else {
             engine = .offline("No engine at \(configuration.endpoint.baseURL.host() ?? "?"):\(configuration.endpoint.baseURL.port.map(String.init) ?? "")")
         }
@@ -300,14 +318,74 @@ public final class AgentViewModel {
     /// then costs one full re-read of the conversation).
     public var hasHistory: Bool { agent != nil && !items.isEmpty }
 
-    /// Sampling from the next request on, in this chat and the ones it starts.
-    public func setSampling(temperature: Double?, topP: Double?, topK: Int?) {
-        guard temperature != configuration.temperature || topP != configuration.topP
-                || topK != configuration.topK else { return }
-        configuration.temperature = temperature
-        configuration.topP = topP
-        configuration.topK = topK
-        if let agent { Task { await agent.setSampling(temperature: temperature, topP: topP, topK: topK) } }
+    /// Sampling overrides from the next request on, in this chat and the
+    /// ones it starts (nil fields: the model's defaults).
+    public func setSampling(_ sampling: SamplingOverrides) {
+        guard sampling != configuration.sampling else { return }
+        configuration.sampling = sampling
+        if let agent { Task { await agent.setSampling(sampling) } }
+    }
+
+    /// What the served model defines: its thinking levels and defaults.
+    public private(set) var capabilities: ModelCapabilities?
+
+    public func setCapabilities(_ capabilities: ModelCapabilities?) {
+        guard capabilities != self.capabilities else { return }
+        self.capabilities = capabilities
+        configuration.model = capabilities
+        if let agent { Task { await agent.setModel(capabilities) } }
+    }
+
+    /// The thinking levels the model's chat template defines, in its order;
+    /// empty when it defines none (the control is then hidden).
+    public var thinkingLevels: [ModelThinking.Level] {
+        guard let thinking = capabilities?.thinking, thinking.supported else { return [] }
+        return thinking.levels
+    }
+
+    /// The level the picker shows: the chat's, or the model's default when
+    /// the chat leaves it to the model.
+    public var shownThinkingLevel: String? {
+        thinking.isModelDefault ? capabilities?.thinking?.defaultLevel : thinking.rawValue
+    }
+
+    /// Compacts the conversation, only on the user's request (the context
+    /// full card's button). Older turns become a summary; the recent ones stay.
+    public func compactConversation() {
+        guard !isRunning, let agent else { return }
+        setContextFullCards(.compacting)
+        isRunning = true
+        runTask = Task {
+            var failure: String?
+            var stillFull = false
+            for await event in agent.compactConversation() {
+                switch event {
+                case .agentEnd(.error(let message)): failure = message
+                case .agentEnd(.contextFull): stillFull = true
+                case .agentEnd: break
+                default: self.apply(event)
+                }
+            }
+            if let failure { self.setContextFullCards(.failed(failure)) }
+            else if stillFull { self.setContextFullCards(.failed("The part to summarize is itself too large for the context; start a new chat.")) }
+            else { self.setContextFullCards(.compacted) }
+            self.isRunning = false
+            self.runTask = nil
+            self.refreshSessions()
+        }
+    }
+
+    /// Leaves the conversation as it is.
+    public func declineCompaction() { setContextFullCards(.declined) }
+
+    private func setContextFullCards(_ state: ContextFullCard.State) {
+        for i in items.indices {
+            if case .contextFull(var card) = items[i].kind,
+               card.state == .offered || card.state == .compacting || card.state == .declined {
+                card.state = state
+                items[i].kind = .contextFull(card)
+            }
+        }
     }
 
     /// Sets the thinking level. Before the first message it simply applies.
@@ -623,13 +701,18 @@ public final class AgentViewModel {
                 b.replyStop = stop
                 items[i].kind = .assistant(b)
             }
-            append(.notice(stop.detail, isError: false))
+            if case .contextFull(let usage) = stop {
+                append(.contextFull(ContextFullCard(usage: usage)))
+            } else {
+                append(.notice(stop.detail, isError: false))
+            }
         case .agentEnd(let reason):
             switch reason {
             case .completed: break
             case .aborted: append(.notice("Stopped.", isError: false))
             case .maxTurns(let n): append(.notice("Stopped after \(n) turns.", isError: true))
             case .error(let message): append(.notice(message, isError: true))
+            case .contextFull(let usage): append(.contextFull(ContextFullCard(usage: usage)))
             }
             updateAllRunningTools()
         }

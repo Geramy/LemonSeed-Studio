@@ -36,7 +36,8 @@ public final class LSEEngine: @unchecked Sendable {
         public var batchSize: UInt32 = 1024
         public var ubatchSize: UInt32 = 1024
         public var temperature: Float?
-        public var maxTokens: Int32 = 4096
+        /// lse_config.max_tokens, an operator cap; 0 is none (LSE 0.5.2's default).
+        public var maxTokens: Int32 = 0
         public var pool: String?
         public var dialect: String?
         public var cacheDirectory: String?

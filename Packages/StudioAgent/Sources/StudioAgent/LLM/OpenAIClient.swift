@@ -102,6 +102,14 @@ public struct OpenAICompatibleClient: LLMClient {
         let json = try JSONValue.parse(data)
         return (json["data"]?.arrayValue ?? []).compactMap { $0["id"]?.stringValue }
     }
+
+    /// `GET /v1/models`, with what each model defines (thinking levels,
+    /// sampling defaults, context) when the server is LSE.
+    public func modelCapabilities(timeout: TimeInterval = 5) async throws -> [ModelCapabilities] {
+        let data = try await transport.request(method: "GET", path: "models", body: nil, timeout: timeout)
+        let json = try JSONValue.parse(data)
+        return (json["data"]?.arrayValue ?? []).compactMap(ModelCapabilities.init(json:))
+    }
 }
 
 /// Decodes a sequence of chunk payloads into stream events. Shared by every

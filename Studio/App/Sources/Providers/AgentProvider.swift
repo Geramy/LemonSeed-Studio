@@ -47,14 +47,13 @@ final class StudioAgentProvider: AgentProviding {
 
     /// The agent configuration for the engine as currently loaded.
     func configuration() -> AgentConfiguration {
-        // A reply, thinking included, is bounded by what the context has
-        // left, or by the user's own limit when the load settings set one.
+        // No output limit: a reply runs until the model ends it or the
+        // context is full. Sampling: only the user's overrides.
         var endpoint = EndpointConfiguration(model: engine.servedName, toolProtocol: .native,
-                                             contextWindow: engine.contextWindow, maxOutputTokens: engine.replyLimit)
+                                             contextWindow: engine.contextWindow)
         endpoint.requestTimeout = 1800
         return AgentConfiguration(endpoint: endpoint, thinking: AppModel.shared.settings.agentThinking, permissionMode: .review,
-                                  temperature: engine.launch?.temperature.map(Double.init),
-                                  topP: engine.launch?.topP, topK: engine.launch?.topK)
+                                  sampling: engine.launch?.sampling ?? SamplingOverrides())
     }
 
     func client() -> OpenAICompatibleClient {
@@ -64,7 +63,7 @@ final class StudioAgentProvider: AgentProviding {
     /// The view model for a workspace folder (one per folder, kept while the
     /// app runs; rebuilt when the engine's model or context changes).
     func viewModel(for root: URL, displayName: String) -> AgentViewModel {
-        let key = "\(engine.servedName)|\(engine.contextWindow)|\(engine.replyLimit.map(String.init) ?? "context")"
+        let key = "\(engine.launch?.modelID ?? "")|\(engine.servedName)|\(engine.contextWindow)"
         if key != configurationKey {
             // The served model or window changed: sessions keep their files,
             // but the next message starts with the new configuration.
@@ -74,8 +73,7 @@ final class StudioAgentProvider: AgentProviding {
         if let existing = models[root] {
             // The load settings' sampling may have changed since (a reload
             // with the same model and context keeps the chat).
-            let c = configuration()
-            existing.setSampling(temperature: c.temperature, topP: c.topP, topK: c.topK)
+            existing.setSampling(configuration().sampling)
             return existing
         }
         let workspace = LocalWorkspace(rootURL: root, displayName: displayName, securityScoped: true)
@@ -128,6 +126,12 @@ final class StudioAgentProvider: AgentProviding {
     func refresh() async {
         for model in models.values { await model.checkEngine() }
     }
+
+    /// The thinking levels the loaded model defines (from its chat template),
+    /// once a chat has read them; empty otherwise.
+    var thinkingLevels: [ModelThinking.Level] {
+        models.values.lazy.map(\.thinkingLevels).first { !$0.isEmpty } ?? []
+    }
 }
 
 /// The AI sidebar: the agent panel once the engine runs, its state before.
@@ -143,7 +147,7 @@ private struct StudioAgentPanel: View {
             if provider.engine.phase == .ready {
                 AgentPanel(model: provider.viewModel(for: root, displayName: name))
                     .agentTheme(AgentTheme.studio(theme))
-                    .id(provider.engine.servedName + "\(provider.engine.contextWindow)")
+                    .id((provider.engine.launch?.modelID ?? "") + provider.engine.servedName + "\(provider.engine.contextWindow)")
             } else {
                 EngineGate(engine: provider.engine)
             }

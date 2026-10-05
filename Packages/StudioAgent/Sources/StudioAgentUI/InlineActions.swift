@@ -109,17 +109,15 @@ public final class InlineExplainer {
     public private(set) var selection: CodeSelection?
     private let client: any LLMClient
     private let model: String
-    private let contextWindow: Int
-    private let outputLimit: Int?
+    private let capabilities: ModelCapabilities?
     private var task: Task<Void, Never>?
 
-    /// `contextWindow` and `outputLimit` bound the explanation as any reply
-    /// is bounded (`OutputBudget`).
-    public init(client: any LLMClient, model: String, contextWindow: Int, outputLimit: Int?) {
+    /// `capabilities` (when known) decides whether thinking can be switched
+    /// off for the explanation.
+    public init(client: any LLMClient, model: String, capabilities: ModelCapabilities? = nil) {
         self.client = client
         self.model = model
-        self.contextWindow = contextWindow
-        self.outputLimit = outputLimit
+        self.capabilities = capabilities
     }
 
     public func explain(_ s: CodeSelection) {
@@ -132,14 +130,7 @@ public final class InlineExplainer {
             .system("You are the LemonSeed agent in LemonSeed Studio. Explain code clearly and briefly, in Markdown."),
             .user(InlineAction.explain.prompt(for: s)),
         ]
-        let budget = OutputBudget(contextWindow: contextWindow, promptTokens: TokenEstimator.rawEstimate(messages),
-                                  limit: outputLimit)
-        guard !budget.contextIsFull else {
-            error = ReplyStop.contextFull(contextWindow: contextWindow).detail
-            isRunning = false
-            return
-        }
-        let request = ChatRequest(model: model, messages: messages, maxTokens: budget.maxTokens, thinking: .off)
+        let request = ChatRequest(model: model, messages: messages, thinking: CompactionPolicy.thinkingOff(capabilities))
         let client = client
         task = Task {
             do {

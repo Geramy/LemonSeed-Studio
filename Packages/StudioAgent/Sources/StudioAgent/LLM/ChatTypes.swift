@@ -83,43 +83,93 @@ public struct ToolDefinition: Sendable, Hashable {
     }
 }
 
-/// Reasoning control. LSE maps these onto Qwen's thinking switch and a
-/// system-prompt instruction, so the level is part of the cached prefix and
-/// should stay fixed within a session.
-public enum ThinkingLevel: String, Sendable, Hashable, Codable, CaseIterable {
-    /// Sends no `reasoning_effort`: the model thinks at its own level.
-    case modelDefault = "default"
-    case off, minimal, low, medium, high
-    /// LSE's `xhigh`, the most thinking it allows.
-    case max
+/// A thinking level: one of the levels the model's chat template defines
+/// (`ModelThinking.levels`, sent as `reasoning_effort`), or the model's
+/// default, which sends nothing. The level is part of the engine's cached
+/// prompt prefix, so it should stay fixed within a session.
+public struct ThinkingLevel: RawRepresentable, Sendable, Hashable, Codable {
+    /// `"default"` or a level id.
+    public let rawValue: String
+
+    /// Earlier versions stored Studio's own names; "off" and "max" were
+    /// LSE's `none` and `xhigh`. Other ids are kept as they are and checked
+    /// against the model when a request is made.
+    public init(rawValue: String) {
+        switch rawValue {
+        case "off": self.rawValue = "none"
+        case "max": self.rawValue = "xhigh"
+        default: self.rawValue = rawValue
+        }
+    }
+
+    public init(from decoder: any Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(rawValue)
+    }
+
+    /// Sends no `reasoning_effort`: the model's own default level.
+    public static let modelDefault = ThinkingLevel(rawValue: "default")
+    /// Thinking off (the level id `none`), on a template with the switch.
+    public static let off = ThinkingLevel(rawValue: "none")
+
+    public static func level(_ id: String) -> ThinkingLevel { ThinkingLevel(rawValue: id) }
+
+    public var isModelDefault: Bool { rawValue == "default" }
 
     /// The `reasoning_effort` value, or nil for the model's default.
-    public var reasoningEffort: String? {
-        switch self {
-        case .modelDefault: nil
-        case .off: "none"
-        case .minimal: "minimal"
-        case .low: "low"
-        case .medium: "medium"
-        case .high: "high"
-        case .max: "xhigh"
-        }
-    }
+    public var reasoningEffort: String? { isModelDefault ? nil : rawValue }
 
+    /// A label from the id: none is Off, on is On, an "x" before a level
+    /// name is Extra (xhigh is Extra high), anything else capitalized.
     public var title: String {
-        switch self {
-        case .modelDefault: "Default"
-        case .off: "Off"
-        case .minimal: "Minimal"
-        case .low: "Low"
-        case .medium: "Medium"
-        case .high: "High"
-        case .max: "Max"
+        switch rawValue {
+        case "default": return "Default"
+        case "none": return "Off"
+        case "on": return "On"
+        default:
+            if rawValue.count > 1, rawValue.hasPrefix("x"), rawValue.dropFirst().allSatisfy(\.isLetter) {
+                return "Extra " + rawValue.dropFirst()
+            }
+            return rawValue.prefix(1).uppercased() + rawValue.dropFirst()
         }
     }
+}
 
-    /// The levels the thinking picker offers.
-    public static let pickerLevels: [ThinkingLevel] = [.modelDefault, .off, .low, .medium, .high, .max]
+/// Sampling the user overrides; nil fields are left to the model's defaults.
+public struct SamplingOverrides: Sendable, Hashable, Codable {
+    public var temperature: Double?
+    /// 0 or -1 turns top-k off.
+    public var topK: Int?
+    public var topP: Double?
+    public var minP: Double?
+    public var presencePenalty: Double?
+    public var repetitionPenalty: Double?
+
+    public init(temperature: Double? = nil, topK: Int? = nil, topP: Double? = nil, minP: Double? = nil,
+                presencePenalty: Double? = nil, repetitionPenalty: Double? = nil) {
+        self.temperature = temperature
+        self.topK = topK
+        self.topP = topP
+        self.minP = minP
+        self.presencePenalty = presencePenalty
+        self.repetitionPenalty = repetitionPenalty
+    }
+
+    /// The request fields for what is set.
+    public var fields: [String: JSONValue] {
+        var o: [String: JSONValue] = [:]
+        if let temperature { o["temperature"] = .number(temperature) }
+        if let topK { o["top_k"] = .int(topK) }
+        if let topP { o["top_p"] = .number(topP) }
+        if let minP { o["min_p"] = .number(minP) }
+        if let presencePenalty { o["presence_penalty"] = .number(presencePenalty) }
+        if let repetitionPenalty { o["repetition_penalty"] = .number(repetitionPenalty) }
+        return o
+    }
 }
 
 public enum ToolChoice: Sendable, Hashable {
@@ -142,11 +192,12 @@ public struct ChatRequest: Sendable, Hashable {
     public var tools: [ToolDefinition]
     public var toolChoice: ToolChoice
     public var parallelToolCalls: Bool
-    public var maxTokens: Int
-    public var temperature: Double?
-    /// Nil leaves them to the model's generation config (LSE's defaults).
-    public var topP: Double?
-    public var topK: Int?
+    /// Nil sends no `max_tokens`: the reply runs until the model ends it or
+    /// the context is full (or a limit the model's own files set).
+    public var maxTokens: Int?
+    /// Sampling: nil leaves each to the model's generation config (LSE's
+    /// `generation_defaults`); only what the user overrides is sent.
+    public var sampling: SamplingOverrides
     public var thinking: ThinkingLevel?
     public var stop: [String]
     /// Conversation identity for engines that keep one KV cache per
@@ -156,7 +207,7 @@ public struct ChatRequest: Sendable, Hashable {
 
     public init(model: String, messages: [ChatMessage], tools: [ToolDefinition] = [],
                 toolChoice: ToolChoice = .auto, parallelToolCalls: Bool = true,
-                maxTokens: Int = 2048, temperature: Double? = nil, topP: Double? = nil, topK: Int? = nil,
+                maxTokens: Int? = nil, sampling: SamplingOverrides = .init(),
                 thinking: ThinkingLevel? = nil, stop: [String] = [], sessionID: String? = nil) {
         self.model = model
         self.messages = messages
@@ -164,9 +215,7 @@ public struct ChatRequest: Sendable, Hashable {
         self.toolChoice = toolChoice
         self.parallelToolCalls = parallelToolCalls
         self.maxTokens = maxTokens
-        self.temperature = temperature
-        self.topP = topP
-        self.topK = topK
+        self.sampling = sampling
         self.thinking = thinking
         self.stop = stop
         self.sessionID = sessionID
@@ -179,16 +228,14 @@ public struct ChatRequest: Sendable, Hashable {
             "messages": .array(messages.map(\.json)),
             "stream": true,
             "stream_options": ["include_usage": true],
-            "max_tokens": .int(maxTokens),
         ]
+        if let maxTokens { o["max_tokens"] = .int(maxTokens) }
         if !tools.isEmpty {
             o["tools"] = .array(tools.map(\.json))
             o["tool_choice"] = toolChoice.json
             o["parallel_tool_calls"] = .bool(parallelToolCalls)
         }
-        if let temperature { o["temperature"] = .number(temperature) }
-        if let topP { o["top_p"] = .number(topP) }
-        if let topK { o["top_k"] = .int(topK) }
+        for (key, value) in sampling.fields { o[key] = value }
         if let effort = thinking?.reasoningEffort { o["reasoning_effort"] = .string(effort) }
         if !stop.isEmpty { o["stop"] = .array(stop.map(JSONValue.string)) }
         if let sessionID { o["session_id"] = .string(sessionID) }
@@ -280,6 +327,11 @@ public enum ChatStreamEvent: Sendable, Hashable {
     /// stream `arguments` in pieces, which the accumulator concatenates.
     case toolCallDelta(index: Int, id: String?, name: String?, arguments: String?)
     case finished(FinishReason)
+    /// LSE's `stop_reason`: `stop_token`, `stop_sequence`, `max_tokens`,
+    /// `context_full` or `cancelled`.
+    case stopReason(String)
+    /// LSE's `lse_context`, in the final chunk.
+    case context(ContextUsage)
     case usage(TokenUsage)
     case timings(GenerationTimings)
 }
@@ -289,6 +341,8 @@ public struct ChatCompletionAccumulator: Sendable {
     public private(set) var content = ""
     public private(set) var reasoning = ""
     public private(set) var finishReason: FinishReason?
+    public private(set) var stopReason: String?
+    public private(set) var context: ContextUsage?
     public private(set) var usage: TokenUsage?
     public private(set) var timings: GenerationTimings?
     private var calls: [Int: (id: String, name: String, arguments: String)] = [:]
@@ -306,6 +360,8 @@ public struct ChatCompletionAccumulator: Sendable {
             if let arguments { call.arguments += arguments }
             calls[index] = call
         case .finished(let r): finishReason = r
+        case .stopReason(let r): stopReason = r
+        case .context(let c): context = c
         case .usage(let u): usage = u
         case .timings(let t): timings = t
         }

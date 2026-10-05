@@ -99,7 +99,7 @@ public struct SessionListView: View {
                     HStack(spacing: 6) {
                         Text(s.modified, format: .relative(presentation: .named))
                         if let m = s.model { Text("·"); Text(m) }
-                        if let t = s.thinking.flatMap(ThinkingLevel.init(rawValue:)) { Text("·"); Text("thinking \(t.title)") }
+                        if let t = s.thinking.map(ThinkingLevel.init(rawValue:)) { Text("·"); Text("thinking \(t.title)") }
                         Text("·")
                         Text("\(s.messageCount) msg")
                     }

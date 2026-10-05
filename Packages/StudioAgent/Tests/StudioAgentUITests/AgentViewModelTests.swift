@@ -42,6 +42,7 @@ struct AgentViewModelTests {
             case .notice: "notice"
             case .compaction: "compaction"
             case .changes(let c): "changes:\(c.files.count)"
+            case .contextFull: "contextFull"
             }
         }
         #expect(kinds == ["user", "assistant", "tool:edit:done", "assistant", "changes:1"])

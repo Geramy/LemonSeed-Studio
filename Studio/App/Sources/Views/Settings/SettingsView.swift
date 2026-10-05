@@ -343,20 +343,29 @@ private struct ModelSettings: View {
     @State private var result: String?
     @State private var checking = false
 
+    /// The loaded model's levels, plus the stored one if the model lacks it.
+    private var thinkingChoices: [ThinkingLevel] {
+        var levels = ((app.services.agent as? StudioAgentProvider)?.thinkingLevels ?? []).map { ThinkingLevel.level($0.id) }
+        let stored = app.settings.agentThinking
+        if !stored.isModelDefault, !levels.contains(stored) { levels.append(stored) }
+        return levels
+    }
+
     var body: some View {
         @Bindable var settings = app.settings
         SettingsForm {
             Section {
                 Picker("Default thinking", selection: $settings.agentThinking) {
-                    ForEach(ThinkingLevel.pickerLevels, id: \.self) { level in
-                        Text(level == .modelDefault ? "Default (model decides)" : level.title).tag(level)
+                    Text("Model default").tag(ThinkingLevel.modelDefault)
+                    ForEach(thinkingChoices, id: \.self) { level in
+                        Text(level.title).tag(level)
                     }
                 }
                 .accessibilityIdentifier("settings.thinking")
             } header: {
                 Text("Agent")
             } footer: {
-                Text("The thinking level new chats start with (reasoning_effort: Off is none, Max is xhigh; Default sends nothing). Each chat keeps its own level; change it from the brain button in the composer.")
+                Text("The thinking level new chats start with. The levels are the ones the loaded model\u{2019}s chat template defines; a level the model does not define is not sent, and the model\u{2019}s default is used. Each chat keeps its own level; change it from the brain button in the composer.")
             }
             Section {
                 TextField("http://127.0.0.1:8080/v1", text: $settings.lseEndpoint)

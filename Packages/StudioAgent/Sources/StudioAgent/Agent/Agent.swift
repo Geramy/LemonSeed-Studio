@@ -7,10 +7,11 @@ public struct AgentConfiguration: Sendable, Hashable {
     public var thinking: ThinkingLevel
     public var permissionMode: PermissionMode
     public var maxTurns: Int
-    public var temperature: Double?
-    /// Sent when set; nil leaves them to the model's generation config.
-    public var topP: Double?
-    public var topK: Int?
+    /// Sent when set; nil fields are left to the model's generation config.
+    public var sampling: SamplingOverrides
+    /// What the served model defines (thinking levels, defaults), when known.
+    public var model: ModelCapabilities?
+    /// How a compaction the user asks for summarizes (never automatic).
     public var compaction: CompactionPolicy
     public var checkpointStorage: Checkpoint.Storage
     /// Global instructions from app settings, placed before AGENTS.md files.
@@ -18,20 +19,18 @@ public struct AgentConfiguration: Sendable, Hashable {
     /// Retries when the engine rejects a malformed tool call.
     public var modelOutputRetries: Int
 
-    public init(endpoint: EndpointConfiguration = .lseDefault, thinking: ThinkingLevel = .low,
-                permissionMode: PermissionMode = .review, maxTurns: Int = 40, temperature: Double? = nil,
-                topP: Double? = nil, topK: Int? = nil,
+    public init(endpoint: EndpointConfiguration = .lseDefault, thinking: ThinkingLevel = .modelDefault,
+                permissionMode: PermissionMode = .review, maxTurns: Int = 40,
+                sampling: SamplingOverrides = .init(), model: ModelCapabilities? = nil,
                 compaction: CompactionPolicy? = nil, checkpointStorage: Checkpoint.Storage = .clone,
                 globalContext: String? = nil, modelOutputRetries: Int = 1) {
         self.endpoint = endpoint
         self.thinking = thinking
         self.permissionMode = permissionMode
         self.maxTurns = maxTurns
-        self.temperature = temperature
-        self.topP = topP
-        self.topK = topK
-        self.compaction = compaction ?? CompactionPolicy(contextWindow: endpoint.contextWindow,
-                                                         maxOutputTokens: endpoint.maxOutputTokens)
+        self.sampling = sampling
+        self.model = model
+        self.compaction = compaction ?? CompactionPolicy()
         self.checkpointStorage = checkpointStorage
         self.globalContext = globalContext
         self.modelOutputRetries = modelOutputRetries
@@ -60,8 +59,9 @@ public actor Agent {
     private let approver: any PermissionApprover
     private var policy: PermissionPolicy
     private var estimator = TokenEstimator()
-    /// The output budget of the request streaming now (or last streamed).
-    private var lastBudget = OutputBudget(contextWindow: 0, promptTokens: 0, limit: nil)
+    /// A level the user chose that the served model does not define, once
+    /// said (the request then uses the model's default).
+    private var undefinedLevelNoticed: String?
     private var steering: [String] = []
     private var followUps: [String] = []
     private var runTask: Task<Void, Never>?
@@ -128,7 +128,7 @@ public actor Agent {
         let store = SessionStore(workspace: workspace)
         let doc = try store.load(url)
         var config = configuration
-        if let level = doc.thinkingLevel.flatMap(ThinkingLevel.init(rawValue:)) { config.thinking = level }
+        if let level = doc.thinkingLevel { config.thinking = ThinkingLevel(rawValue: level) }
         let checkpoints = CheckpointStore(workspace: workspace, storage: config.checkpointStorage)
         for e in doc.entries {
             if case .custom(Checkpoint.sessionCustomType, let data?) = e.payload, let cp = Checkpoint(sessionData: data) {
@@ -152,11 +152,10 @@ public actor Agent {
 
     /// Sampling from the next request on (sent per request; nil fields are
     /// left to the model's generation config).
-    public func setSampling(temperature: Double?, topP: Double?, topK: Int?) {
-        configuration.temperature = temperature
-        configuration.topP = topP
-        configuration.topK = topK
-    }
+    public func setSampling(_ sampling: SamplingOverrides) { configuration.sampling = sampling }
+
+    /// What the served model defines, from `/v1/models`.
+    public func setModel(_ model: ModelCapabilities?) { configuration.model = model }
 
     /// Changes the thinking level from the next request on, recorded in the
     /// session. The level is part of the engine's prompt prefix, so the next
@@ -223,6 +222,9 @@ public actor Agent {
             reason = try await loop(out)
         } catch is CancellationError {
             reason = .aborted
+        } catch let error as LLMError where error.isContextFull {
+            // The conversation alone fills the context: no reply was started.
+            if case .api(_, _, _, let usage, _) = error { reason = .contextFull(usage) } else { reason = .contextFull(nil) }
         } catch {
             reason = .error((error as? LocalizedError)?.errorDescription ?? "\(error)")
         }
@@ -236,23 +238,21 @@ public actor Agent {
         while true {
             try Task.checkCancellation()
             if turn >= configuration.maxTurns { return .maxTurns(turn) }
-            try await compactIfNeeded(out)
-            if currentRequest().budget.contextIsFull {
-                // Nothing is left for a reply: say so rather than send a request.
-                out.yield(.replyStopped(.contextFull(contextWindow: configuration.endpoint.contextWindow)))
-                return .completed
-            }
+            if let notice = undefinedLevelNotice() { out.yield(.notice(notice)) }
             turn += 1
             out.yield(.turnStart(index: turn))
 
-            let (assistant, finish, timings, usage) = try await streamAssistant(out)
+            let (assistant, finish, timings, usage, stop) = try await streamAssistant(out)
+            if let stop {
+                // Cut off: the reply so far stands. A full context waits for
+                // the user to compact; nothing more is sent.
+                out.yield(.replyStopped(stop))
+                out.yield(.turnEnd(index: turn, timings: timings, usage: usage, contextTokens: lastContextTokens))
+                if case .contextFull = stop { return .completed }
+            }
             let calls = assistant.toolCalls
             if calls.isEmpty {
-                if finish == .length {
-                    out.yield(.replyStopped(lastBudget.boundByContext
-                        ? .contextFull(contextWindow: configuration.endpoint.contextWindow)
-                        : .replyLimit(lastBudget.maxTokens)))
-                }
+                if stop == nil, finish == .length { out.yield(.replyStopped(.maxTokens)) }
                 out.yield(.turnEnd(index: turn, timings: timings, usage: usage, contextTokens: lastContextTokens))
                 if !followUps.isEmpty {
                     try flushQueue(&followUps, out: out)
@@ -282,30 +282,47 @@ public actor Agent {
         return e
     }
 
-    /// The current request: replayed system prompt, tools, and context, and
-    /// a reply budget of what the context window has left after them (or the
-    /// user's limit when smaller). Reasoning counts toward it like the answer.
-    private func currentRequest() -> (ChatRequest, estimated: Int, budget: OutputBudget) {
+    /// The current request: replayed system prompt, tools and context, the
+    /// thinking level and the user's sampling overrides. No `max_tokens`: a
+    /// reply runs until the model ends it or the context is full.
+    private func currentRequest() -> (ChatRequest, estimated: Int) {
         let state = document.systemState()
         let messages = WireConverter.messages(systemPrompt: state.prompt, context: document.contextMessages())
-        let budget = OutputBudget(contextWindow: configuration.endpoint.contextWindow,
-                                  promptTokens: estimator.estimate(messages, tools: state.tools),
-                                  limit: configuration.endpoint.maxOutputTokens)
         let request = ChatRequest(model: configuration.endpoint.model, messages: messages, tools: state.tools,
-                                  maxTokens: budget.maxTokens,
-                                  temperature: configuration.temperature, topP: configuration.topP,
-                                  topK: configuration.topK, thinking: configuration.thinking,
+                                  sampling: configuration.sampling, thinking: requestThinking,
                                   sessionID: document.header.id)
-        return (request, TokenEstimator.rawEstimate(messages, tools: state.tools), budget)
+        return (request, TokenEstimator.rawEstimate(messages, tools: state.tools))
+    }
+
+    /// The level to send: the session's, when the model defines it (or when
+    /// what it defines is unknown); otherwise none, which is the model's
+    /// default. Never a level the model would refuse.
+    private var requestThinking: ThinkingLevel? {
+        let level = configuration.thinking
+        if level.isModelDefault { return nil }
+        guard let thinking = configuration.model?.thinking else { return level }
+        return thinking.defines(level.rawValue) ? level : nil
+    }
+
+    private func undefinedLevelNotice() -> String? {
+        let level = configuration.thinking
+        guard !level.isModelDefault, let thinking = configuration.model?.thinking,
+              !thinking.defines(level.rawValue), undefinedLevelNoticed != level.rawValue else { return nil }
+        undefinedLevelNoticed = level.rawValue
+        let model = configuration.model?.id ?? "This model"
+        guard thinking.supported else {
+            return "\(model) has no thinking levels, so thinking \(level.title) is not sent."
+        }
+        let fallback = thinking.defaultLevel.map { " its default, \(ThinkingLevel(rawValue: $0).title)," } ?? " its default"
+        return "\(model) has no \(level.title) thinking level; the chat uses\(fallback) until you choose one of its levels."
     }
 
     private func streamAssistant(_ out: AsyncStream<AgentEvent>.Continuation) async throws
-        -> (AgentMessage.AssistantMessage, FinishReason?, GenerationTimings?, TokenUsage?)
+        -> (AgentMessage.AssistantMessage, FinishReason?, GenerationTimings?, TokenUsage?, ReplyStop?)
     {
         var attempt = 0
         while true {
-            let (request, rawEstimate, budget) = currentRequest()
-            lastBudget = budget
+            let (request, rawEstimate) = currentRequest()
             lastContextTokens = estimator.estimate(request.messages, tools: request.tools)
             out.yield(.assistantStart)
             var acc = ChatCompletionAccumulator()
@@ -328,14 +345,11 @@ public actor Agent {
                 // A cancelled consumer sees the stream end quietly; make it an abort.
                 try Task.checkCancellation()
             } catch let error as LLMError where error.isContextFull {
-                // The engine reached the end of its KV cache before the
-                // budget (an estimate) ran out: the reply so far stands, cut
-                // off because the context is full.
-                lastBudget.boundByContext = true
-                let message = assistantMessage(from: acc, keepCalls: false, stop: .length, error: nil)
-                let e = try record(.message(.assistant(message)))
-                out.yield(.assistantEnd(message, entryID: e.id))
-                return (message, .length, acc.timings, acc.usage)
+                // The prompt already fills the context (HTTP 400): nothing
+                // was generated, nothing is recorded.
+                out.yield(.assistantEnd(assistantMessage(from: acc, keepCalls: false, stop: .length, error: nil),
+                                        entryID: ""))
+                throw error
             } catch let error as LLMError where error.isModelOutputError && attempt < configuration.modelOutputRetries {
                 attempt += 1
                 out.yield(.notice("The model produced a malformed tool call; retrying."))
@@ -356,11 +370,17 @@ public actor Agent {
                 estimator.calibrate(actualPromptTokens: usage.promptTokens, estimated: rawEstimate)
                 lastContextTokens = usage.promptTokens + usage.completionTokens
             }
+            if let context = acc.context { lastContextTokens = context.tokensUsed }
             let message = assistantMessage(from: acc, keepCalls: acc.finishReason != .length,
                                            stop: acc.finishReason == .length ? .length : nil, error: nil)
             let e = try record(.message(.assistant(message)))
             out.yield(.assistantEnd(message, entryID: e.id))
-            return (message, acc.finishReason, acc.timings, acc.usage)
+            let stop: ReplyStop? = switch acc.stopReason {
+            case "context_full": .contextFull(acc.context)
+            case "max_tokens": .maxTokens
+            default: nil
+            }
+            return (message, acc.finishReason, acc.timings, acc.usage, stop)
         }
     }
 
@@ -556,41 +576,68 @@ public actor Agent {
 
     // MARK: Compaction
 
-    private func compactIfNeeded(_ out: AsyncStream<AgentEvent>.Continuation) async throws {
-        let (request, _, _) = currentRequest()
-        let estimate = estimator.estimate(request.messages, tools: request.tools)
-        guard configuration.compaction.shouldCompact(estimatedTokens: estimate) else { return }
-        try await compact(out, estimate: estimate)
-    }
-
-    /// Summarizes older context now (pi's `/compact`).
+    /// Summarizes older context now (pi's `/compact`). Only ever on the
+    /// user's request: nothing compacts on its own.
     public func compactNow() async throws {
-        let (request, _, _) = currentRequest()
+        let (request, _) = currentRequest()
         let (stream, cont) = AsyncStream<AgentEvent>.makeStream()
         _ = stream
         try await compact(cont, estimate: estimator.estimate(request.messages, tools: request.tools))
         cont.finish()
     }
 
-    private func compact(_ out: AsyncStream<AgentEvent>.Continuation, estimate: Int) async throws {
-        let context = document.contextEntries()
-        guard context.count > 2 else { return }
-        out.yield(.compactionStart(tokensBefore: estimate))
-        let firstKept = configuration.compaction.cutPoint(context)
-        let cutIndex = firstKept.flatMap { id in context.firstIndex(where: { $0.entryId == id }) } ?? context.count
-        let older = Array(context[..<cutIndex].map(\.message))
-        let wire = WireConverter.messages(systemPrompt: "", context: older)
-        let summaryRequest = configuration.compaction.summaryRequest(model: configuration.endpoint.model,
-                                                                     conversation: wire)
-        guard summaryRequest.maxTokens > 0 else {
-            out.yield(.notice("Compaction skipped: the part of the conversation to summarize leaves no room for a summary in the \(configuration.endpoint.contextWindow)-token context window."))
+    /// `compactNow`, with its events (compaction start and end, notices) and
+    /// an end reason, for the panel's Compact conversation button.
+    public nonisolated func compactConversation() -> AsyncStream<AgentEvent> {
+        AsyncStream { continuation in
+            Task {
+                await self.runCompaction(continuation)
+            }
+        }
+    }
+
+    private func runCompaction(_ out: AsyncStream<AgentEvent>.Continuation) async {
+        guard runTask == nil else {
+            out.yield(.notice("The agent is running; compact once it has finished."))
+            out.finish()
             return
         }
+        let (request, _) = currentRequest()
+        var reason: AgentEndReason = .completed
+        do {
+            if let problem = try await compact(out, estimate: estimator.estimate(request.messages, tools: request.tools)) {
+                reason = .error(problem)
+            }
+        } catch let error as LLMError where error.isContextFull {
+            if case .api(_, _, _, let usage, _) = error { reason = .contextFull(usage) } else { reason = .contextFull(nil) }
+        } catch {
+            reason = .error("Compaction failed: \((error as? LocalizedError)?.errorDescription ?? "\(error)")")
+        }
+        out.yield(.agentEnd(reason))
+        out.finish()
+    }
+
+    /// Summarizes the turns before the kept tail. Returns what is wrong when
+    /// there is nothing to summarize, nil when it compacted.
+    @discardableResult
+    private func compact(_ out: AsyncStream<AgentEvent>.Continuation, estimate: Int) async throws -> String? {
+        let context = document.contextEntries()
+        let contextLength = configuration.model?.contextLength ?? configuration.endpoint.contextWindow
+        let firstKept = configuration.compaction.cutPoint(context, contextLength: contextLength)
+        let cutIndex = firstKept.flatMap { id in context.firstIndex(where: { $0.entryId == id }) } ?? context.count
+        let older = Array(context[..<cutIndex].map(\.message))
+        guard context.count > 2, older.contains(where: { if case .user = $0 { true } else { false } }) else {
+            return "There is nothing older to summarize: the latest turn alone fills the context. Start a new chat to continue."
+        }
+        out.yield(.compactionStart(tokensBefore: estimate))
+        let wire = WireConverter.messages(systemPrompt: "", context: older)
+        let summaryRequest = configuration.compaction.summaryRequest(model: configuration.endpoint.model,
+                                                                     conversation: wire, sampling: configuration.sampling,
+                                                                     capabilities: configuration.model)
         let result = try await client.complete(summaryRequest)
         let summary = result.content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !summary.isEmpty else {
-            out.yield(.notice("Compaction produced no summary; continuing with the full context."))
-            return
+            return "The model returned no summary, so the conversation was left as it was."
         }
         let state = document.systemState()
         var sections: [String: String?] = [:]
@@ -609,5 +656,6 @@ public actor Agent {
         try sessionStore.append([e], to: sessionURL)
         estimator.calibration = 1.0
         out.yield(.compactionEnd(summary: summary))
+        return nil
     }
 }

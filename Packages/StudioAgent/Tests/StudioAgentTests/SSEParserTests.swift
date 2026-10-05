@@ -112,14 +112,16 @@ struct SSEParserTests {
         let tools = [ToolDefinition(name: "read", description: "Read a file", parameters: ["type": "object", "properties": ["path": ["type": "string"]]]),
                      ToolDefinition(name: "edit", description: "Edit a file", parameters: ["type": "object"])]
         let r = ChatRequest(model: "qwen-q4", messages: [.system("s"), .user("u")], tools: tools,
-                            maxTokens: 512, thinking: .low, sessionID: "abc")
+                            thinking: .level("low"), sessionID: "abc")
         let a = r.body().serialized(), b = r.body().serialized()
         #expect(a == b)
         let body = r.body()
         #expect(body["stream"] == true)
         #expect(body["stream_options"]?["include_usage"] == true)
         #expect(body["reasoning_effort"] == "low")
-        #expect(body["max_tokens"] == 512)
+        // No output limit unless one is asked for.
+        #expect(body["max_tokens"] == nil)
+        #expect(ChatRequest(model: "m", messages: [], maxTokens: 64).body()["max_tokens"] == 64)
         // strict must never be sent: LSE answers 400 to strict:true.
         #expect(!a.contains("\"strict\""))
     }

@@ -6,28 +6,33 @@ public enum AgentEndReason: Sendable, Hashable {
     case aborted
     case maxTurns(Int)
     case error(String)
+    /// The prompt already fills the context, so no reply was started.
+    case contextFull(ContextUsage?)
 }
 
 /// Why a reply was cut off before the model finished it.
 public enum ReplyStop: Sendable, Hashable {
-    /// The context window (that many tokens) is full.
-    case contextFull(contextWindow: Int)
-    /// The reply reached the user's limit on one reply (load settings).
-    case replyLimit(Int)
+    /// The conversation and the reply fill the context. With the engine's
+    /// count when it sent one.
+    case contextFull(ContextUsage?)
+    /// A limit on one reply: the operator's cap or the model's own
+    /// (`max_new_tokens`); Studio sets none.
+    case maxTokens
 
     public var title: String {
         switch self {
         case .contextFull: "Stopped: context full"
-        case .replyLimit: "Stopped: reply limit reached"
+        case .maxTokens: "Stopped: the model's output limit"
         }
     }
 
     public var detail: String {
         switch self {
-        case .contextFull(let window):
-            "Stopped: context full. The conversation and this reply fill the \(window)-token context window; start a new chat or compact this one to continue."
-        case .replyLimit(let limit):
-            "Stopped: the reply reached the \(limit)-token limit set in the model's load settings."
+        case .contextFull(let usage):
+            let size = usage.map { " (\($0.contextLength) tokens)" } ?? ""
+            return "Stopped: context full. This conversation fills the model's context\(size). Compact the conversation to continue in this chat, or start a new one."
+        case .maxTokens:
+            return "Stopped: the reply reached an output limit the model or the engine sets."
         }
     }
 }

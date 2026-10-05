@@ -90,34 +90,6 @@ struct AgentLoopTests {
         #expect(client.requests.count == 2)
     }
 
-    @Test func compactsNearTheWindowAndKeepsRecentTurns() async throws {
-        let ws = try TempWorkspace(["notes.txt": String(repeating: "0123456789abcdef\n", count: 60)])
-        let client = ScriptedLLMClient([
-            .toolCalls([("read", ["path": "notes.txt"])]),
-            .text("Read it."),
-            .text("## Goal\nRead notes.txt"),  // the summary
-            .text("Answer after compaction."),
-        ])
-        var cfg = AgentConfiguration(endpoint: EndpointConfiguration(contextWindow: 8192, maxOutputTokens: 1024),
-                                     checkpointStorage: .memory)
-        cfg.compaction = CompactionPolicy(contextWindow: 8192, maxOutputTokens: 1024, threshold: 0.75,
-                                          keepRecentTokens: 200)
-        let agent = try Agent.start(workspace: ws.workspace, client: client, approver: DenyingApprover(), configuration: cfg)
-        let first = await collect(agent.prompt("read notes.txt"))
-        #expect(!first.contains { if case .compactionStart = $0 { true } else { false } })
-        let big = "Here is a long spec:\n" + String(repeating: "The parser must accept nested blocks. ", count: 260)
-        let events = await collect(agent.prompt(big))
-        #expect(events.contains { if case .compactionEnd = $0 { true } else { false } })
-        let last = client.requests.last!.messages
-        #expect(last.count == 3)
-        #expect(last[1].content?.contains("<summary>\n## Goal") == true)
-        #expect(last.last == .user(big))
-        #expect(!last.contains { $0.role == .tool })
-        // The summary request itself saw the first run.
-        let summaryRequest = client.requests[2]
-        #expect(summaryRequest.thinking == .off)
-        #expect(summaryRequest.messages[1].content?.contains("[Tool call] read") == true)
-    }
 
     @Test func agentSessionReplaysAPrefixStableRequest() async throws {
         let ws = try TempWorkspace(["AGENTS.md": "Use tabs.", "a.txt": "hello\n"])

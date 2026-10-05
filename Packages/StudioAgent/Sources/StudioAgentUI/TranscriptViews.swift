@@ -479,3 +479,66 @@ struct PendingChangesCard: View {
         }
     }
 }
+
+/// The context is full: an error, and the offer to compact the conversation.
+/// Nothing is compacted unless the user taps the button.
+struct ContextFullView: View {
+    let card: ContextFullCard
+    let onCompact: () -> Void
+    let onDecline: () -> Void
+    @Environment(\.agentTheme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("Context full", systemImage: "exclamationmark.triangle.fill")
+                .font(theme.captionFont.weight(.semibold))
+                .foregroundStyle(theme.danger)
+            Text(message)
+                .font(theme.captionFont)
+                .foregroundStyle(theme.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+            switch card.state {
+            case .offered:
+                HStack(spacing: 10) {
+                    Button("Compact conversation", action: onCompact)
+                        .buttonStyle(.borderedProminent)
+                        .tint(theme.accent)
+                        .accessibilityIdentifier("agent.compact")
+                    Button("Not now", action: onDecline)
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("agent.compact.decline")
+                }
+                .font(theme.captionFont)
+            case .compacting:
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Compacting…").font(theme.captionFont).foregroundStyle(theme.secondaryText)
+                }
+            case .compacted:
+                Label("Compacted: older turns are now a summary. Continue the conversation.",
+                      systemImage: "checkmark.circle")
+                    .font(theme.captionFont).foregroundStyle(theme.success)
+            case .declined:
+                HStack(spacing: 10) {
+                    Text("Not compacted.").font(theme.captionFont).foregroundStyle(theme.tertiaryText)
+                    Button("Compact conversation", action: onCompact)
+                        .buttonStyle(.bordered)
+                        .font(theme.captionFont)
+                        .accessibilityIdentifier("agent.compact")
+                }
+            case .failed(let why):
+                Label(why, systemImage: "xmark.octagon").font(theme.captionFont).foregroundStyle(theme.danger)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(theme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: theme.cornerRadius, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("agent.contextFull")
+    }
+
+    private var message: String {
+        let size = card.usage.map { "the model\u{2019}s \($0.contextLength)-token context" } ?? "the model\u{2019}s context"
+        return "This conversation fills \(size), so the model cannot add to it. Compacting replaces the older turns with a summary and keeps the recent ones; the files are untouched."
+    }
+}

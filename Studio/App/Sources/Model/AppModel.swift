@@ -122,7 +122,7 @@ final class AppSettings {
         density = defaults.string(forKey: "density").flatMap(Density.init(rawValue:)) ?? .automatic
         showActivityBar = defaults.object(forKey: "showActivityBar") as? Bool ?? true
         lseEndpoint = defaults.string(forKey: "lseEndpoint") ?? ModelEndpointProbe.defaultEndpoint.absoluteString
-        agentThinking = defaults.string(forKey: "agentThinking").flatMap(ThinkingLevel.init(rawValue:)) ?? .low
+        agentThinking = defaults.string(forKey: "agentThinking").flatMap(ThinkingLevel.init(rawValue:)) ?? .modelDefault
         editor = defaults.data(forKey: "editorSettings").flatMap { try? JSONDecoder().decode(EditorSettings.self, from: $0) } ?? EditorSettings()
     }
 

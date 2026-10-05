@@ -36,13 +36,12 @@ final class DemoEnvironment {
             ? ScriptedLLMClient(DemoScript.replies, delay: .milliseconds(28))
             : OpenAICompatibleClient(configuration: endpoint)
         let mode = defaults.string(forKey: "mode").flatMap(PermissionMode.init(rawValue:)) ?? .review
-        let config = AgentConfiguration(endpoint: endpoint, thinking: .low, permissionMode: mode)
+        let config = AgentConfiguration(endpoint: endpoint, permissionMode: mode)
         model = AgentViewModel(workspace: workspace, client: client, configuration: config)
         explainer = InlineExplainer(client: defaults.bool(forKey: "scripted")
                                         ? ScriptedLLMClient([DemoScript.explanation], delay: .milliseconds(20))
                                         : client,
-                                    model: endpoint.model, contextWindow: endpoint.contextWindow,
-                                    outputLimit: endpoint.maxOutputTokens)
+                                    model: endpoint.model)
         screen = defaults.string(forKey: "screen") ?? "chat"
         autoPrompt = defaults.string(forKey: "autoPrompt")
     }

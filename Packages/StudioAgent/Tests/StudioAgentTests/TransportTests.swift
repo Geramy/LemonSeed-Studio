@@ -15,7 +15,7 @@ struct TransportTests {
 
     let request = ChatRequest(model: "qwen-q4", messages: [.user("read hello.txt")],
                               tools: [ToolDefinition(name: "read", description: "Read", parameters: ["type": "object"])],
-                              maxTokens: 64, thinking: .off)
+                              maxTokens: 64, thinking: ThinkingLevel.off)
 
     @Test func closureTransportCarriesTheSameJSONBothWays() async throws {
         let seen = Mutex<(String, String, Data?)?>(nil)
@@ -96,9 +96,13 @@ struct TransportTests {
         }
         #expect(try effort(.modelDefault) == nil)
         #expect(try effort(nil) == nil)
-        #expect(try effort(.off) == "none")
-        #expect(try effort(.low) == "low")
-        #expect(try effort(.max) == "xhigh")
+        #expect(try effort(ThinkingLevel.off) == "none")
+        #expect(try effort(.level("low")) == "low")
+        #expect(try effort(.level("xhigh")) == "xhigh")
+        // Session files written before levels came from the model.
+        #expect(ThinkingLevel(rawValue: "off") == ThinkingLevel.off)
+        #expect(ThinkingLevel(rawValue: "max").rawValue == "xhigh")
+        #expect(ThinkingLevel.level("xhigh").title == "Extra high" && ThinkingLevel.off.title == "Off")
     }
 
     @Test func errorStatusesAndStreamErrorsSurface() async throws {

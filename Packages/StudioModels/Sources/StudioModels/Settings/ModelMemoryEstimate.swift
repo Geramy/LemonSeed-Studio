@@ -62,6 +62,49 @@ public enum MemoryFit: String, Sendable, Hashable {
 public protocol ModelMemoryEstimating: Sendable {
     /// `draftDirectory` is the DFlash2 draft to run, when `settings` enable it.
     func estimate(modelDirectory: URL, draftDirectory: URL?, settings: ModelLoadSettings) throws -> ModelMemoryEstimate
+    /// The model's sampling defaults as the engine reads them, for the load
+    /// settings' "Model default (value)". Nil when the engine cannot say
+    /// (the settings then show "Model default" without a value).
+    func generationDefaults(modelDirectory: URL) -> ModelGenerationDefaults?
+}
+
+extension ModelMemoryEstimating {
+    public func generationDefaults(modelDirectory: URL) -> ModelGenerationDefaults? { nil }
+}
+
+/// The sampling defaults LSE reports for a model (`generation_defaults` of
+/// lse_model_info), each with where it came from.
+public struct ModelGenerationDefaults: Sendable, Hashable {
+    public var temperature: Double?
+    public var topK: Int?
+    public var topP: Double?
+    public var minP: Double?
+    public var presencePenalty: Double?
+    public var repetitionPenalty: Double?
+    /// LSE's field name to `generation_config.json`, `config.json`,
+    /// `server_option` or `lse_default`.
+    public var sources: [String: String]
+
+    public init(temperature: Double? = nil, topK: Int? = nil, topP: Double? = nil, minP: Double? = nil,
+                presencePenalty: Double? = nil, repetitionPenalty: Double? = nil, sources: [String: String] = [:]) {
+        self.temperature = temperature
+        self.topK = topK
+        self.topP = topP
+        self.minP = minP
+        self.presencePenalty = presencePenalty
+        self.repetitionPenalty = repetitionPenalty
+        self.sources = sources
+    }
+
+    /// From lse_model_info's JSON object.
+    public init?(lseModelInfo info: [String: Any]) {
+        guard let d = info["generation_defaults"] as? [String: Any] else { return nil }
+        func number(_ key: String) -> Double? { (d[key] as? NSNumber)?.doubleValue }
+        self.init(temperature: number("temperature"), topK: (d["top_k"] as? NSNumber)?.intValue,
+                  topP: number("top_p"), minP: number("min_p"), presencePenalty: number("presence_penalty"),
+                  repetitionPenalty: number("repetition_penalty"),
+                  sources: d["sources"] as? [String: String] ?? [:])
+    }
 }
 
 public enum ModelMemoryEstimateError: Error, LocalizedError {

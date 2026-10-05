@@ -1,4 +1,5 @@
 import SwiftUI
+import StudioAgent
 import StudioCore
 import StudioDesign
 import StudioModels
@@ -170,8 +171,8 @@ struct EnginePanel: View {
             summaryRow("Draft", launch.draftID.map { "DFlash2 · \($0)" } ?? (launch.mtpEnabled ? "MTP depth \(launch.mtpDepth)" : "none"))
             summaryRow("K/V cache", "\(launch.kvCacheDType) · \(launch.kvLength.formatted()) tokens")
             summaryRow("Batch", "\(launch.batchSize) / ubatch \(launch.ubatchSize)")
-            summaryRow("Sampling", launch.temperature.map { String(format: "temperature %.2f", $0) } ?? "model default")
-            summaryRow("Reply", launch.replyLimit.map { "at most \($0.formatted()) tokens" } ?? "until the context is full")
+            summaryRow("Sampling", SamplingSummary.text(launch.sampling))
+            summaryRow("Reply", "no output limit (until the model stops or the context is full)")
             if let total = provider.vramTotalBytes {
                 summaryRow("GPU VRAM", ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .memory)
                            + (provider.summary == nil ? " (last reading)" : ""))
@@ -320,5 +321,19 @@ enum DiagnosticsReport {
         lines.append("== Engine log (last 60) ==")
         lines.append(contentsOf: engine.log.suffix(60))
         return lines.joined(separator: "\n")
+    }
+}
+
+/// "model defaults", or the overrides the user set, for summaries.
+enum SamplingSummary {
+    static func text(_ s: SamplingOverrides) -> String {
+        var parts: [String] = []
+        if let v = s.temperature { parts.append(String(format: "temperature %.2f", v)) }
+        if let v = s.topK { parts.append("top-k \(v)") }
+        if let v = s.topP { parts.append(String(format: "top-p %.2f", v)) }
+        if let v = s.minP { parts.append(String(format: "min-p %.2f", v)) }
+        if let v = s.presencePenalty { parts.append(String(format: "presence %.2f", v)) }
+        if let v = s.repetitionPenalty { parts.append(String(format: "repetition %.2f", v)) }
+        return parts.isEmpty ? "model defaults" : parts.joined(separator: " · ") + ", the rest the model\u{2019}s"
     }
 }

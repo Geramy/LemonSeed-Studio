@@ -66,6 +66,13 @@ struct LSEMemoryEstimator: ModelMemoryEstimating {
                                    workspaceBytes: total - weights - kv - draft, totalBytes: total,
                                    isApproximate: false, source: source)
     }
+
+    /// lse_model_info's `generation_defaults`: what the model's files set,
+    /// as the engine will use them.
+    func generationDefaults(modelDirectory: URL) -> ModelGenerationDefaults? {
+        guard let info = try? LSEEngine.modelInfo(modelDirectory.path) else { return nil }
+        return ModelGenerationDefaults(lseModelInfo: info)
+    }
 }
 #endif
 

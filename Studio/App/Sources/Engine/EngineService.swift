@@ -21,15 +21,10 @@ struct EngineLaunch: Equatable, Sendable {
     var kvLength: Int32 = 32768
     var batchSize: UInt32 = 1024
     var ubatchSize: UInt32 = 1024
-    var temperature: Float? = 0.6
-    /// Sent with each request; nil leaves them to the model's generation config.
-    var topP: Double?
-    var topK: Int?
-    /// The user's limit on one reply (load settings), nil for none.
-    var replyLimit: Int?
-    /// lse_config.max_tokens, LSE's per-request cap: the reply limit, or the
-    /// KV length so that a reply can run until the context is full.
-    var maxTokens: Int32 { replyLimit.map(Int32.init) ?? kvLength }
+    /// The user's sampling overrides, sent with each request (nil fields:
+    /// the model's defaults). Not engine options: the engine keeps the
+    /// model's own temperature, and sets no output limit.
+    var sampling = SamplingOverrides()
     var mtpEnabled = false
     var mtpDepth: UInt32 = 3
     /// The engine's served model name (what requests put in "model").
@@ -170,8 +165,6 @@ final class EngineService {
     var isRunning: Bool { phase == .ready }
     var servedName: String { launch?.servedName ?? "qwen-q4" }
     var contextWindow: Int { Int(launch?.kvLength ?? 32768) }
-    /// The user's limit on one reply, nil when a reply may fill the context.
-    var replyLimit: Int? { launch?.replyLimit }
 
     /// Shown while the engine reloads after the GPU lost its memory.
     private(set) var recoveryNotice: String?
@@ -437,7 +430,7 @@ final class EngineService {
 
     #if canImport(LSEKit)
     /// The lse-server settings (LSELaunchPreset.standard by default: Q4 +
-    /// DFlash2, bf16 KV, 32768, batch/ubatch 1024, temperature 0.6).
+    /// DFlash2, bf16 KV, 32768, batch/ubatch 1024).
     static func configuration(for launch: EngineLaunch) -> LSEEngine.Configuration {
         var c = LSEEngine.Configuration(model: launch.modelDirectory.path)
         if let draft = launch.draftDirectory {
@@ -452,9 +445,11 @@ final class EngineService {
         c.pool = "hrx:0"
         c.dialect = "loom"
         c.kvCacheDType = launch.kvCacheDType
+        // Always set: without it the engine's context is 4096.
         c.kvLength = launch.kvLength
-        c.temperature = launch.temperature
-        c.maxTokens = launch.maxTokens
+        // The model's own sampling defaults and no operator cap on replies.
+        c.temperature = nil
+        c.maxTokens = 0
         c.batchSize = launch.batchSize
         c.ubatchSize = launch.ubatchSize
         c.servedName = launch.servedName

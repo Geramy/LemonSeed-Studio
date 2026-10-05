@@ -97,6 +97,8 @@ public struct AgentPanel: View {
             CompactionView(summary: summary)
         case .changes(let changes):
             PendingChangesCard(model: model, changes: changes)
+        case .contextFull(let card):
+            ContextFullView(card: card, onCompact: model.compactConversation, onDecline: model.declineCompaction)
         }
     }
 }
@@ -252,7 +254,7 @@ struct Composer: View {
     var body: some View {
         HStack(alignment: .bottom, spacing: 6) {
             modeMenu
-            thinkingMenu
+            if !model.thinkingLevels.isEmpty { thinkingMenu }
             TextField(model.isRunning ? "Steer the agent…" : "Ask the LemonSeed agent…", text: $model.composer,
                       axis: .vertical)
                 .font(theme.bodyFont)
@@ -346,33 +348,37 @@ struct Composer: View {
         }
     }
 
-    /// Thinking: Default (the model's own level), Off, Low, Medium, High, Max.
+    /// Thinking: the levels the model's chat template defines, in its order,
+    /// with its default marked. Hidden for a model without any.
     private var thinkingMenu: some View {
-        Menu {
-            Picker("Thinking", selection: Binding(get: { model.thinking }, set: { choose($0) })) {
-                ForEach(ThinkingLevel.pickerLevels, id: \.self) { level in
-                    Text(level == .modelDefault ? "Default (model decides)" : level.title).tag(level)
+        let shown = model.shownThinkingLevel.map(ThinkingLevel.level)
+        let off = shown == ThinkingLevel.off
+        return Menu {
+            Picker("Thinking", selection: Binding(get: { model.shownThinkingLevel ?? "" },
+                                                  set: { choose(.level($0)) })) {
+                ForEach(model.thinkingLevels) { level in
+                    Text(level.isDefault ? "\(level.title) (model default)" : level.title).tag(level.id)
                 }
             }
         } label: {
             HStack(spacing: 4) {
-                Image(systemName: model.thinking == .off ? "brain" : "brain.fill")
-                Text(model.thinking.title)
+                Image(systemName: off ? "brain" : "brain.fill")
+                Text(shown?.title ?? "Thinking")
             }
             .font(theme.captionFont)
-            .foregroundStyle(model.thinking == .off ? theme.tertiaryText : theme.accent)
+            .foregroundStyle(off ? theme.tertiaryText : theme.accent)
             .padding(.horizontal, 10)
             .frame(height: 34)
             .background(theme.hairline.opacity(0.6), in: Capsule())
             .contentShape(Capsule())
         }
-        .accessibilityLabel("Thinking: \(model.thinking.title)")
+        .accessibilityLabel("Thinking: \(shown?.title ?? "model default")")
         .accessibilityIdentifier("agent.thinking")
         .padding(.bottom, 5)
     }
 
     private func choose(_ level: ThinkingLevel) {
-        guard level != model.thinking else { return }
+        guard level.rawValue != model.shownThinkingLevel else { return }
         if model.hasHistory { pendingThinking = level } else { model.setThinking(level) }
     }
 }

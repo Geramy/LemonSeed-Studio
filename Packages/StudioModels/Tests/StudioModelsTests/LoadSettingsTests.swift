@@ -33,8 +33,8 @@ struct LoadSettingsTests {
         #expect(s == .standard)
         #expect(s.kvCacheDType.rawValue == preset.kvCacheDType && s.kvLength == preset.kvLength)
         #expect(s.batchSize == preset.batchSize && s.ubatchSize == preset.ubatchSize)
-        #expect(s.temperature == preset.temperature && s.dflash2Enabled && !s.mtpEnabled)
-        #expect(s.mtpDepth == 3 && s.topP == nil && s.maxTokens == nil)
+        #expect(s.temperature == nil && s.dflash2Enabled && !s.mtpEnabled)
+        #expect(s.mtpDepth == 3 && s.topP == nil && s.topK == nil && s.minP == nil)
 
         let launch = preset.configuration(model: model, settings: s, dflash2Draft: draft, mtpModule: nil)
         #expect(launch.arguments == preset.arguments(model: model, dflash2Draft: draft))
@@ -49,14 +49,13 @@ struct LoadSettingsTests {
         let mtp = model.appending(path: "mtp")
         var s = ModelLoadSettings(kvCacheDType: .fp8, kvLength: 65536, batchSize: 2048, ubatchSize: 512,
                                   dflash2Enabled: false, mtpEnabled: true, mtpDepth: 5, temperature: 1,
-                                  topP: 0.9, maxTokens: 8192)
+                                  topP: 0.9)
         var launch = LSELaunchConfiguration(model: model, settings: s, dflash2Draft: draft, mtpModule: mtp)
         #expect(!launch.dflash2 && launch.usesMTP && !launch.noMTP)
         #expect(launch.arguments.joined(separator: " ") ==
-                "--model /m/qwen38-27b-q4 --pool hrx:0 --dialect loom --kv-cache-dtype fp8 --kv-len 65536 --temperature 1 --batch-size 2048 --ubatch-size 512 --mtp-depth 5 --max-tokens 8192")
-        #expect(launch.topP == 0.9 && launch.topK == nil)
-        #expect(LSELaunchConfiguration(model: model, settings: ModelLoadSettings(topK: 20), dflash2Draft: nil,
-                                       mtpModule: nil).topK == 20)
+                "--model /m/qwen38-27b-q4 --pool hrx:0 --dialect loom --kv-cache-dtype fp8 --kv-len 65536 --batch-size 2048 --ubatch-size 512 --mtp-depth 5")
+        // Sampling is sent per request, never as a launch option.
+        #expect(!launch.arguments.contains("--temperature") && !launch.arguments.contains("--max-tokens"))
 
         s.mtpEnabled = false
         launch = LSELaunchConfiguration(model: model, settings: s, dflash2Draft: nil, mtpModule: mtp)
@@ -71,32 +70,39 @@ struct LoadSettingsTests {
                 == LSELaunchPreset.standard.arguments(model: model, dflash2Draft: nil))
     }
 
-    @Test func aReplyRunsUntilTheContextIsFullUnlessLimited() throws {
-        // No limit: LSE's per-request cap is the KV length, never its 4096 default.
-        let open = LSELaunchConfiguration(model: model, settings: ModelLoadSettings(kvLength: 65536),
-                                          dflash2Draft: nil, mtpModule: nil)
-        #expect(open.maxTokens == 65536)
-        #expect(open.arguments.suffix(2) == ["--max-tokens", "65536"])
-        let limited = LSELaunchConfiguration(model: model, settings: ModelLoadSettings(maxTokens: 4096),
-                                             dflash2Draft: nil, mtpModule: nil)
-        #expect(limited.maxTokens == 4096)
-
-        // An explicit limit survives a round trip, 4096 included.
+    @Test func samplingIsTheModelsUnlessOverriddenAndOldSettingsMigrate() throws {
         let decoder = JSONDecoder()
-        let chosen = ModelLoadSettings(maxTokens: 4096)
-        #expect(try decoder.decode(ModelLoadSettings.self, from: JSONEncoder().encode(chosen)).maxTokens == 4096)
-        #expect(try decoder.decode(ModelLoadSettings.self, from: JSONEncoder().encode(ModelLoadSettings())).maxTokens == nil)
-        // Registries from before: 4096 was the unchosen default, anything else a choice.
-        #expect(try decoder.decode(ModelLoadSettings.self, from: Data(#"{"maxTokens":4096}"#.utf8)).maxTokens == nil)
-        #expect(try decoder.decode(ModelLoadSettings.self, from: Data(#"{"maxTokens":2048}"#.utf8)).maxTokens == 2048)
+        // The old fixed default (0.6) and the old reply limits read back as nothing chosen.
+        let old = try decoder.decode(ModelLoadSettings.self,
+                                     from: Data(#"{"temperature":0.6,"maxTokens":4096,"maxReplyTokens":2048,"topP":0.9}"#.utf8))
+        #expect(old.temperature == nil && old.topP == 0.9)
+        // A temperature someone did choose stays an override.
+        #expect(try decoder.decode(ModelLoadSettings.self, from: Data(#"{"temperature":0.8}"#.utf8)).temperature == 0.8)
+        // Overrides round-trip; unset fields stay unset.
+        let chosen = ModelLoadSettings(temperature: 0.6, topK: 0, minP: 0.05, presencePenalty: 0.5, repetitionPenalty: 1.1)
+        let back = try decoder.decode(ModelLoadSettings.self, from: JSONEncoder().encode(chosen))
+        #expect(back == chosen && back.temperature == 0.6)
+        #expect(try decoder.decode(ModelLoadSettings.self, from: JSONEncoder().encode(ModelLoadSettings())) == ModelLoadSettings())
+        let json = String(decoding: try JSONEncoder().encode(ModelLoadSettings()), as: UTF8.self)
+        #expect(!json.contains("temperature") && !json.contains("maxTokens"))
+    }
+
+    @Test func modelDefaultsReadFromLSE() {
+        let info: [String: Any] = ["generation_defaults": ["temperature": 1.0, "top_k": 20, "top_p": 0.95, "min_p": 0.0,
+                                                           "repetition_penalty": 1.0, "presence_penalty": 0.0,
+                                                           "sources": ["temperature": "generation_config.json"]]]
+        let d = ModelGenerationDefaults(lseModelInfo: info)
+        #expect(d?.temperature == 1.0 && d?.topK == 20 && d?.topP == 0.95 && d?.sources["temperature"] == "generation_config.json")
+        #expect(ModelGenerationDefaults(lseModelInfo: [:]) == nil)
+        #expect(ConfigMemoryEstimator().generationDefaults(modelDirectory: model) == nil)
     }
 
     @Test func valuesAreClampedToWhatLSEAccepts() {
         var s = ModelLoadSettings(kvLength: 1_000_000, batchSize: 1000, ubatchSize: 4096, mtpDepth: 9,
-                                  temperature: 3, topP: 1.5, maxTokens: 0)
+                                  temperature: 3, topK: -4, topP: 1.5, minP: -1)
         s = s.clamped(maxContext: 262_144)
         #expect(s.kvLength == 262_144 && s.batchSize == 1024 && s.ubatchSize == 1024)
-        #expect(s.mtpDepth == 7 && s.temperature == 2 && s.topP == 1 && s.maxTokens == 1)
+        #expect(s.mtpDepth == 7 && s.temperature == 2 && s.topP == 1 && s.topK == 0 && s.minP == 0)
         #expect(ModelLoadSettings(kvLength: 100).clamped(maxContext: 262_144).kvLength == 2048)
         #expect(ModelLoadSettings(kvLength: 100).clamped(maxContext: 1024).kvLength == 1024)
 
@@ -120,7 +126,7 @@ struct LoadSettingsTests {
         let odd = #"{"kvCacheDType":"int3","kvLength":"long","batchSize":512,"topP":0.8}"#
         let s = try decoder.decode(ModelLoadSettings.self, from: Data(odd.utf8))
         #expect(s.kvCacheDType == .bf16 && s.kvLength == 32768 && s.batchSize == 512 && s.topP == 0.8)
-        let custom = ModelLoadSettings(kvCacheDType: .bf8, kvLength: 8192, draftID: "d", topP: 0.5, topK: 40)
+        let custom = ModelLoadSettings(kvCacheDType: .bf8, kvLength: 8192, draftID: "d", topK: 40, topP: 0.5)
         #expect(try decoder.decode(ModelLoadSettings.self, from: JSONEncoder().encode(custom)) == custom)
     }
 }

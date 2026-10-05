@@ -32,6 +32,9 @@ public struct ModelLoadSettingsView: View {
     @State private var summary: ModelConfigSummary?
     @State private var estimate: ModelMemoryEstimate?
     @State private var estimateError: String?
+    /// The model's sampling defaults, as the engine reads them (nil until
+    /// read, or when this build has no engine to ask).
+    @State private var generationDefaults: ModelGenerationDefaults?
     @State private var confirmingOverflow = false
     @State private var applying = false
 
@@ -90,6 +93,7 @@ public struct ModelLoadSettingsView: View {
             .animation(.default, value: confirmingOverflow)
             .onChange(of: settings) { confirmingOverflow = false }
             .task(id: settings) { await refreshEstimate() }
+            .task { await loadGenerationDefaults() }
         }
     }
 
@@ -300,54 +304,38 @@ public struct ModelLoadSettingsView: View {
 
     // MARK: Sampling
 
-    private static let maxTokenChoices = [256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536]
-
+    /// Each field is the model's own default (from its generation config,
+    /// as the engine reads it) until the user overrides it; only overrides
+    /// are sent with requests. There is no output limit to set.
     private var samplingSection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 6) {
-                LabeledContent("Temperature", value: settings.temperature.formatted(.number.precision(.fractionLength(2))))
-                Slider(value: $settings.temperature, in: ModelLoadSettings.temperatureRange, step: 0.05) {
-                    Text("Temperature")
-                }
-                .accessibilityIdentifier("loadSettings.temperature")
+            SamplingOverrideRow(title: "Temperature", key: "temperature", value: $settings.temperature,
+                                modelDefault: generationDefaults?.temperature, sources: generationDefaults?.sources,
+                                range: ModelLoadSettings.temperatureRange, step: 0.05, digits: 2)
+            SamplingOverrideRow(title: "Top-k", key: "top_k",
+                                value: Binding { settings.topK.map(Double.init) } set: { settings.topK = $0.map { Int($0.rounded()) } },
+                                modelDefault: generationDefaults?.topK.map(Double.init), sources: generationDefaults?.sources,
+                                range: Double(ModelLoadSettings.topKRange.lowerBound)...Double(ModelLoadSettings.topKRange.upperBound),
+                                step: 1, digits: 0, offAt: 0)
+            SamplingOverrideRow(title: "Top-p", key: "top_p", value: $settings.topP,
+                                modelDefault: generationDefaults?.topP, sources: generationDefaults?.sources,
+                                range: ModelLoadSettings.probabilityRange, step: 0.01, digits: 2, offAt: 1)
+            SamplingOverrideRow(title: "Min-p", key: "min_p", value: $settings.minP,
+                                modelDefault: generationDefaults?.minP, sources: generationDefaults?.sources,
+                                range: ModelLoadSettings.probabilityRange, step: 0.01, digits: 2, offAt: 0)
+            DisclosureGroup("Advanced") {
+                SamplingOverrideRow(title: "Presence penalty", key: "presence_penalty", value: $settings.presencePenalty,
+                                    modelDefault: generationDefaults?.presencePenalty, sources: generationDefaults?.sources,
+                                    range: ModelLoadSettings.presencePenaltyRange, step: 0.05, digits: 2, offAt: 0)
+                SamplingOverrideRow(title: "Repetition penalty", key: "repetition_penalty", value: $settings.repetitionPenalty,
+                                    modelDefault: generationDefaults?.repetitionPenalty, sources: generationDefaults?.sources,
+                                    range: ModelLoadSettings.repetitionPenaltyRange, step: 0.01, digits: 2, offAt: 1)
             }
-            Toggle("Top-p", isOn: Binding {
-                settings.topP != nil
-            } set: { settings.topP = $0 ? (settings.topP ?? 0.95) : nil })
-            .accessibilityIdentifier("loadSettings.topPEnabled")
-            if let topP = settings.topP {
-                VStack(alignment: .leading, spacing: 6) {
-                    LabeledContent("Top-p", value: topP.formatted(.number.precision(.fractionLength(2))))
-                    Slider(value: Binding { settings.topP ?? 0.95 } set: { settings.topP = $0 }, in: 0.05...1, step: 0.01) {
-                        Text("Top-p")
-                    }
-                    .accessibilityIdentifier("loadSettings.topP")
-                }
-            }
-            Toggle("Top-k", isOn: Binding {
-                settings.topK != nil
-            } set: { settings.topK = $0 ? (settings.topK ?? 20) : nil })
-            .accessibilityIdentifier("loadSettings.topKEnabled")
-            if let topK = settings.topK {
-                Stepper(value: Binding { settings.topK ?? topK } set: { settings.topK = $0 },
-                        in: ModelLoadSettings.topKRange) {
-                    LabeledContent("Top-k", value: topK.formatted())
-                }
-                .accessibilityIdentifier("loadSettings.topK")
-            }
-            Picker("Max tokens per reply", selection: $settings.maxTokens) {
-                Text("Until the context is full").tag(Int?.none)
-                // A limit from elsewhere that is not on the ladder is listed too.
-                let other = settings.maxTokens.flatMap { Self.maxTokenChoices.contains($0) ? nil : $0 }
-                let choices = other.map { (Self.maxTokenChoices + [$0]).sorted() } ?? Self.maxTokenChoices
-                ForEach(choices, id: \.self) { Text($0.formatted()).tag(Int?.some($0)) }
-            }
-            .pickerStyle(.menu)
-            .accessibilityIdentifier("loadSettings.maxTokens")
+            .accessibilityIdentifier("loadSettings.samplingAdvanced")
         } header: {
-            Text("Sampling defaults")
+            Text("Sampling")
         } footer: {
-            Text("Used when a request does not set its own. Top-p and top-k off leave them to the model's generation config. A reply, its thinking included, runs until the context is full unless you set a limit.")
+            Text("Each value is the model\u{2019}s own default unless you override it. Replies have no output limit: they run until the model finishes or the context is full.")
         }
     }
 
@@ -423,6 +411,15 @@ public struct ModelLoadSettingsView: View {
         guard await library.setLoadSettings(chosen, for: modelID) else { return }
         onApply(library.loadSettings(for: modelID))
         dismiss()
+    }
+
+    private func loadGenerationDefaults() async {
+        guard let record else { return }
+        let estimator = estimator
+        let directory = library.directory(of: record)
+        generationDefaults = await Task.detached(priority: .userInitiated) {
+            estimator.generationDefaults(modelDirectory: directory)
+        }.value
     }
 
     private func refreshEstimate() async {
@@ -629,3 +626,59 @@ extension NSColor {
     }
 }
 #endif
+
+/// One sampling field: "Model default (value)" until overridden, then a
+/// slider for the override. `offAt` names the value that turns it off.
+struct SamplingOverrideRow: View {
+    let title: String
+    /// LSE's field name, for the default's source.
+    let key: String
+    @Binding var value: Double?
+    let modelDefault: Double?
+    let sources: [String: String]?
+    let range: ClosedRange<Double>
+    let step: Double
+    let digits: Int
+    var offAt: Double? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: Binding { value != nil } set: { value = $0 ? (value ?? start) : nil }) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityIdentifier("loadSettings.\(key).override")
+            if let current = value {
+                HStack {
+                    Slider(value: Binding { current } set: { value = ($0 / step).rounded() * step }, in: range, step: step) {
+                        Text(title)
+                    }
+                    Text(format(current)).monospacedDigit().frame(minWidth: 44, alignment: .trailing)
+                }
+                .accessibilityIdentifier("loadSettings.\(key)")
+            }
+        }
+    }
+
+    private var start: Double { min(max(modelDefault ?? range.lowerBound, range.lowerBound), range.upperBound) }
+
+    private var subtitle: String {
+        if let value { return "Override: \(format(value))" + (value == offAt ? " (off)" : "") }
+        guard let modelDefault else { return "Model default" }
+        var text = "Model default (\(format(modelDefault))" + (modelDefault == offAt ? ", off" : "") + ")"
+        if let source = sources?[key] { text += " · " + Self.sourceLabel(source) }
+        return text
+    }
+
+    private func format(_ v: Double) -> String { v.formatted(.number.precision(.fractionLength(digits))) }
+
+    static func sourceLabel(_ source: String) -> String {
+        switch source {
+        case "generation_config.json", "config.json": "from " + source
+        case "server_option": "set by the engine"
+        default: "LSE default"
+        }
+    }
+}

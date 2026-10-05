@@ -112,10 +112,15 @@ public enum LLMError: Error, Sendable, Hashable, LocalizedError {
     case stream(type: String, message: String)
     case malformedChunk(String)
     case unreachable(String)
+    /// An error envelope with a code (LSE's `error.code`, e.g. `context_full`
+    /// or `unsupported_reasoning_effort`), its `lse_context` and `levels`
+    /// when present. `status` is 0 for one that arrived inside the stream.
+    case api(status: Int, code: String, message: String, context: ContextUsage?, levels: [String])
 
     public var errorDescription: String? {
         switch self {
         case .http(let status, let message): "HTTP \(status): \(message)"
+        case .api(_, _, let message, _, _): message
         case .stream(let type, let message): "\(type): \(message)"
         case .malformedChunk(let s): "Malformed stream chunk: \(s.prefix(200))"
         case .unreachable(let s): "Endpoint unreachable: \(s)"
@@ -127,13 +132,25 @@ public enum LLMError: Error, Sendable, Hashable, LocalizedError {
         return false
     }
 
-    /// LSE refuses a decode step that would run past its KV cache with this
-    /// error ("... past the engine length N"): the context is full.
-    public var isContextFull: Bool {
-        switch self {
-        case .http(_, let message), .stream(_, let message): message.contains("past the engine length")
-        case .malformedChunk, .unreachable: false
+    /// The error code, when the server sent one.
+    public var code: String? {
+        if case .api(_, let code, _, _, _) = self { return code }
+        return nil
+    }
+
+    /// The prompt already fills the context (LSE's `context_full`).
+    public var isContextFull: Bool { code == "context_full" }
+
+    /// Maps an OpenAI error envelope (`{"error": {...}}`).
+    static func envelope(_ err: JSONValue, status: Int) -> LLMError {
+        let message = err["message"]?.stringValue ?? err.serialized()
+        if let code = err["code"]?.stringValue {
+            return .api(status: status, code: code, message: message,
+                        context: err["lse_context"].flatMap(ContextUsage.init(json:)),
+                        levels: (err["levels"]?.arrayValue ?? []).compactMap(\.stringValue))
         }
+        if status == 0 { return .stream(type: err["type"]?.stringValue ?? "server_error", message: message) }
+        return .http(status: status, message: message)
     }
 }
 
@@ -149,10 +166,7 @@ public enum ChatChunkDecoder {
         if trimmed == "[DONE]" { return .done }
         let json: JSONValue
         do { json = try JSONValue.parse(trimmed) } catch { throw LLMError.malformedChunk(trimmed) }
-        if let err = json["error"] {
-            throw LLMError.stream(type: err["type"]?.stringValue ?? "server_error",
-                                  message: err["message"]?.stringValue ?? err.serialized())
-        }
+        if let err = json["error"] { throw LLMError.envelope(err, status: 0) }
         var events: [ChatStreamEvent] = []
         for choice in json["choices"]?.arrayValue ?? [] {
             if let delta = choice["delta"] {
@@ -176,7 +190,9 @@ public enum ChatChunkDecoder {
             if let reason = choice["finish_reason"]?.stringValue {
                 events.append(.finished(FinishReason(rawValue: reason) ?? .stop))
             }
+            if let reason = choice["stop_reason"]?.stringValue { events.append(.stopReason(reason)) }
         }
+        if let c = json["lse_context"].flatMap(ContextUsage.init(json:)) { events.append(.context(c)) }
         if let t = json["timings"].flatMap(GenerationTimings.init(json:)) { events.append(.timings(t)) }
         if let u = json["usage"].flatMap(TokenUsage.init(json:)) { events.append(.usage(u)) }
         return .events(events)

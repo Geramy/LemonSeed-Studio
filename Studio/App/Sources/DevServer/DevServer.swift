@@ -69,6 +69,15 @@ final class DevServer {
     }
 
     func startIfEnabled() {
+        // A suspended app loses its listening socket (the iPad locked or the
+        // app went to the background): listen again when it is active.
+        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil,
+                                               queue: .main) { _ in
+            MainActor.assumeIsolated {
+                let server = DevServer.shared
+                if server.enabled, server.listener == nil { server.start() }
+            }
+        }
         guard enabled else { return }
         start()
         UIDriver.enableAccessibilityTree()
@@ -121,8 +130,16 @@ final class DevServer {
             devLog.log("dev server ready on \(self.addresses.joined(separator: ", "), privacy: .public):\(Self.port)")
         case .failed(let error):
             state = "failed: \(error.localizedDescription)"
+            devLog.log("dev server failed: \(error.localizedDescription, privacy: .public)")
             listener?.cancel()
             listener = nil
+            // Listen again now if the app is in front, else when it is.
+            if enabled, UIApplication.shared.applicationState == .active {
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(2))
+                    if self.enabled, self.listener == nil, UIApplication.shared.applicationState == .active { self.start() }
+                }
+            }
         case .waiting(let error):
             state = "waiting: \(error.localizedDescription)"
         case .cancelled:

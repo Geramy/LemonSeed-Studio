@@ -44,6 +44,11 @@ public final class LSEEngine: @unchecked Sendable {
         public var host = "127.0.0.1"
         public var port: Int32 = 8080
         public var apiKey: String?
+        /// lse_config.disable_cpu_fallback (LSE 0.5.3): an operation with no
+        /// device kernel fails its request ("CPU fallback disabled: ...")
+        /// instead of running on the CPU interpreter, and startup fails if
+        /// no device backend comes up. On by default.
+        public var disableCPUFallback = true
 
         public init(model: String) { self.model = model }
     }
@@ -144,6 +149,7 @@ public final class LSEEngine: @unchecked Sendable {
         cfg.host = cString(c.host)
         cfg.port = c.port
         cfg.api_key = cString(c.apiKey)
+        cfg.disable_cpu_fallback = c.disableCPUFallback ? 1 : 0
         return try body(&cfg)
     }
 

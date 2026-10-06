@@ -227,7 +227,6 @@ static inline bool mlg_power_admits(uint32_t state, uint64_t selector)
 	case 18:  /* BOGetInfo */
 	case 21:  /* QueryInfo: cached */
 	case 36:  /* BOMap: client mapping of host pages */
-	case 41:  /* GetReBARInfo */
 	case 42:  /* ShutdownGPU */
 	case 43:  /* RuntimeBuild */
 	case 58:  /* AQLQueueDestroy: an unmapped queue */

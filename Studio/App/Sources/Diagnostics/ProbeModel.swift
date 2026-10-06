@@ -368,16 +368,6 @@ enum ProbeRun {
                 } else { failed("GetBARInfo (2) BAR\(bar)", barKR) }
             }
 
-            for bar in UInt64(0)..<6 {
-                let (rebarKR, info) = session.call(.getReBARInfo, [bar], outputs: 6)
-                if rebarKR == KERN_SUCCESS, info.count >= 6 {
-                    add("GetReBARInfo (41) BAR\(bar)", .ok,
-                        String(format: "cap offset 0x%llx cap 0x%llx ctl 0x%llx supported 0x%llx selected %@ assigned %@",
-                               info[0], info[1], info[2], info[3],
-                               formatBytes(info[4]), formatBytes(info[5])))
-                } else { failed("GetReBARInfo (41) BAR\(bar)", rebarKR) }
-            }
-
             let (buildKR, build) = session.call(.runtimeBuild, outputs: 4)
             if buildKR == KERN_SUCCESS, build.count >= 3 {
                 var text = String(format: "magic 0x%llx ABI %llu build %llu", build[0], build[1], build[2])

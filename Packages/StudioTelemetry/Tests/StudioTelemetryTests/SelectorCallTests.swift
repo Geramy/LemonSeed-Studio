@@ -22,7 +22,7 @@ import Testing
         #expect(synchronous(21, [0x4C4C_4F47, 0]))             // QueryInfo 'LLOG', cursor
         #expect(synchronous(LinuxABI.selSysfsRead, [LinuxABI.opRead, 0]))
         #expect(synchronous(LinuxABI.selDrmInfo, [LinuxABI.infoReadMMRReg, 4]))
-        for selector: UInt32 in [1, 2, 9, 54, 55, 41, 42, 82, 85, 61] {
+        for selector: UInt32 in [1, 2, 9, 54, 55, 42, 82, 85, 61] {
             #expect(!synchronous(selector, [0]), "selector \(selector) is async")
         }
         #expect(!synchronous(21, [1]))                         // a compute QueryInfo tag

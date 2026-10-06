@@ -283,9 +283,15 @@ final class DevServer {
         case ("GET", "/gpu/telemetry"):
             guard let telemetry = app.services.telemetry as? StudioTelemetryProvider else { return .error("no telemetry") }
             let state = telemetry.service.state
+            let snap = state.snapshot
             return .json(["availability": "\(state.availability)", "device": state.deviceName ?? NSNull(),
                           "vramUsedGiB": state.summary.vram?.used ?? NSNull(), "vramTotalGiB": state.summary.vram?.total ?? NSNull(),
-                          "load": state.summary.load ?? NSNull(), "source": state.sourceName])
+                          "load": state.summary.load ?? NSNull(), "source": state.sourceName,
+                          // The PCIe link: the endpoint's current and maximum link (pci-sysfs), the
+                          // SMU's view (gpu_metrics) and the SMU's PCIe DPM levels (pp_dpm_pcie).
+                          "link": snap.linkLine,
+                          "pcie": Dictionary(uniqueKeysWithValues: snap.pcie.map { ($0.label, $0.text) }),
+                          "pcieLevels": snap.pcieLevels.map { ($0.active ? "* " : "  ") + $0.text }])
         case ("POST", "/fixtures/record"):
             guard app.driver.service != nil else { return .error("the driver is not running", status: 409) }
             let name = body["name"] as? String ?? "r9700-idle"

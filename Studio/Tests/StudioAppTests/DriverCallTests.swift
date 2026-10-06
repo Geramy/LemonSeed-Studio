@@ -22,6 +22,10 @@ final class DriverCallTests: XCTestCase {
             XCTAssertTrue(text.contains("mlg_selector_call_on(connection, &protocolState, selector.rawValue"), path)
             XCTAssertFalse(text.contains("IOConnectCall"), "\(path) calls IOKit directly")
         }
+        // Retired by the driver (build 255): GetReBARInfo answers Unsupported.
+        for path in ["Studio/App/Sources/Diagnostics/DriverClient.swift", "Engine/ProofOfLife/App/DriverClient.swift"] {
+            XCTAssertFalse(code(try source(path)).contains("= 41"), "\(path) still names selector 41")
+        }
         for header in ["Studio/App/Studio-Bridging-Header.h", "Engine/ProofOfLife/App/ProofOfLife-Bridging-Header.h"] {
             XCTAssertTrue(try source(header).contains("#include \"selector_call.h\""), header)
         }

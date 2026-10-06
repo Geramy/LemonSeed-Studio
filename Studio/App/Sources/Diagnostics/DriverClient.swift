@@ -26,7 +26,6 @@ enum MLG {
         /// Host window: 0 queries the GART aperture size; a nonzero base
         /// places it before InitDevice, as the HSA runtime does.
         case hostWindow = 54
-        case getReBARInfo = 41
         case runtimeBuild = 43
     }
 

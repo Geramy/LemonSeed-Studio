@@ -39,11 +39,15 @@ struct AssistantMessageView: View {
                               seconds: block.reasoningSeconds, started: block.reasoningStarted)
             }
             if !block.answer.isEmpty {
-                MarkdownView(chunks: block.answer)
+                MarkdownView(chunks: block.answer, streaming: block.isStreaming)
             } else if block.isStreaming && block.thinking.isEmpty {
                 TypingIndicator()
             }
-            MessageStatsFooter(block: block)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                MessageStatsFooter(block: block)
+                Spacer(minLength: 0)
+                if !block.isStreaming, !block.answer.isEmpty { CopyMessageButton(block: block) }
+            }
             if let error = block.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(theme.captionFont)
@@ -64,6 +68,29 @@ struct AssistantMessageView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Copies a finished answer as its Markdown source.
+struct CopyMessageButton: View {
+    let block: AssistantBlock
+    @State private var copied = false
+    @Environment(\.agentTheme) private var theme
+
+    var body: some View {
+        Button {
+            copy(block.text)
+            withAnimation(.snappy) { copied = true }
+            Task { try? await Task.sleep(for: .seconds(1.5)); withAnimation { copied = false } }
+        } label: {
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(theme.captionFont)
+                .foregroundStyle(copied ? theme.success : theme.tertiaryText)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(copied ? "Copied" : "Copy message")
+        .accessibilityIdentifier("agent.copyMessage")
     }
 }
 

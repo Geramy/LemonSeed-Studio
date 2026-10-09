@@ -32,8 +32,15 @@ final class DemoEnvironment {
         var endpoint = EndpointConfiguration()
         if let url = defaults.string(forKey: "endpoint").flatMap(URL.init(string:)) { endpoint.baseURL = url }
         if let model = defaults.string(forKey: "model") { endpoint.model = model }
-        let client: any LLMClient = defaults.bool(forKey: "scripted")
-            ? ScriptedLLMClient(DemoScript.replies, delay: .milliseconds(28))
+        #if DEBUG
+        let sample = defaults.bool(forKey: "markdownSample")
+        #else
+        let sample = false
+        #endif
+        let client: any LLMClient = sample
+            ? Self.markdownSampleClient()
+            : defaults.bool(forKey: "scripted")
+            ? ScriptedLLMClient(DemoScript.replies, delay: .milliseconds(28)) as any LLMClient
             : OpenAICompatibleClient(configuration: endpoint)
         let mode = defaults.string(forKey: "mode").flatMap(PermissionMode.init(rawValue:)) ?? .review
         let config = AgentConfiguration(endpoint: endpoint, permissionMode: mode)
@@ -44,6 +51,16 @@ final class DemoEnvironment {
                                     model: endpoint.model)
         screen = defaults.string(forKey: "screen") ?? "chat"
         autoPrompt = defaults.string(forKey: "autoPrompt")
+    }
+}
+
+extension DemoEnvironment {
+    static func markdownSampleClient() -> any LLMClient {
+        #if DEBUG
+        ScriptedLLMClient([DemoScript.markdownSample], delay: .milliseconds(10))
+        #else
+        ScriptedLLMClient([])
+        #endif
     }
 }
 

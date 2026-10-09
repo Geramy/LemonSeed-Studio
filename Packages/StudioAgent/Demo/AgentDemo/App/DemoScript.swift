@@ -1,4 +1,5 @@
 import StudioAgent
+import StudioAgentUI
 
 /// The offline demo: a believable run of the agent fixing `mathx_mean`,
 /// replayed by `ScriptedLLMClient`. The engine pill says "Scripted demo" so
@@ -27,6 +28,14 @@ enum DemoScript {
         The existing tests cover both cases (`{1, 2, 3, 4}` → 2.5 and `{-3, -4}` → −3.5).
         """, reasoning: "Tests at lines 13-14 already exercise both failure modes."),
     ]
+
+    #if DEBUG
+    /// `-markdownSample YES`: one long streamed reply, every Markdown element
+    /// the chat renders eight times over, a few characters per delta.
+    static let markdownSample = ScriptedLLMClient.Reply.text(
+        (1...8).map { "## Part \($0)\n\n" + MarkdownSample.text }.joined(separator: "\n\n"),
+        reasoning: "Streaming the Markdown sample.", chunk: 4)
+    #endif
 
     static let explanation = ScriptedLLMClient.Reply.text("""
     `mathx_mean` returns the arithmetic mean of `n` integers.

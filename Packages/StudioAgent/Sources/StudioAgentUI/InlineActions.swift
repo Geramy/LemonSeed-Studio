@@ -240,7 +240,7 @@ public struct InlineExplainCard: View {
         } else if explainer.text.isEmpty {
             TypingIndicator().frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            MarkdownView(explainer.text)
+            MarkdownView(explainer.text, streaming: explainer.isRunning)
         }
     }
 }

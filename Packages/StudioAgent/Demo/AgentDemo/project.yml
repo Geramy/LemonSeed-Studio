@@ -6,6 +6,7 @@
 #   -endpoint URL        OpenAI-compatible base URL (default http://127.0.0.1:8080/v1)
 #   -model NAME          model id (default qwen-q4)
 #   -scripted YES        replay a built-in script instead of calling an engine
+#   -markdownSample YES  (debug) stream a long reply with every Markdown element
 #   -autoPrompt TEXT     send TEXT on launch
 #   -mode NAME           readOnly | ask | review | autopilot
 #   -screen NAME         chat | sessions | inline (initial surface, for screenshots)

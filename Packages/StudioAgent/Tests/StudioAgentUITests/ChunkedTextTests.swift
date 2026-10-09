@@ -40,7 +40,7 @@ struct ChunkedTextTests {
         let text = Self.reply(5000)
         let chunked = ChunkedText(.markdownBlocks, text)
         let pieces = chunked.chunks.map(\.text) + [chunked.tail]
-        #expect(pieces.flatMap(MarkdownBlock.parse) == MarkdownBlock.parse(text))
+        #expect(pieces.flatMap { MarkdownBlock.parse($0) } == MarkdownBlock.parse(text))
     }
 
     @Test func aLineWithNoBreakIsStillSealed() {

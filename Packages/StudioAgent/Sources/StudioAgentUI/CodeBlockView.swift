@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// A fenced code block: language label, copy button, light syntax tinting,
-/// horizontal scrolling for long lines.
+/// horizontal scrolling for long lines. Not selectable (see MarkdownView):
+/// the Copy button copies the block.
 public struct CodeBlockView: View {
     let code: String
     let language: String?
@@ -39,7 +40,6 @@ public struct CodeBlockView: View {
                 Text(SyntaxTint.highlight(code, language: language, theme: theme))
                     .font(theme.codeFont)
                     .lineSpacing(3)
-                    .textSelection(.enabled)
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(12)
             }

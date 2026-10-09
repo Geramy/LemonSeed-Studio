@@ -128,8 +128,9 @@ struct AgentViewModelTests {
     @Test func markdownBlocks() {
         let md = "# Title\n\nSome *text*\nmore.\n\n- a\n- b\n\n1. x\n2. y\n\n> quote\n\n```c\nint x;\n```\n\n---\n```swift\nlet open"
         #expect(MarkdownBlock.parse(md) == [
-            .heading(1, "Title"), .paragraph("Some *text*\nmore."), .list(["a", "b"], ordered: false),
-            .list(["x", "y"], ordered: true), .quote("quote"), .code(language: "c", "int x;"), .rule,
+            .heading(1, "Title"), .paragraph("Some *text*\nmore."), .list([.init(marker: .bullet, text: "a", depth: 0), .init(marker: .bullet, text: "b", depth: 0)]),
+            .list([.init(marker: .number(1), text: "x", depth: 0), .init(marker: .number(2), text: "y", depth: 0)]),
+            .quote([.paragraph("quote")]), .code(language: "c", "int x;"), .rule,
             .code(language: "swift", "let open"),  // unterminated while streaming
         ])
     }
